@@ -47,8 +47,6 @@ export interface Project {
   id: string;
   name: string;
   modules: ProjectModule[];
-  owner_id: string;
-  shared_with: string[];
 }
 
 export interface WeeklySummary {
@@ -81,5 +79,4 @@ export interface Holiday {
   date: string; // YYYY-MM-DD
   name: string;
   country: string; // Country code e.g. 'MY', 'SG', 'Global'
-  user_id?: string; // Belongs to a specific user
 }

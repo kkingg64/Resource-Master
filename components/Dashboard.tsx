@@ -1,47 +1,24 @@
 
 import React, { useMemo } from 'react';
-// FIX: Removed WeekPoint from this import as it's not defined in types.ts
-import { Project, Role } from '../types';
+import { Project, Role, WeeklySummary, ResourceAllocation } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
-// FIX: Imported WeekPoint from constants.ts where it is defined.
-import { getTimeline, WeekPoint } from '../constants';
+import { TIMELINE_DATA as GLOBAL_TIMELINE_DATA } from '../constants'; // Import actual data
 
 interface DashboardProps {
   projects: Project[];
-  timelineStart: WeekPoint;
-  timelineEnd: WeekPoint;
 }
 
-// Define which roles get a specific color/bar in the chart
-// FIX: Added 'as const' to ensure CHARTED_ROLES has a narrow, specific tuple type. This prevents TypeScript from widening it to Role[], which caused ChartedRole and ChartDataRow to be inferred incorrectly.
-const CHARTED_ROLES = [Role.DEV, Role.QA, Role.UIUX, Role.BA] as const;
-type ChartedRole = typeof CHARTED_ROLES[number];
-
-// Define the shape of our chart data rows for type safety
-type ChartDataRow = {
-  name: string;
-  total: number;
-  Other: number;
-} & {
-  [key in ChartedRole]: number;
-};
-
-
-export const Dashboard: React.FC<DashboardProps> = ({ projects, timelineStart, timelineEnd }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
   
+  // Aggregate data for charts
   const chartData = useMemo(() => {
-    // 1. Generate a dynamic timeline that matches the planner's view
-    const dynamicTimeline = getTimeline('week', timelineStart, timelineEnd);
-    
-    return dynamicTimeline.map(week => {
-      // 2. Create a clean, typed summary object for each week
-      const summary: ChartDataRow = {
-        name: `${week.label} (${week.groupLabel.split(' ')[0]})`,
+    return GLOBAL_TIMELINE_DATA.map(week => {
+      const summary = {
+        name: `${week.label} (${week.month})`,
         [Role.DEV]: 0,
         [Role.QA]: 0,
         [Role.UIUX]: 0,
         [Role.BA]: 0,
-        Other: 0,
         total: 0
       };
 
@@ -53,11 +30,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, timelineStart, t
               
               assignment.allocations.forEach(alloc => {
                 if (alloc.weekId === week.id) {
-                  // 3. Safely aggregate data, grouping non-primary roles into "Other"
-                  if (CHARTED_ROLES.includes(role as ChartedRole)) {
-                    summary[role as ChartedRole] += alloc.count;
+                  if (summary[role] !== undefined) {
+                    summary[role] += alloc.count;
                   } else {
-                     summary.Other += alloc.count;
+                     // @ts-ignore
+                     summary['Other'] = (summary['Other'] || 0) + alloc.count;
                   }
                   summary.total += alloc.count;
                 }
@@ -69,7 +46,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, timelineStart, t
 
       return summary;
     });
-  }, [projects, timelineStart, timelineEnd]);
+  }, [projects]);
 
   const totalFP = projects.reduce((accP, p) => accP + p.modules.reduce((accM, m) => accM + m.functionPoints, 0), 0);
   const totalAllocatedDays = chartData.reduce((acc, week) => acc + week.total, 0);
@@ -86,7 +63,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, timelineStart, t
         </div>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <h3 className="text-slate-500 text-sm font-medium">Total Resource Days Allocated</h3>
-          <p className="text-3xl font-bold text-indigo-600 mt-2">{totalAllocatedDays.toFixed(0)}</p>
+          <p className="text-3xl font-bold text-indigo-600 mt-2">{totalAllocatedDays}</p>
           <div className="mt-2 text-xs text-slate-400">Across {projects.length} projects</div>
         </div>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -109,11 +86,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, timelineStart, t
                 contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
               />
               <Legend />
-              <Bar dataKey={Role.DEV} stackId="a" fill="#4f46e5" name="Developers" />
+              <Bar dataKey={Role.DEV} stackId="a" fill="#4f46e5" name="Developers" radius={[0, 0, 4, 4]} />
               <Bar dataKey={Role.QA} stackId="a" fill="#10b981" name="QA" />
               <Bar dataKey={Role.UIUX} stackId="a" fill="#f59e0b" name="Design" />
-              <Bar dataKey={Role.BA} stackId="a" fill="#64748b" name="Analysts" />
-              <Bar dataKey="Other" stackId="a" fill="#94a3b8" name="Other" radius={[4, 4, 0, 0]} />
+              <Bar dataKey={Role.BA} stackId="a" fill="#64748b" name="Analysts" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -129,7 +105,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, timelineStart, t
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tick={{fontSize: 10}} interval={Math.max(1, Math.floor(chartData.length / 10))} />
+              <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tick={{fontSize: 10}} interval={2} />
               <YAxis stroke="#94a3b8" fontSize={12} />
               <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}/>
               <Area type="monotone" dataKey="total" stroke="#4f46e5" fillOpacity={1} fill="url(#colorTotal)" strokeWidth={2} />

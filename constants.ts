@@ -258,10 +258,7 @@ export const INITIAL_PROJECTS: Project[] = [
   {
     id: 'p1',
     name: 'OMS Migration Phase 1',
-    modules: INITIAL_MODULES_DATA,
-// FIX: Added missing properties `owner_id` and `shared_with` to satisfy the Project type.
-    owner_id: '',
-    shared_with: []
+    modules: INITIAL_MODULES_DATA
   }
 ];
 
@@ -365,7 +362,7 @@ const generateDays = (weeks: TimelineColumn[]): TimelineColumn[] => {
 
     // Generate Mon-Fri for each week
     ['M', 'T', 'W', 'T', 'F'].forEach((dayName, idx) => {
-       const date = new Date( monday );
+       const date = new Date(monday);
        date.setDate(monday.getDate() + idx);
        
        days.push({

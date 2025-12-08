@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Project, ProjectModule } from '../types';
 import { Calculator, ArrowRight, Save, GripVertical, CheckCircle, AlertCircle, Folder } from 'lucide-react';
 
@@ -11,21 +10,41 @@ interface EstimatorProps {
 
 export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunctionPoints, onReorderModules }) => {
   const [velocity, setVelocity] = useState<number>(5); // FP per person-day
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(projects[0]?.id || '');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [selectedModuleId, setSelectedModuleId] = useState<string>('');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  // Effect to select a valid project when the project list changes or becomes available.
+  useEffect(() => {
+    if (projects.length > 0 && !projects.some(p => p.id === selectedProjectId)) {
+      setSelectedProjectId(projects[0].id);
+    } else if (projects.length === 0) {
+      setSelectedProjectId('');
+    }
+  }, [projects, selectedProjectId]);
+
+  // Effect to select a valid module when the selected project changes.
+  useEffect(() => {
+    const selectedProject = projects.find(p => p.id === selectedProjectId);
+    if (selectedProject) {
+      const modules = selectedProject.modules || [];
+      if (modules.length > 0 && !modules.some(m => m.id === selectedModuleId)) {
+        setSelectedModuleId(modules[0].id);
+      } else if (modules.length === 0) {
+        setSelectedModuleId('');
+      }
+    } else {
+      setSelectedModuleId('');
+    }
+  }, [selectedProjectId, projects, selectedModuleId]);
+
 
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const modules = selectedProject ? selectedProject.modules : [];
   
-  // Auto-select first module of project if none selected
-  if (selectedProject && modules.length > 0 && !modules.find(m => m.id === selectedModuleId)) {
-      setSelectedModuleId(modules[0].id);
-  }
-
   const selectedModule = modules.find(m => m.id === selectedModuleId);
   const estimatedLegacyDays = selectedModule ? Math.ceil((selectedModule.legacyFunctionPoints || 0) / velocity) : 0;
-  const estimatedMvpDays = selectedModule ? Math.ceil(selectedModule.functionPoints / velocity) : 0;
+  const estimatedMvpDays = selectedModule ? Math.ceil((selectedModule?.functionPoints || 0) / velocity) : 0;
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.setData("text/plain", index.toString());
@@ -39,7 +58,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
   const handleDrop = (e: React.DragEvent, index: number) => {
     e.preventDefault();
     const startIndex = parseInt(e.dataTransfer.getData("text/plain"), 10);
-    if (!isNaN(startIndex) && startIndex !== index) {
+    if (!isNaN(startIndex) && startIndex !== index && selectedProjectId) {
       onReorderModules(selectedProjectId, startIndex, index);
     }
     setDraggedIndex(null);
@@ -61,6 +80,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
                className="w-full p-2 pl-9 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm appearance-none bg-white"
                value={selectedProjectId}
                onChange={(e) => setSelectedProjectId(e.target.value)}
+               disabled={projects.length === 0}
              >
                {projects.map(p => (
                  <option key={p.id} value={p.id}>{p.name}</option>
@@ -112,6 +132,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
                <input 
                   type="number" 
                   value={selectedModule?.legacyFunctionPoints || 0}
+                  disabled={!selectedModule}
                   onChange={(e) => selectedModule && onUpdateFunctionPoints(selectedProjectId, selectedModule.id, parseInt(e.target.value) || 0, selectedModule.functionPoints)}
                   className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
                />
@@ -122,6 +143,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
                <input 
                   type="number" 
                   value={selectedModule?.functionPoints || 0}
+                   disabled={!selectedModule}
                   onChange={(e) => selectedModule && onUpdateFunctionPoints(selectedProjectId, selectedModule.id, selectedModule.legacyFunctionPoints || 0, parseInt(e.target.value) || 0)}
                   className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
                />

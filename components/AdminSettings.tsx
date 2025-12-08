@@ -6,7 +6,7 @@ import { Globe, Download, Trash2, CalendarDays, CheckCircle, XCircle } from 'luc
 
 interface AdminSettingsProps {
   holidays: Holiday[];
-  onUpdateHolidays: (holidays: Holiday[]) => void;
+  onUpdateHolidays: React.Dispatch<React.SetStateAction<Holiday[]>>;
 }
 
 export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onUpdateHolidays }) => {
@@ -28,28 +28,27 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onUpdate
 
   // Filter active holidays to see which ones belong to the selected country
   const activeCountryHolidays = holidays.filter(h => h.country === selectedCountryCode);
-  const otherHolidays = holidays.filter(h => h.country !== selectedCountryCode);
 
   const handleSync = () => {
     setIsSyncing(true);
     setTimeout(() => {
-      // Merge: Keep all existing, add new ones from source if ID doesn't exist
-      const existingIds = new Set(holidays.map(h => h.id));
-      const newHolidays = sourceHolidays.filter(h => !existingIds.has(h.id));
-      
-      onUpdateHolidays([...holidays, ...newHolidays]);
+      onUpdateHolidays((prevHolidays) => {
+        const existingIds = new Set(prevHolidays.map(h => h.id));
+        const newHolidays = sourceHolidays.filter(h => !existingIds.has(h.id));
+        return [...prevHolidays, ...newHolidays];
+      });
       setIsSyncing(false);
     }, 500);
   };
 
   const handleDeleteAllFromCountry = () => {
     if (window.confirm(`Are you sure you want to remove all holidays for ${selectedCountryName}?`)) {
-      onUpdateHolidays(otherHolidays);
+      onUpdateHolidays((prevHolidays) => prevHolidays.filter(h => h.country !== selectedCountryCode));
     }
   };
 
   const handleDeleteSingle = (id: string) => {
-    onUpdateHolidays(holidays.filter(h => h.id !== id));
+    onUpdateHolidays((prevHolidays) => prevHolidays.filter(h => h.id !== id));
   };
 
   const isHolidayActive = (id: string) => holidays.some(h => h.id === id);
