@@ -13,7 +13,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
   // Aggregate data for charts
   const chartData = useMemo(() => {
     return GLOBAL_TIMELINE_DATA.map(week => {
-      const summary = {
+      const summary: Record<string, any> = {
         name: `${week.label} (${week.month})`,
         [Role.DEV]: 0,
         [Role.QA]: 0,
@@ -33,7 +33,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
                   if (summary[role] !== undefined) {
                     summary[role] += alloc.count;
                   } else {
-                     // @ts-ignore
                      summary['Other'] = (summary['Other'] || 0) + alloc.count;
                   }
                   summary.total += alloc.count;
