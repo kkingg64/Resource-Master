@@ -2,9 +2,10 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday } from '../types';
 import { getTimeline, ALL_WEEK_IDS, WeekPoint } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, Info, GripVertical, Plus, UserPlus, ChevronLeft, Clock, PlayCircle, Folder, Settings2 } from 'lucide-react';
+import { Layers, Calendar, ChevronRight, ChevronDown, Info, GripVertical, Plus, UserPlus, ChevronLeft, Clock, PlayCircle, Folder, Settings2, Trash2, Share2, Eye } from 'lucide-react';
 
 interface PlannerGridProps {
+  currentUserId: string;
   projects: Project[];
   holidays: Holiday[];
   timelineStart: WeekPoint;
@@ -19,12 +20,15 @@ interface PlannerGridProps {
   onShiftAssignment: (projectId: string, moduleId: string, taskId: string, assignmentId: string, direction: 'left' | 'right') => void;
   onUpdateTaskSchedule: (projectId: string, moduleId: string, taskId: string, startWeekId: string, duration: number) => void;
   onAddProject: () => void;
+  onDeleteProject: (projectId: string) => void;
+  onShareProject: (project: Project) => void;
   onAddModule: (projectId: string) => void;
   onUpdateProjectName: (projectId: string, name: string) => void;
   onUpdateTaskName: (projectId: string, moduleId: string, taskId: string, name: string) => void;
 }
 
 export const PlannerGrid: React.FC<PlannerGridProps> = ({ 
+  currentUserId,
   projects, 
   holidays,
   timelineStart,
@@ -39,6 +43,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   onShiftAssignment,
   onUpdateTaskSchedule,
   onAddProject,
+  onDeleteProject,
+  onShareProject,
   onAddModule,
   onUpdateProjectName,
   onUpdateTaskName
@@ -127,6 +133,18 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     } else if (e.key === 'Escape') {
       setEditingId(null);
     }
+  };
+
+  const handleDeleteProjectClick = (e: React.MouseEvent, project: Project) => {
+    e.stopPropagation();
+    if (window.confirm(`Are you sure you want to delete project "${project.name}"? This cannot be undone.`)) {
+      onDeleteProject(project.id);
+    }
+  };
+
+  const handleShareClick = (e: React.MouseEvent, project: Project) => {
+    e.stopPropagation();
+    onShareProject(project);
   };
 
   const timeline = useMemo(() => getTimeline(viewMode, timelineStart, timelineEnd), [viewMode, timelineStart, timelineEnd]);
@@ -370,45 +388,63 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           {projects.map((project) => {
             const isProjectCollapsed = collapsedProjects[project.id];
             const isEditingProject = editingId === project.id;
+            const isOwner = project.ownerId === currentUserId;
+            const isReadOnly = !isOwner;
 
             return (
               <React.Fragment key={project.id}>
                 {/* Project Header Row */}
                 <div className="flex bg-slate-700 border-b border-slate-600 sticky z-30 group">
                   <div 
-                    className="flex-shrink-0 p-3 border-r border-slate-600 sticky left-0 bg-slate-700 z-40 cursor-pointer flex items-center gap-2 text-white shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]"
+                    className="flex-shrink-0 p-3 border-r border-slate-600 sticky left-0 bg-slate-700 z-40 cursor-pointer flex items-center justify-between text-white shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]"
                     style={stickyStyle}
                     onClick={() => !isEditingProject && toggleProject(project.id)}
                   >
-                     {isProjectCollapsed ? <ChevronRight className="w-4 h-4 text-slate-300" /> : <ChevronDown className="w-4 h-4 text-slate-300" />}
-                     <Folder className="w-4 h-4 text-slate-200" />
-                     
-                     {isEditingProject ? (
-                        <input 
-                          ref={editInputRef}
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onBlur={() => saveEdit(project.id)}
-                          onKeyDown={(e) => handleKeyDown(e, project.id)}
-                          className="bg-slate-600 text-white text-sm font-bold border border-slate-500 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        />
-                     ) : (
-                        <span 
-                          className="font-bold text-sm truncate select-none flex-1" 
-                          onDoubleClick={(e) => startEditing(project.id, project.name, e)}
-                          title="Double click to rename"
-                        >
-                          {project.name}
-                        </span>
+                     <div className="flex items-center gap-2 flex-1 overflow-hidden">
+                        {isProjectCollapsed ? <ChevronRight className="w-4 h-4 text-slate-300" /> : <ChevronDown className="w-4 h-4 text-slate-300" />}
+                        <Folder className="w-4 h-4 text-slate-200" />
+                        
+                        {isEditingProject && isOwner ? (
+                            <input 
+                              ref={editInputRef}
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              onBlur={() => saveEdit(project.id)}
+                              onKeyDown={(e) => handleKeyDown(e, project.id)}
+                              className="bg-slate-600 text-white text-sm font-bold border border-slate-500 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                        ) : (
+                            <span 
+                              className="font-bold text-sm truncate select-none flex-1" 
+                              onDoubleClick={(e) => isOwner && startEditing(project.id, project.name, e)}
+                              title={isOwner ? "Double click to rename" : "View Only"}
+                            >
+                              {project.name}
+                              {!isOwner && <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[10px] bg-indigo-500/20 text-indigo-200 border border-indigo-500/30">Viewer</span>}
+                            </span>
+                        )}
+                     </div>
+
+                     {isOwner && (
+                       <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <button onClick={(e) => handleShareClick(e, project)} className="p-1 hover:bg-slate-600 rounded text-slate-300 hover:text-white" title="Share Project">
+                            <Share2 size={14} />
+                         </button>
+                         <button onClick={(e) => handleDeleteProjectClick(e, project)} className="p-1 hover:bg-red-900/50 rounded text-slate-400 hover:text-red-400" title="Delete Project">
+                            <Trash2 size={14} />
+                         </button>
+                       </div>
                      )}
                   </div>
                   <div className="w-32 flex-shrink-0 p-3 text-center text-xs font-bold text-slate-300 border-r border-slate-600 flex items-center justify-center">
-                     <button 
-                       onClick={(e) => { e.stopPropagation(); onAddModule(project.id); }}
-                       className="flex items-center gap-1 text-[10px] bg-slate-600 hover:bg-slate-500 px-2 py-0.5 rounded transition-colors"
-                     >
-                        <Plus size={10} /> Module
-                     </button>
+                     {isOwner && (
+                       <button 
+                         onClick={(e) => { e.stopPropagation(); onAddModule(project.id); }}
+                         className="flex items-center gap-1 text-[10px] bg-slate-600 hover:bg-slate-500 px-2 py-0.5 rounded transition-colors"
+                       >
+                          <Plus size={10} /> Module
+                       </button>
+                     )}
                   </div>
                    {/* Project Summaries */}
                    {timeline.map(col => {
@@ -428,10 +464,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   return (
                     <div 
                       key={module.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, index)}
-                      onDragOver={(e) => handleDragOver(e, index)}
-                      onDrop={(e) => handleDrop(e, project.id, index)}
+                      draggable={!isReadOnly}
+                      onDragStart={(e) => !isReadOnly && handleDragStart(e, index)}
+                      onDragOver={(e) => !isReadOnly && handleDragOver(e, index)}
+                      onDrop={(e) => !isReadOnly && handleDrop(e, project.id, index)}
                       className={`${draggedModuleIndex === index ? 'opacity-50' : 'opacity-100'}`}
                     >
                       {/* Module Header Row */}
@@ -441,7 +477,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           style={stickyStyle}
                           onClick={() => toggleModule(module.id)}
                         >
-                          <div className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500" title="Drag to reorder">
+                          <div className={`text-slate-300 ${!isReadOnly ? 'cursor-grab active:cursor-grabbing hover:text-slate-500' : 'cursor-default'}`} title="Drag to reorder">
                             <GripVertical className="w-4 h-4" />
                           </div>
                           {isModuleCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-indigo-500" />}
@@ -485,7 +521,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                    {isTaskCollapsed ? <ChevronRight size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
                                    <div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0"></div>
                                    
-                                   {isEditingTask ? (
+                                   {isEditingTask && isOwner ? (
                                       <input 
                                         ref={editInputRef}
                                         value={editValue}
@@ -497,8 +533,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                    ) : (
                                       <span 
                                         className="text-xs text-slate-700 font-bold truncate select-none hover:text-indigo-600 flex-1" 
-                                        title="Double click to rename"
-                                        onDoubleClick={(e) => startEditing(task.id, task.name, e)}
+                                        title={isOwner ? "Double click to rename" : ""}
+                                        onDoubleClick={(e) => isOwner && startEditing(task.id, task.name, e)}
                                       >
                                         {task.name}
                                       </span>
@@ -506,61 +542,74 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                  </div>
                                  
                                  {/* Controls */}
-                                 <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity">
-                                   <button 
-                                      onClick={() => onShiftTask(project.id, module.id, task.id, 'left')}
-                                      className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
-                                      title="Shift entire task back 1 week"
-                                   >
-                                     <ChevronLeft size={12} />
-                                   </button>
-                                   <button 
-                                      onClick={() => onShiftTask(project.id, module.id, task.id, 'right')}
-                                      className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
-                                      title="Shift entire task forward 1 week"
-                                   >
-                                     <ChevronRight size={12} />
-                                   </button>
-                                   <div className="w-px h-3 bg-slate-300 mx-1"></div>
-                                   <button 
-                                      onClick={() => onAddAssignment(project.id, module.id, task.id, Role.DEV)}
-                                      className="text-slate-400 hover:text-indigo-600"
-                                      title="Add another role to this task"
-                                   >
-                                     <UserPlus size={14} />
-                                   </button>
-                                 </div>
+                                 {isOwner && (
+                                   <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity">
+                                     <button 
+                                        onClick={() => onShiftTask(project.id, module.id, task.id, 'left')}
+                                        className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
+                                        title="Shift entire task back 1 week"
+                                     >
+                                       <ChevronLeft size={12} />
+                                     </button>
+                                     <button 
+                                        onClick={() => onShiftTask(project.id, module.id, task.id, 'right')}
+                                        className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
+                                        title="Shift entire task forward 1 week"
+                                     >
+                                       <ChevronRight size={12} />
+                                     </button>
+                                     <div className="w-px h-3 bg-slate-300 mx-1"></div>
+                                     <button 
+                                        onClick={() => onAddAssignment(project.id, module.id, task.id, Role.DEV)}
+                                        className="text-slate-400 hover:text-indigo-600"
+                                        title="Add another role to this task"
+                                     >
+                                       <UserPlus size={14} />
+                                     </button>
+                                   </div>
+                                 )}
                               </div>
 
                               {/* Schedule Controls */}
                               <div className="w-32 flex-shrink-0 border-r border-slate-200 bg-slate-50/30 flex items-center gap-1 px-1">
-                                  <div className="flex flex-col w-full">
-                                      <div className="flex items-center gap-1">
-                                          <PlayCircle size={10} className="text-slate-400" />
-                                          <select 
-                                              className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer"
-                                              value={task.startWeekId || ''}
-                                              onChange={(e) => onUpdateTaskSchedule(project.id, module.id, task.id, e.target.value, task.duration || 1)}
-                                          >
-                                              <option value="">Start...</option>
-                                              {ALL_WEEK_IDS.map(w => (
-                                                  <option key={w} value={w}>{w.split('-')[1]}</option>
-                                              ))}
-                                          </select>
-                                      </div>
-                                      <div className="flex items-center gap-1 border-t border-slate-200 pt-0.5 mt-0.5">
-                                          <Clock size={10} className="text-slate-400" />
-                                          <input 
-                                              type="number" 
-                                              className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-8"
-                                              placeholder="Wks"
-                                              min={1}
-                                              value={task.duration || ''}
-                                              onChange={(e) => onUpdateTaskSchedule(project.id, module.id, task.id, task.startWeekId || ALL_WEEK_IDS[0], parseInt(e.target.value) || 0)}
-                                          />
-                                          <span className="text-[9px] text-slate-400">wks</span>
-                                      </div>
-                                  </div>
+                                  {isOwner ? (
+                                    <div className="flex flex-col w-full">
+                                        <div className="flex items-center gap-1">
+                                            <PlayCircle size={10} className="text-slate-400" />
+                                            <select 
+                                                className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer"
+                                                value={task.startWeekId || ''}
+                                                onChange={(e) => onUpdateTaskSchedule(project.id, module.id, task.id, e.target.value, task.duration || 1)}
+                                            >
+                                                <option value="">Start...</option>
+                                                {ALL_WEEK_IDS.map(w => (
+                                                    <option key={w} value={w}>{w.split('-')[1]}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="flex items-center gap-1 border-t border-slate-200 pt-0.5 mt-0.5">
+                                            <Clock size={10} className="text-slate-400" />
+                                            <input 
+                                                type="number" 
+                                                className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-8"
+                                                placeholder="Wks"
+                                                min={1}
+                                                value={task.duration || ''}
+                                                onChange={(e) => onUpdateTaskSchedule(project.id, module.id, task.id, task.startWeekId || ALL_WEEK_IDS[0], parseInt(e.target.value) || 0)}
+                                            />
+                                            <span className="text-[9px] text-slate-400">wks</span>
+                                        </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex flex-col justify-center h-full w-full pl-2">
+                                        <div className="text-[9px] text-slate-500">
+                                            Start: {task.startWeekId ? task.startWeekId.split('-')[1] : '-'}
+                                        </div>
+                                        <div className="text-[9px] text-slate-500">
+                                            Dur: {task.duration || '-'} wks
+                                        </div>
+                                    </div>
+                                  )}
                               </div>
                               
                               {/* Task Summaries */}
@@ -591,35 +640,39 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-slate-200/0"></div> 
                                     <select 
                                       value={assignment.role}
+                                      disabled={isReadOnly}
                                       onChange={(e) => onUpdateAssignmentRole(project.id, module.id, task.id, assignment.id, e.target.value as Role)}
-                                      className="w-20 text-[10px] p-1 border-none bg-transparent focus:ring-0 text-slate-600 cursor-pointer font-medium"
+                                      className="w-20 text-[10px] p-1 border-none bg-transparent focus:ring-0 text-slate-600 font-medium disabled:cursor-not-allowed"
                                     >
                                       {Object.values(Role).map(r => (
                                         <option key={r} value={r}>{r}</option>
                                       ))}
                                     </select>
 
-                                    <div className="flex items-center gap-0.5 opacity-0 group-hover/assign:opacity-100 transition-opacity">
-                                      <button 
-                                          onClick={() => onShiftAssignment(project.id, module.id, task.id, assignment.id, 'left')}
-                                          className="text-slate-300 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
-                                      >
-                                        <ChevronLeft size={10} />
-                                      </button>
-                                      <button 
-                                          onClick={() => onShiftAssignment(project.id, module.id, task.id, assignment.id, 'right')}
-                                          className="text-slate-300 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
-                                      >
-                                        <ChevronRight size={10} />
-                                      </button>
-                                    </div>
+                                    {isOwner && (
+                                      <div className="flex items-center gap-0.5 opacity-0 group-hover/assign:opacity-100 transition-opacity">
+                                        <button 
+                                            onClick={() => onShiftAssignment(project.id, module.id, task.id, assignment.id, 'left')}
+                                            className="text-slate-300 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
+                                        >
+                                          <ChevronLeft size={10} />
+                                        </button>
+                                        <button 
+                                            onClick={() => onShiftAssignment(project.id, module.id, task.id, assignment.id, 'right')}
+                                            className="text-slate-300 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
+                                        >
+                                          <ChevronRight size={10} />
+                                        </button>
+                                      </div>
+                                    )}
                                 </div>
                                 
                                 {timeline.map(col => {
                                   const raw = getRawCellValue(assignment, col);
                                   const display = formatValue(raw);
                                   const hasValue = raw > 0;
-                                  const isReadOnly = viewMode === 'day';
+                                  // Read only if ViewMode is day OR current user is not owner
+                                  const isCellReadOnly = viewMode === 'day' || isReadOnly;
                                   const holidayInfo = getHolidayInfo(col.date);
                                   const isHol = !!holidayInfo;
 
@@ -632,14 +685,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     >
                                       <input 
                                         type="text"
-                                        disabled={isReadOnly || isHol}
+                                        disabled={isCellReadOnly || isHol}
                                         className={`w-full h-full text-center text-xs focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors
                                             ${hasValue ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50'}
-                                            ${isReadOnly ? 'cursor-default text-slate-500 bg-slate-50/50' : ''}
+                                            ${isCellReadOnly ? 'cursor-default text-slate-500 bg-slate-50/50' : ''}
                                             ${isHol ? 'bg-transparent cursor-not-allowed' : ''}
                                         `}
                                         value={display}
-                                        placeholder={isReadOnly ? '' : '-'}
+                                        placeholder={isCellReadOnly ? '' : '-'}
                                         onChange={(e) => handleCellUpdate(project.id, module.id, task.id, assignment.id, col, e.target.value)}
                                       />
                                     </div>
@@ -652,7 +705,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                       })}
                       
                       {/* Add Task Button */}
-                      {!isModuleCollapsed && (
+                      {!isModuleCollapsed && isOwner && (
                         <div className="flex border-b border-slate-100 bg-slate-50/20">
                           <div 
                             className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50/80 z-20 pl-12 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]"

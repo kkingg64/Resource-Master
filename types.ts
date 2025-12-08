@@ -46,7 +46,16 @@ export interface ProjectModule {
 export interface Project {
   id: string;
   name: string;
+  ownerId: string; // User ID of the owner
+  sharedWith: string[]; // List of emails having view-only access
   modules: ProjectModule[];
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  avatar: string;
 }
 
 export interface WeeklySummary {

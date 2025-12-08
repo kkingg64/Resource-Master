@@ -1,5 +1,21 @@
 
-import { Project, Role, Phase, TimelineWeek, TimelineColumn, ViewMode, Holiday } from './types';
+import { Project, Role, Phase, TimelineWeek, TimelineColumn, ViewMode, Holiday, User } from './types';
+
+// Mock Users
+export const MOCK_USERS: User[] = [
+  {
+    id: 'u1',
+    name: 'Project Admin',
+    email: 'admin@oms.com',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin'
+  },
+  {
+    id: 'u2',
+    name: 'Guest Viewer',
+    email: 'guest@oms.com',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Guest'
+  }
+];
 
 // Mock "Government Database" - Expanded for 2024-2027
 export const GOV_HOLIDAYS_DB: Record<string, Holiday[]> = {
@@ -240,7 +256,7 @@ const INITIAL_MODULES_DATA = [
   },
   {
     id: 'm3',
-    name: 'Product Module (Ron+COE)',
+    name: 'Product Module',
     legacyFunctionPoints: 100,
     functionPoints: 83,
     tasks: []
@@ -258,6 +274,8 @@ export const INITIAL_PROJECTS: Project[] = [
   {
     id: 'p1',
     name: 'OMS Migration Phase 1',
+    ownerId: 'u1', // Default owned by Admin
+    sharedWith: [],
     modules: INITIAL_MODULES_DATA
   }
 ];

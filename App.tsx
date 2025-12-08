@@ -1,21 +1,55 @@
 
 import React, { useState } from 'react';
 import { INITIAL_PROJECTS, ALL_WEEK_IDS, INITIAL_HOLIDAYS, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint } from './constants';
-import { Project, Role, ResourceAllocation, Holiday } from './types';
+import { Project, Role, ResourceAllocation, Holiday, User } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
 import { Estimator } from './components/Estimator';
 import { AdminSettings } from './components/AdminSettings';
-import { LayoutDashboard, Calendar, Calculator, Settings, ShieldCheck, Globe } from 'lucide-react';
+import { Login } from './components/Login';
+import { ShareModal } from './components/ShareModal';
+import { LayoutDashboard, Calendar, Calculator, Settings, ShieldCheck, Globe, LogOut } from 'lucide-react';
 
 const App: React.FC = () => {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
   const [holidays, setHolidays] = useState<Holiday[]>(INITIAL_HOLIDAYS);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'planner' | 'estimator' | 'holiday'>('planner');
   
+  // Sharing Modal State
+  const [projectToShare, setProjectToShare] = useState<Project | null>(null);
+
   // Timeline State
   const [timelineStart, setTimelineStart] = useState<WeekPoint>(DEFAULT_START);
   const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
+
+  // Filter projects for the current user
+  const visibleProjects = currentUser ? projects.filter(p => 
+    p.ownerId === currentUser.id || p.sharedWith.includes(currentUser.email)
+  ) : [];
+
+  const handleLogin = (user: User) => {
+    setCurrentUser(user);
+    setActiveTab('planner');
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+  };
+
+  const handleDeleteProject = (projectId: string) => {
+    setProjects(prev => prev.filter(p => p.id !== projectId));
+  };
+
+  const handleShareProject = (email: string) => {
+    if (projectToShare) {
+      setProjects(prev => prev.map(p => {
+        if (p.id !== projectToShare.id) return p;
+        if (p.sharedWith.includes(email)) return p;
+        return { ...p, sharedWith: [...p.sharedWith, email] };
+      }));
+    }
+  };
 
   const handleExtendTimeline = (direction: 'start' | 'end') => {
     if (direction === 'start') {
@@ -70,10 +104,13 @@ const App: React.FC = () => {
   };
 
   const addProject = () => {
+    if (!currentUser) return;
     const newId = `p${projects.length + 1}-${Date.now()}`;
     setProjects(prev => [...prev, {
       id: newId,
       name: `New Project ${projects.length + 1}`,
+      ownerId: currentUser.id,
+      sharedWith: [],
       modules: []
     }]);
   };
@@ -227,6 +264,10 @@ const App: React.FC = () => {
     }));
   };
 
+  if (!currentUser) {
+    return <Login onLogin={handleLogin} />;
+  }
+
   return (
     <div className="flex h-screen w-full bg-slate-100">
       {/* Sidebar */}
@@ -275,16 +316,27 @@ const App: React.FC = () => {
           </button>
         </nav>
 
+        {/* User Profile Footer */}
         <div className="p-4 border-t border-slate-800">
-           <button className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">
-             <Settings size={16} />
-             <span>Settings</span>
+           <div className="flex items-center gap-3 mb-4 px-2">
+              <img src={currentUser.avatar} alt="Avatar" className="w-8 h-8 rounded-full bg-slate-700" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-white truncate">{currentUser.name}</div>
+                <div className="text-xs text-slate-500 truncate">{currentUser.email}</div>
+              </div>
+           </div>
+           <button 
+             onClick={handleLogout}
+             className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded transition-colors"
+           >
+             <LogOut size={16} />
+             <span>Sign Out</span>
            </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden relative">
         {/* Top Header */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
            <h1 className="text-xl font-bold text-slate-800">
@@ -295,14 +347,14 @@ const App: React.FC = () => {
            </h1>
            <div className="flex items-center gap-4">
               <div className="text-sm text-slate-500">
-                Portfolio: <span className="font-semibold text-slate-800">{projects.length} Projects</span>
+                Visible Projects: <span className="font-semibold text-slate-800">{visibleProjects.length}</span>
               </div>
            </div>
         </header>
 
         {/* Content Area */}
         <div className="flex-1 overflow-auto p-6">
-          {activeTab === 'dashboard' && <Dashboard projects={projects} />}
+          {activeTab === 'dashboard' && <Dashboard projects={visibleProjects} />}
           
           {activeTab === 'planner' && (
             <div className="h-full flex flex-col">
@@ -321,7 +373,8 @@ const App: React.FC = () => {
                 </div>
               </div>
               <PlannerGrid 
-                projects={projects} 
+                currentUserId={currentUser.id}
+                projects={visibleProjects} 
                 holidays={holidays}
                 timelineStart={timelineStart}
                 timelineEnd={timelineEnd}
@@ -335,6 +388,8 @@ const App: React.FC = () => {
                 onShiftAssignment={shiftAssignmentTimeline}
                 onUpdateTaskSchedule={updateTaskSchedule}
                 onAddProject={addProject}
+                onDeleteProject={handleDeleteProject}
+                onShareProject={setProjectToShare}
                 onAddModule={addModule}
                 onUpdateProjectName={updateProjectName}
                 onUpdateTaskName={updateTaskName}
@@ -346,7 +401,7 @@ const App: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
               <div className="lg:col-span-1 h-fit">
                 <Estimator 
-                  projects={projects} 
+                  projects={visibleProjects} 
                   onUpdateFunctionPoints={updateFunctionPoints} 
                   onReorderModules={reorderModules}
                 />
@@ -366,6 +421,15 @@ const App: React.FC = () => {
             />
           )}
         </div>
+
+        {/* Modals */}
+        {projectToShare && (
+          <ShareModal 
+            project={projectToShare} 
+            onClose={() => setProjectToShare(null)} 
+            onShare={handleShareProject} 
+          />
+        )}
       </main>
     </div>
   );
