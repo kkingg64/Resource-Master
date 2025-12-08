@@ -1,13 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { Project, Holiday } from '../types';
 
-// These environment variables are configured in Vercel
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY!;
-const PLAN_ID = process.env.PLAN_ID!;
+// These environment variables are configured in Vercel and prefixed with VITE_
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY!;
+const PLAN_ID = import.meta.env.VITE_PLAN_ID!;
 
 if (!supabaseUrl || !supabaseAnonKey || !PLAN_ID) {
-  console.error("Supabase environment variables are not set. Please check your Vercel configuration.");
+  console.error("Supabase environment variables are not set. Please check your Vercel configuration and ensure they are prefixed with VITE_.");
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
