@@ -46,16 +46,9 @@ export interface ProjectModule {
 export interface Project {
   id: string;
   name: string;
-  ownerId: string; // User ID of the owner
-  sharedWith: string[]; // List of emails having view-only access
   modules: ProjectModule[];
-}
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  avatar: string;
+  owner_id: string;
+  shared_with: string[];
 }
 
 export interface WeeklySummary {
@@ -88,4 +81,5 @@ export interface Holiday {
   date: string; // YYYY-MM-DD
   name: string;
   country: string; // Country code e.g. 'MY', 'SG', 'Global'
+  user_id?: string; // Belongs to a specific user
 }

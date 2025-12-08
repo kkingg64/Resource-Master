@@ -1,53 +1,95 @@
 
-import React from 'react';
-import { MOCK_USERS } from '../constants';
-import { User } from '../types';
+import React, { useState } from 'react';
+import { supabase } from '../supabaseClient';
+import { Layers } from 'lucide-react';
 
-interface LoginProps {
-  onLogin: (user: User) => void;
-}
+export const Login: React.FC = () => {
+  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
-export const Login: React.FC<LoginProps> = ({ onLogin }) => {
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setMessage(null);
+    setLoading(true);
+
+    if (isSignUp) {
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) {
+        setError(error.message);
+      } else {
+        setMessage('Registration successful! Please check your email to confirm your account.');
+      }
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        setError(error.message);
+      }
+    }
+    setLoading(false);
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md border border-slate-200">
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-2xl mb-4 shadow-lg shadow-indigo-600/30">
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center">
+      <div className="w-full max-w-md bg-white rounded-xl shadow-lg border border-slate-200 p-8 m-4">
+        <div className="flex flex-col items-center mb-6">
+          <div className="w-12 h-12 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-2xl mb-3">
             OM
           </div>
-          <h1 className="text-2xl font-bold text-slate-800">Welcome Back</h1>
-          <p className="text-slate-500 mt-2 text-center">Sign in to OMS Resource Master to manage your projects.</p>
+          <h1 className="text-2xl font-bold text-slate-800">Welcome to Resourcer</h1>
+          <p className="text-slate-500 mt-1">{isSignUp ? 'Create an account to start planning.' : 'Sign in to access your projects.'}</p>
         </div>
 
-        <div className="space-y-4">
-          <button
-            onClick={() => onLogin(MOCK_USERS[0])}
-            className="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold py-3 px-4 rounded-xl transition-all shadow-sm"
-          >
-            <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
-            Sign in with Google
-          </button>
-          
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-200"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-slate-500">Demo Modes</span>
-            </div>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="email">
+              Email Address
+            </label>
+            <input
+              id="email"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+            />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-600 mb-1" htmlFor="password">
+              Password
+            </label>
+            <input
+              id="password"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          <div>
+            <button
+              disabled={loading}
+              className="w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {loading ? 'Processing...' : (isSignUp ? 'Sign Up' : 'Sign In')}
+            </button>
+          </div>
+        </form>
 
-          <button
-            onClick={() => onLogin(MOCK_USERS[1])}
-            className="w-full flex items-center justify-center gap-3 bg-slate-800 hover:bg-slate-900 text-white font-medium py-3 px-4 rounded-xl transition-all shadow-lg shadow-slate-900/10"
-          >
-            Login as Guest Viewer
+        {error && <p className="mt-4 text-center text-sm text-red-600">{error}</p>}
+        {message && <p className="mt-4 text-center text-sm text-green-600">{message}</p>}
+
+        <div className="mt-6 text-center">
+          <button onClick={() => { setIsSignUp(!isSignUp); setError(null); setMessage(null); }} className="text-sm text-indigo-600 hover:underline">
+            {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
           </button>
-        </div>
-
-        <div className="mt-8 text-center text-xs text-slate-400">
-          <p>This is a secure demo environment.</p>
-          <p>&copy; 2025 OMS Resource Master</p>
         </div>
       </div>
     </div>

@@ -1,21 +1,5 @@
 
-import { Project, Role, Phase, TimelineWeek, TimelineColumn, ViewMode, Holiday, User } from './types';
-
-// Mock Users
-export const MOCK_USERS: User[] = [
-  {
-    id: 'u1',
-    name: 'Project Admin',
-    email: 'admin@oms.com',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin'
-  },
-  {
-    id: 'u2',
-    name: 'Guest Viewer',
-    email: 'guest@oms.com',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Guest'
-  }
-];
+import { Project, Role, Phase, TimelineWeek, TimelineColumn, ViewMode, Holiday } from './types';
 
 // Mock "Government Database" - Expanded for 2024-2027
 export const GOV_HOLIDAYS_DB: Record<string, Holiday[]> = {
@@ -256,7 +240,7 @@ const INITIAL_MODULES_DATA = [
   },
   {
     id: 'm3',
-    name: 'Product Module',
+    name: 'Product Module (Ron+COE)',
     legacyFunctionPoints: 100,
     functionPoints: 83,
     tasks: []
@@ -274,9 +258,10 @@ export const INITIAL_PROJECTS: Project[] = [
   {
     id: 'p1',
     name: 'OMS Migration Phase 1',
-    ownerId: 'u1', // Default owned by Admin
-    sharedWith: [],
-    modules: INITIAL_MODULES_DATA
+    modules: INITIAL_MODULES_DATA,
+// FIX: Added missing properties `owner_id` and `shared_with` to satisfy the Project type.
+    owner_id: '',
+    shared_with: []
   }
 ];
 
@@ -380,7 +365,7 @@ const generateDays = (weeks: TimelineColumn[]): TimelineColumn[] => {
 
     // Generate Mon-Fri for each week
     ['M', 'T', 'W', 'T', 'F'].forEach((dayName, idx) => {
-       const date = new Date(monday);
+       const date = new Date( monday );
        date.setDate(monday.getDate() + idx);
        
        days.push({
