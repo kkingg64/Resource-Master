@@ -24,6 +24,7 @@ export interface ResourceAllocation {
 export interface TaskAssignment {
   id: string;
   role: Role;
+  resourceName?: string;
   allocations: ResourceAllocation[];
 }
 

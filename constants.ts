@@ -103,6 +103,7 @@ const INITIAL_MODULES_DATA = [
           {
             id: 'a1-1-1',
             role: Role.BA,
+            resourceName: 'Alex Chen',
             allocations: [
               { weekId: '2025-44', count: 12 },
               { weekId: '2025-45', count: 18 }
@@ -119,6 +120,7 @@ const INITIAL_MODULES_DATA = [
           {
             id: 'a1-2-1',
             role: Role.BA,
+            resourceName: 'Alex Chen',
             allocations: [
               { weekId: '2025-46', count: 18 }
             ]
@@ -134,6 +136,7 @@ const INITIAL_MODULES_DATA = [
           {
             id: 'a1-3-1',
             role: Role.UIUX,
+            resourceName: 'Sarah Lee',
             allocations: [
               { weekId: '2025-47', count: 1 },
               { weekId: '2025-48', count: 1 }
@@ -150,6 +153,7 @@ const INITIAL_MODULES_DATA = [
           {
             id: 'a1-4-1',
             role: Role.DEV,
+            resourceName: 'Unassigned',
             allocations: [
               { weekId: '2025-49', count: 2 },
               { weekId: '2025-50', count: 2 },
@@ -167,6 +171,7 @@ const INITIAL_MODULES_DATA = [
           {
             id: 'a1-5-1',
             role: Role.QA,
+            resourceName: 'Mike Johnson',
             allocations: [
               { weekId: '2025-52', count: 1 }
             ]
@@ -190,6 +195,7 @@ const INITIAL_MODULES_DATA = [
           {
             id: 'a2-1-1',
             role: Role.BA,
+            resourceName: 'Alex Chen',
             allocations: [
               { weekId: '2025-46', count: 18 }
             ]
@@ -205,6 +211,7 @@ const INITIAL_MODULES_DATA = [
           {
             id: 'a2-2-1',
             role: Role.UIUX,
+            resourceName: 'Sarah Lee',
             allocations: [
               { weekId: '2025-49', count: 1 },
               { weekId: '2025-50', count: 1 }
@@ -221,6 +228,7 @@ const INITIAL_MODULES_DATA = [
           {
             id: 'a2-3-1',
             role: Role.DEV,
+            resourceName: 'Unassigned',
             allocations: [
               { weekId: '2025-51', count: 2 },
               { weekId: '2025-52', count: 2 },
@@ -230,6 +238,7 @@ const INITIAL_MODULES_DATA = [
           {
             id: 'a2-3-2',
             role: Role.QA,
+            resourceName: 'Mike Johnson',
              allocations: [
               { weekId: '2026-01', count: 1 }
             ]
