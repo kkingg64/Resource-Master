@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ALL_WEEK_IDS, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId } from './constants';
+import { ALL_WEEK_IDS, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getDateFromWeek, getWeekIdFromDate } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
@@ -29,6 +29,7 @@ const structureProjectsData = (data: any[]): Project[] => {
         name: t.name,
         startWeekId: t.start_week_id,
         duration: t.duration,
+        dependencies: t.dependencies || [],
         assignments: t.task_assignments.map((a: any) => ({
           id: a.id,
           role: a.role,
@@ -40,7 +41,7 @@ const structureProjectsData = (data: any[]): Project[] => {
           })),
         })),
       })),
-    })).sort((a,b) => a.sort_order - b.sort_order), // Sort modules
+    })).sort((a: any, b: any) => a.sort_order - b.sort_order), // Sort modules
   }));
 };
 
@@ -87,7 +88,7 @@ const App: React.FC = () => {
         modules (
           id, name, legacy_function_points, function_points, sort_order,
           tasks (
-            id, name, start_week_id, duration,
+            id, name, start_week_id, duration, dependencies,
             task_assignments (
               id, role, resource_name,
               resource_allocations ( id, week_id, count, days )
@@ -291,14 +292,13 @@ const App: React.FC = () => {
   };
   
   const addTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
-    // This now needs to be a transaction
     const { data: taskData, error: taskError } = await supabase.from('tasks').insert({ id: taskId, name: taskName, module_id: moduleId, user_id: session!.user.id }).select().single();
     if (taskError) { console.error(taskError); alert("Failed to add task."); return; }
     
     const { data: assignData, error: assignError } = await supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
     if (assignError) { console.error(assignError); return; }
 
-    fetchData(); // Simplest way to refresh state after complex insert
+    fetchData(); 
   };
   
   const deleteTask = async (projectId: string, moduleId: string, taskId: string) => {
@@ -362,16 +362,107 @@ const App: React.FC = () => {
         alert("Failed to reorder modules.");
     }
   };
+
+  // Helper to recalculate dependency chains (Gantt logic)
+  const recalculateAndSaveDependencyChain = async (
+    currentProjects: Project[],
+    projectId: string,
+    moduleId: string, 
+    startTaskId: string, 
+    newStartWeekId: string, 
+    newDuration: number
+  ) => {
+    // 1. Update the starting task locally
+    let updatedProjects = JSON.parse(JSON.stringify(currentProjects));
+    const tasksToUpdate: { id: string, startWeekId: string }[] = [];
+    
+    // Recursive function to update dependents
+    const updateDependentTasks = (pId: string, mId: string, tId: string, sWeekId: string, dur: number) => {
+       const taskEndWeekDate = new Date(getDateFromWeek(
+          parseInt(sWeekId.split('-')[0]),
+          parseInt(sWeekId.split('-')[1])
+       ));
+       taskEndWeekDate.setDate(taskEndWeekDate.getDate() + (dur * 7));
+       const finishWeekId = getWeekIdFromDate(taskEndWeekDate);
+
+       // Find all tasks that depend on tId
+       updatedProjects.forEach((p: Project) => {
+          p.modules.forEach((m: ProjectModule) => {
+             m.tasks.forEach((t: ProjectTask) => {
+                if (t.dependencies && t.dependencies.includes(tId)) {
+                   // This task 't' depends on the modified task
+                   // Start date must be > finishWeekId
+                   // Simplified: Start date = Finish Week of predecessor
+                   
+                   // Check if we need to move it forward
+                   // We only move forward, typically, to respect constraint
+                   const currentStart = t.startWeekId || sWeekId;
+                   if (finishWeekId > currentStart) {
+                      // Update logic
+                      t.startWeekId = finishWeekId;
+                      tasksToUpdate.push({ id: t.id, startWeekId: finishWeekId });
+                      // Recurse
+                      updateDependentTasks(p.id, m.id, t.id, finishWeekId, t.duration || 1);
+                   }
+                }
+             });
+          });
+       });
+    };
+
+    // Apply initial update
+    updatedProjects = updatedProjects.map((p: Project) => {
+       if (p.id !== projectId) return p;
+       return { ...p, modules: p.modules.map((m: ProjectModule) => {
+          if (m.id !== moduleId) return m;
+          return { ...m, tasks: m.tasks.map((t: ProjectTask) => {
+             if (t.id === startTaskId) {
+               return { ...t, startWeekId: newStartWeekId, duration: newDuration };
+             }
+             return t;
+          })};
+       })};
+    });
+
+    // Start recursion
+    updateDependentTasks(projectId, moduleId, startTaskId, newStartWeekId, newDuration);
+    
+    setProjects(updatedProjects);
+
+    // Save initial task
+    await supabase.from('tasks').update({ start_week_id: newStartWeekId, duration: newDuration }).eq('id', startTaskId);
+
+    // Save cascading updates
+    for (const update of tasksToUpdate) {
+       await supabase.from('tasks').update({ start_week_id: update.startWeekId }).eq('id', update.id);
+    }
+  };
   
   const updateTaskSchedule = async (projectId: string, moduleId: string, taskId: string, startWeekId: string, duration: number) => {
-     const previousState = projects;
-     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? {...t, startWeekId, duration } : t) } : m) } : p));
-     const { error } = await supabase.from('tasks').update({ start_week_id: startWeekId, duration }).eq('id', taskId);
-     if (error) {
-        console.error(error);
-        setProjects(previousState);
-        alert("Failed to update task schedule.");
-     }
+     await recalculateAndSaveDependencyChain(projects, projectId, moduleId, taskId, startWeekId, duration);
+  };
+
+  const updateTaskDependencies = async (projectId: string, moduleId: string, taskId: string, dependencies: string[]) => {
+      const previousState = projects;
+      
+      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? {...t, dependencies } : t) } : m) } : p));
+      
+      const { error } = await supabase.from('tasks').update({ dependencies }).eq('id', taskId);
+      
+      if (error) {
+         console.error(error);
+         setProjects(previousState);
+         alert("Failed to update dependencies.");
+      } else {
+         // Trigger auto-schedule to align with new dependencies
+         const task = projects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
+         if (task && task.startWeekId) {
+            // Re-run scheduling logic as if this task just changed, to ensure it respects new predecessors
+            // Actually, we need to check if IT needs to move based on predecessors.
+            // Simplified: We assume user places it, or we could auto-align. 
+            // For now, let's leave it manual placement unless predecessor moves.
+         }
+      }
   };
   
   const handleSaveVersion = async (name: string) => {
@@ -394,15 +485,10 @@ const App: React.FC = () => {
       alert("Error: Version not found.");
       return;
     }
-    // This is destructive. A more complex merge would be better in a real app.
-    // Clear existing data
     await supabase.from('projects').delete().eq('user_id', session!.user.id);
     await supabase.from('holidays').delete().eq('user_id', session!.user.id);
-    // Restore
     setProjects(version.data.projects);
     setHolidays(version.data.holidays);
-    // We need to re-insert all this data into the DB, which is a complex operation.
-    // For this app, we will just update the state and let the user save manually.
     alert(`Version restored. Any new changes will be saved to your current state.`);
     setShowHistory(false);
   };
@@ -439,6 +525,23 @@ const App: React.FC = () => {
             <button onClick={() => setActiveTab('estimator')} title="Estimator" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'estimator' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><Calculator size={20} />{!isSidebarCollapsed && <span className="font-medium">Estimator</span>}</button>
             <button onClick={() => setActiveTab('holiday')} title="Holidays" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'holiday' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><Globe size={20} />{!isSidebarCollapsed && <span className="font-medium">Holidays</span>}</button>
           </nav>
+          
+          <div className="p-4 border-t border-slate-800 flex items-center gap-3 overflow-hidden">
+             {session.user.user_metadata.avatar_url ? (
+               <img src={session.user.user_metadata.avatar_url} alt="Avatar" className="w-8 h-8 rounded-full border border-slate-600" />
+             ) : (
+               <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+                  {session.user.email?.substring(0,2).toUpperCase()}
+               </div>
+             )}
+             {!isSidebarCollapsed && (
+               <div className="overflow-hidden">
+                  <p className="text-sm font-medium text-white truncate">{session.user.user_metadata.full_name || 'User'}</p>
+                  <p className="text-xs text-slate-500 truncate">{session.user.email}</p>
+               </div>
+             )}
+          </div>
+
           <div className="p-4 border-t border-slate-800 space-y-2">
             <button onClick={() => setActiveTab('settings')} title="Settings" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-2 text-sm rounded-lg ${activeTab === 'settings' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}><SettingsIcon size={16} />{!isSidebarCollapsed && <span>Settings</span>}</button>
             <button onClick={() => supabase.auth.signOut()} title="Sign Out" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-white`}><LogOut size={16} />{!isSidebarCollapsed && <span>Sign Out</span>}</button>
@@ -450,7 +553,7 @@ const App: React.FC = () => {
             {loading ? <div className="text-center">Loading your data...</div> : (
               <>
                 {activeTab === 'dashboard' && <Dashboard projects={projects} />}
-                {activeTab === 'planner' && <PlannerGrid projects={projects} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={async () => {}} onUpdateAssignmentResourceName={async () => {}} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onShiftTask={async () => {}} onShiftAssignment={async () => {}} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={() => {}} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} />}
+                {activeTab === 'planner' && <PlannerGrid projects={projects} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={async () => {}} onUpdateAssignmentResourceName={async () => {}} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onShiftTask={async () => {}} onShiftAssignment={async () => {}} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={() => {}} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} onUpdateTaskDependencies={updateTaskDependencies} />}
                 {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
                 {activeTab === 'holiday' && <AdminSettings holidays={holidays} onUpdateHolidays={setHolidays} />}
                 {activeTab === 'settings' && <Settings />}

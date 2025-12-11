@@ -34,6 +34,7 @@ export interface ProjectTask {
   name: string;
   startWeekId?: string; // Auto-scheduler start
   duration?: number;    // Auto-scheduler duration in weeks
+  dependencies?: string[]; // Array of prerequisite task IDs
   assignments: TaskAssignment[];
 }
 
