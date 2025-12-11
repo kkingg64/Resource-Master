@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday } from '../types';
 import { getTimeline, ALL_WEEK_IDS, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, Info, GripVertical, Plus, UserPlus, ChevronLeft, Clock, PlayCircle, Folder, Settings2, Trash2, Download, Upload, History } from 'lucide-react';
+import { Layers, Calendar, ChevronRight, ChevronDown, Info, GripVertical, Plus, UserPlus, ChevronLeft, Clock, PlayCircle, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface PlannerGridProps {
@@ -33,7 +33,29 @@ interface PlannerGridProps {
   onImportPlan: (projects: Project[], holidays: Holiday[]) => void;
   onShowHistory: () => void;
   onUpdateFunctionPoints: (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => void;
+  onRefresh: () => void;
+  saveStatus: 'idle' | 'saving' | 'success' | 'error';
+  isRefreshing: boolean;
 }
+
+const SaveStatusIndicator: React.FC<{ status: PlannerGridProps['saveStatus'] }> = ({ status }) => {
+  const statusConfig = {
+    saving: { icon: <RotateCw size={14} className="animate-spin" />, text: 'Saving...', style: 'text-slate-600 bg-slate-100' },
+    success: { icon: <CheckCircle size={14} />, text: 'Saved!', style: 'text-green-700 bg-green-100' },
+    error: { icon: <AlertTriangle size={14} />, text: 'Error!', style: 'text-red-700 bg-red-100' },
+    idle: { icon: <CheckCircle size={14} />, text: 'Up to date', style: 'text-slate-500 bg-white' },
+  };
+  
+  const current = statusConfig[status];
+
+  return (
+    <div className={`flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 transition-all ${current.style}`}>
+      {current.icon}
+      <span>{current.text}</span>
+    </div>
+  );
+};
+
 
 export const PlannerGrid: React.FC<PlannerGridProps> = ({ 
   projects, 
@@ -62,7 +84,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   onDeleteAssignment,
   onImportPlan,
   onShowHistory,
-  onUpdateFunctionPoints
+  onUpdateFunctionPoints,
+  onRefresh,
+  saveStatus,
+  isRefreshing,
 }) => {
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const [collapsedModules, setCollapsedModules] = useState<Record<string, boolean>>({});
@@ -563,25 +588,36 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         <div className="flex gap-4 items-center">
            <div className="flex items-center gap-2">
               <button 
+                  onClick={onRefresh}
+                  disabled={isRefreshing}
+                  className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Refresh data from server"
+              >
+                  <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh
+              </button>
+              <SaveStatusIndicator status={saveStatus} />
+              <div className="w-px h-4 bg-slate-300"></div>
+
+              <button 
                   onClick={onShowHistory}
                   className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors"
                   title="View and restore saved versions"
               >
-                  <History size={12} /> History
+                  <History size={12} />
               </button>
               <button 
                   onClick={handleExportExcel}
                   className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors"
                   title="Export the current plan as an Excel file"
               >
-                  <Download size={12} /> Export Excel
+                  <Download size={12} />
               </button>
               <button 
                   onClick={() => importInputRef.current?.click()}
                   className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors"
                   title="Import a plan from an Excel file"
               >
-                  <Upload size={12} /> Import Excel
+                  <Upload size={12} />
               </button>
               <input type="file" ref={importInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
           </div>

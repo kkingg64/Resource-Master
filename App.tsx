@@ -51,12 +51,20 @@ const App: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'planner' | 'estimator' | 'holiday' | 'settings'>('planner');
   const [showHistory, setShowHistory] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   const [timelineStart, setTimelineStart] = useState<WeekPoint>(DEFAULT_START);
   const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
+  
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const statusTimeoutRef = useRef<number>();
+
+  useEffect(() => {
+    return () => clearTimeout(statusTimeoutRef.current);
+  }, []);
 
   // Debug Log State
   const [isDebugLogEnabled, setIsDebugLogEnabled] = useState(false);
@@ -85,12 +93,20 @@ const App: React.FC = () => {
     supabasePromise: PromiseLike<{ data: any; error: any }>
   ) => {
     const logId = log(message, payload);
+    setSaveStatus('saving');
+    clearTimeout(statusTimeoutRef.current);
+    
     const result = await supabasePromise;
     if (result.error) {
       updateLog(logId, 'error', result.error);
+      setSaveStatus('error');
     } else {
       updateLog(logId, 'success', result.data);
+      setSaveStatus('success');
     }
+    
+    statusTimeoutRef.current = window.setTimeout(() => setSaveStatus('idle'), 3000);
+
     return result;
   };
 
@@ -106,19 +122,17 @@ const App: React.FC = () => {
     }
   }, [session]);
 
-  const fetchData = async () => {
+  const fetchData = async (isRefresh: boolean = false) => {
     if (!session) return;
-    setLoading(true);
+    if (isRefresh) setIsRefreshing(true);
+    else setLoading(true);
     
-    const { data: projectsData, error: projectsError } = await callSupabase(
-      'FETCH projects', {},
-      supabase.from('projects').select('id, name, modules (id, name, legacy_function_points, function_points, sort_order, tasks (id, name, start_week_id, duration, sort_order, task_assignments (id, role, resource_name, resource_allocations ( id, week_id, count, days ))))').order('created_at', { ascending: true })
-    );
+    const { data: projectsData, error: projectsError } = await supabase.from('projects').select('id, name, modules (id, name, legacy_function_points, function_points, sort_order, tasks (id, name, start_week_id, duration, sort_order, task_assignments (id, role, resource_name, resource_allocations ( id, week_id, count, days ))))').order('created_at', { ascending: true });
+    log('FETCH projects', {}, projectsError ? 'error': 'success');
 
-    const { data: holidaysData, error: holidaysError } = await callSupabase(
-      'FETCH holidays', {},
-      supabase.from('holidays').select('*')
-    );
+    const { data: holidaysData, error: holidaysError } = await supabase.from('holidays').select('*');
+    log('FETCH holidays', {}, holidaysError ? 'error': 'success');
+
 
     if (projectsData) {
       const formattedProjects = structureProjectsData(projectsData);
@@ -138,7 +152,8 @@ const App: React.FC = () => {
       setHolidays(holidaysData.map(h => ({ ...h, id: h.id.toString() })));
     }
     
-    setLoading(false);
+    if (isRefresh) setIsRefreshing(false);
+    else setLoading(false);
   };
 
   const handleExtendTimeline = (direction: 'start' | 'end') => {
@@ -273,29 +288,23 @@ const App: React.FC = () => {
   };
   
   const addTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
-    const logId = log('TRANSACTION: Add Task', { taskId, taskName, role });
     const startWeekId = getWeekIdFromDate(new Date());
     const duration = 1;
 
-    const project = projects.find(p => p.id === projectId);
-    const module = project?.modules.find(m => m.id === moduleId);
-    const sortOrder = module?.tasks.length || 0;
-
-    const { data: taskData, error: taskError } = await supabase.from('tasks').insert({ 
+    const { data: taskData, error: taskError } = await callSupabase('CREATE task', { taskId, taskName }, supabase.from('tasks').insert({ 
       id: taskId, 
       name: taskName, 
       module_id: moduleId, 
       user_id: session!.user.id,
       start_week_id: startWeekId,
-      duration: duration,
-      sort_order: sortOrder
-    }).select().single();
-    if (taskError) { updateLog(logId, 'error', { step: 'create_task', ...taskError }); alert("Failed to add task."); return; }
-    
-    const { error: assignError } = await supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
-    if (assignError) { updateLog(logId, 'error', { step: 'create_assignment', ...assignError }); return; }
+      duration: duration
+    }).select().single());
 
-    updateLog(logId, 'success');
+    if (taskError) { alert("Failed to add task."); return; }
+    
+    const { error: assignError } = await callSupabase('CREATE assignment', { taskId, role }, supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single());
+    if (assignError) { return; }
+
     fetchData();
   };
   
@@ -319,10 +328,23 @@ const App: React.FC = () => {
   
   const deleteAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
      const previousState = deepClone(projects);
-     setProjects(prev => deepClone(prev).map(p => {
-        if(p.id === projectId) p.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId)?.assignments.filter(a => a.id !== assignmentId);
-        return p;
-     }));
+     // FIX: Correctly perform optimistic update for deleting an assignment.
+     // The original implementation had a bug calling deepClone without arguments
+     // and a non-functional update logic.
+     setProjects(prev => {
+        const updatedProjects = deepClone(prev);
+        const project = updatedProjects.find(p => p.id === projectId);
+        if (project) {
+          const module = project.modules.find(m => m.id === moduleId);
+          if (module) {
+            const task = module.tasks.find(t => t.id === taskId);
+            if (task) {
+              task.assignments = task.assignments.filter(a => a.id !== assignmentId);
+            }
+          }
+        }
+        return updatedProjects;
+     });
      
      const { error } = await callSupabase('DELETE assignment', { id: assignmentId }, supabase.from('task_assignments').delete().eq('id', assignmentId));
      if (error) { setProjects(previousState); alert("Failed to delete assignment."); } else { fetchData(); }
@@ -491,7 +513,7 @@ const App: React.FC = () => {
             {loading ? <div className="text-center">Loading your data...</div> : (
               <>
                 {activeTab === 'dashboard' && <Dashboard projects={projects} />}
-                {activeTab === 'planner' && <PlannerGrid projects={projects} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={updateAssignmentRole} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onShiftTask={async () => {}} onShiftAssignment={async () => {}} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={() => {}} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} />}
+                {activeTab === 'planner' && <PlannerGrid projects={projects} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={updateAssignmentRole} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onShiftTask={async () => {}} onShiftAssignment={async () => {}} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={() => {}} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
                 {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
                 {activeTab === 'holiday' && <AdminSettings holidays={holidays} onUpdateHolidays={setHolidays} />}
                 {activeTab === 'settings' && <Settings isDebugLogEnabled={isDebugLogEnabled} setIsDebugLogEnabled={setIsDebugLogEnabled} />}
