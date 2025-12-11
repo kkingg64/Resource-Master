@@ -1,13 +1,14 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ALL_WEEK_IDS, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId } from './constants';
-import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment } from './types';
+import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
 import { Estimator } from './components/Estimator';
 import { AdminSettings } from './components/AdminSettings';
 import { Settings } from './components/Settings';
 import { VersionHistory } from './components/VersionHistory';
+import { DebugLog } from './components/DebugLog';
 import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, Globe, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
@@ -44,8 +45,6 @@ const structureProjectsData = (data: any[]): Project[] => {
   }));
 };
 
-// FIX: Moved helper function outside component scope and fixed JSX parsing ambiguity with a trailing comma in the generic type parameter.
-// Helper function for creating a safe, deep clone of the state
 const deepClone = <T,>(obj: T): T => JSON.parse(JSON.stringify(obj));
 
 const App: React.FC = () => {
@@ -60,15 +59,45 @@ const App: React.FC = () => {
   const [timelineStart, setTimelineStart] = useState<WeekPoint>(DEFAULT_START);
   const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
 
+  // Debug Log State
+  const [isDebugLogEnabled, setIsDebugLogEnabled] = useState(false);
+  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+  const nextLogId = useRef(0);
+  
+  const log = (message: string, payload: any, status: LogEntry['status'] = 'pending'): number => {
+    if (!isDebugLogEnabled) return -1;
+    const id = nextLogId.current++;
+    const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString(), message, payload, status };
+    setLogEntries(prev => [newEntry, ...prev.slice(0, 99)]);
+    return id;
+  };
+
+  const updateLog = (id: number, status: 'success' | 'error', payload?: any) => {
+    if (id === -1) return;
+    setLogEntries(prev => prev.map(entry =>
+      entry.id === id ? { ...entry, status, payload: payload || entry.payload } : entry
+    ));
+  };
+  
+  const callSupabase = async (
+    message: string,
+    payload: any,
+    // FIX: Change type to PromiseLike to accommodate Supabase query builders which are "thenable" but not full Promises.
+    supabasePromise: PromiseLike<{ data: any; error: any }>
+  ) => {
+    const logId = log(message, payload);
+    const result = await supabasePromise;
+    if (result.error) {
+      updateLog(logId, 'error', result.error);
+    } else {
+      updateLog(logId, 'success', result.data);
+    }
+    return result;
+  };
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
     return () => subscription.unsubscribe();
   }, []);
 
@@ -82,41 +111,25 @@ const App: React.FC = () => {
     if (!session) return;
     setLoading(true);
     
-    // Fetch projects and related data
-    const { data: projectsData, error: projectsError } = await supabase
-      .from('projects')
-      .select(`
-        id, name,
-        modules (
-          id, name, legacy_function_points, function_points, sort_order,
-          tasks (
-            id, name, start_week_id, duration,
-            task_assignments (
-              id, role, resource_name,
-              resource_allocations ( id, week_id, count, days )
-            )
-          )
-        )
-      `)
-      .order('created_at', { ascending: true });
+    const { data: projectsData, error: projectsError } = await callSupabase(
+      'FETCH projects', {},
+      supabase.from('projects').select('id, name, modules (id, name, legacy_function_points, function_points, sort_order, tasks (id, name, start_week_id, duration, task_assignments (id, role, resource_name, resource_allocations ( id, week_id, count, days ))))').order('created_at', { ascending: true })
+    );
 
-    // Fetch holidays
-    const { data: holidaysData, error: holidaysError } = await supabase
-      .from('holidays')
-      .select('*');
-
-    if (projectsError) console.error('Error fetching projects:', projectsError);
-    if (holidaysError) console.error('Error fetching holidays:', holidaysError);
+    const { data: holidaysData, error: holidaysError } = await callSupabase(
+      'FETCH holidays', {},
+      supabase.from('holidays').select('*')
+    );
 
     if (projectsData) {
       const formattedProjects = structureProjectsData(projectsData);
       if (formattedProjects.length === 0) {
-         // Create default project if none exist
-         const { data, error } = await supabase.from('projects').insert({ name: 'My First Project', user_id: session!.user.id }).select().single();
+         const { data, error } = await callSupabase(
+            'CREATE default project', { name: 'My First Project' },
+            supabase.from('projects').insert({ name: 'My First Project', user_id: session!.user.id }).select().single()
+         );
          if (data && !error) {
              setProjects([{ id: data.id, name: data.name, modules: [] }]);
-         } else {
-             console.error("Error creating default project:", error);
          }
       } else {
           setProjects(formattedProjects);
@@ -156,10 +169,8 @@ const App: React.FC = () => {
             alloc.days = alloc.days || {};
             if (Object.keys(alloc.days).length === 0 && alloc.count > 0) {
                 const weekdays = getWeekdaysForWeekId(weekId);
-                // FIX: Used {[key: string]: number} to avoid JSX parsing ambiguity.
                 weekdays.forEach(d => (alloc.days as {[key: string]: number})[d] = alloc.count / 5);
             }
-            // FIX: Used {[key: string]: number} to avoid JSX parsing ambiguity.
             (alloc.days as {[key: string]: number})[dayDate] = value;
             alloc.count = Object.values(alloc.days).reduce((sum: number, v: number) => sum + v, 0);
         } else {
@@ -171,7 +182,6 @@ const App: React.FC = () => {
         const newAlloc: ResourceAllocation = { weekId, count: value, days: {} };
         if (dayDate) {
             const weekdays = getWeekdaysForWeekId(weekId);
-            // FIX: Used {[key: string]: number} to avoid JSX parsing ambiguity.
             const days = weekdays.reduce((acc, day) => ({...acc, [day]: 0}), {} as {[key: string]: number});
             days[dayDate] = value;
             newAlloc.days = days;
@@ -179,7 +189,7 @@ const App: React.FC = () => {
         }
         assignment.allocations.push(newAlloc);
         allocationToUpdate = newAlloc;
-    } else { // Handle setting value to 0 for an existing daily allocation
+    } else {
         const alloc = assignment.allocations[allocIndex];
         if (alloc && dayDate && alloc.days && alloc.days[dayDate] !== undefined) {
              delete alloc.days[dayDate];
@@ -190,71 +200,38 @@ const App: React.FC = () => {
 
     setProjects(updatedProjects);
 
-    // DB update
     if (allocationToUpdate) {
-        const { data: existingAlloc } = await supabase
-            .from('resource_allocations')
-            .select('id')
-            .eq('assignment_id', assignmentId)
-            .eq('week_id', weekId)
-            .maybeSingle();
-
-        const upsertData = {
-            id: existingAlloc?.id,
-            assignment_id: assignmentId,
-            user_id: session!.user.id,
-            week_id: weekId,
-            count: allocationToUpdate.count,
-            days: allocationToUpdate.days
-        };
-
-        const { error } = await supabase.from('resource_allocations').upsert(upsertData);
-
-        if (error) {
-            console.error("Failed to update allocation:", error);
-            setProjects(previousState);
-            alert("Error: Could not save allocation.");
-        }
+        const { data: existingAlloc } = await supabase.from('resource_allocations').select('id').eq('assignment_id', assignmentId).eq('week_id', weekId).maybeSingle();
+        const upsertData = { id: existingAlloc?.id, assignment_id: assignmentId, user_id: session!.user.id, week_id: weekId, count: allocationToUpdate.count, days: allocationToUpdate.days };
+        const { error } = await callSupabase('UPSERT allocation', upsertData, supabase.from('resource_allocations').upsert(upsertData));
+        if (error) { setProjects(previousState); alert("Error: Could not save allocation."); }
     }
   };
 
   const addProject = async () => {
-    const { data, error } = await supabase.from('projects').insert({ name: `New Project ${projects.length + 1}`, user_id: session!.user.id }).select().single();
-    if (error) {
-        console.error("Error adding project:", error);
-        alert("Could not create project.");
-    }
-    else {
-        setProjects(prev => [...prev, { id: data.id, name: data.name, modules: [] }]);
-    }
+    const { data, error } = await callSupabase(
+        'CREATE project', { name: `New Project ${projects.length + 1}` },
+        supabase.from('projects').insert({ name: `New Project ${projects.length + 1}`, user_id: session!.user.id }).select().single()
+    );
+    if (error) { alert("Could not create project."); }
+    else { setProjects(prev => [...prev, { id: data.id, name: data.name, modules: [] }]); }
   };
   
   const deleteProject = async (projectId: string) => {
     const previousState = deepClone(projects);
     setProjects(prev => prev.filter(p => p.id !== projectId));
-    const { error } = await supabase.from('projects').delete().eq('id', projectId);
-    if (error) { 
-        console.error(error); 
-        setProjects(previousState);
-        alert("Failed to delete project.");
-    }
+    const { error } = await callSupabase('DELETE project', { id: projectId }, supabase.from('projects').delete().eq('id', projectId));
+    if (error) { setProjects(previousState); alert("Failed to delete project."); }
   };
   
   const updateProjectName = async (projectId: string, name: string) => {
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
     const project = updatedProjects.find(p => p.id === projectId);
-    if (project) {
-        project.name = name;
-        setProjects(updatedProjects);
-    }
+    if (project) { project.name = name; setProjects(updatedProjects); }
 
-    const { error } = await supabase.from('projects').update({ name }).eq('id', projectId);
-    if (error) {
-        console.error(error);
-        setProjects(previousState);
-        alert("Failed to update project name.");
-    }
+    const { error } = await callSupabase('UPDATE project name', { id: projectId, name }, supabase.from('projects').update({ name }).eq('id', projectId));
+    if (error) { setProjects(previousState); alert("Failed to update project name."); }
   };
   
   const updateModuleName = async (projectId: string, moduleId: string, name: string) => {
@@ -262,177 +239,120 @@ const App: React.FC = () => {
      const updatedProjects = deepClone(projects);
      const project = updatedProjects.find(p => p.id === projectId);
      const module = project?.modules.find(m => m.id === moduleId);
-     if (module) {
-        module.name = name;
-        setProjects(updatedProjects);
-     }
+     if (module) { module.name = name; setProjects(updatedProjects); }
      
-     const { error } = await supabase.from('modules').update({ name }).eq('id', moduleId);
-     if (error) {
-        console.error(error);
-        setProjects(previousState);
-        alert("Failed to update module name.");
-     }
+     const { error } = await callSupabase('UPDATE module name', { id: moduleId, name }, supabase.from('modules').update({ name }).eq('id', moduleId));
+     if (error) { setProjects(previousState); alert("Failed to update module name."); }
   };
   
   const updateTaskName = async (projectId: string, moduleId: string, taskId: string, name: string) => {
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
-    const project = updatedProjects.find(p => p.id === projectId);
-    const module = project?.modules.find(m => m.id === moduleId);
-    const task = module?.tasks.find(t => t.id === taskId);
-    if (task) {
-        task.name = name;
-        setProjects(updatedProjects);
-    }
+    const task = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
+    if (task) { task.name = name; setProjects(updatedProjects); }
     
-    const { error } = await supabase.from('tasks').update({ name }).eq('id', taskId);
-    if (error) {
-        console.error(error);
-        setProjects(previousState);
-        alert("Failed to update task name.");
-    }
+    const { error } = await callSupabase('UPDATE task name', { id: taskId, name }, supabase.from('tasks').update({ name }).eq('id', taskId));
+    if (error) { setProjects(previousState); alert("Failed to update task name."); }
   };
   
   const addModule = async (projectId: string) => {
-    const { data, error } = await supabase.from('modules').insert({ name: 'New Module', project_id: projectId, user_id: session!.user.id }).select().single();
-    if (error) {
-        console.error(error);
-        alert("Failed to add module.");
-    }
-    else {
-        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: [...p.modules, { id: data.id, name: data.name, legacyFunctionPoints: 0, functionPoints: 0, tasks: [] }] } : p));
-    }
+    const { data, error } = await callSupabase(
+        'CREATE module', { name: 'New Module', projectId },
+        supabase.from('modules').insert({ name: 'New Module', project_id: projectId, user_id: session!.user.id }).select().single()
+    );
+    if (error) { alert("Failed to add module."); }
+    else { setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: [...p.modules, { id: data.id, name: data.name, legacyFunctionPoints: 0, functionPoints: 0, tasks: [] }] } : p)); }
   };
   
   const deleteModule = async (projectId: string, moduleId: string) => {
     const previousState = deepClone(projects);
-    const updatedProjects = deepClone(projects);
-    const project = updatedProjects.find(p => p.id === projectId);
-    if (project) {
-        project.modules = project.modules.filter(m => m.id !== moduleId);
-        setProjects(updatedProjects);
-    }
+    const project = projects.find(p => p.id === projectId);
+    if (project) setProjects(projects.map(p => p.id === projectId ? {...p, modules: p.modules.filter(m => m.id !== moduleId)} : p));
     
-    const { error } = await supabase.from('modules').delete().eq('id', moduleId);
-    if (error) { 
-        console.error(error); 
-        setProjects(previousState);
-        alert("Failed to delete module.");
-    }
+    const { error } = await callSupabase('DELETE module', { id: moduleId }, supabase.from('modules').delete().eq('id', moduleId));
+    if (error) { setProjects(previousState); alert("Failed to delete module."); }
   };
   
   const addTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
-    // This now needs to be a transaction
+    const logId = log('TRANSACTION: Add Task', { taskId, taskName, role });
     const { data: taskData, error: taskError } = await supabase.from('tasks').insert({ id: taskId, name: taskName, module_id: moduleId, user_id: session!.user.id }).select().single();
-    if (taskError) { console.error(taskError); alert("Failed to add task."); return; }
+    if (taskError) { updateLog(logId, 'error', { step: 'create_task', ...taskError }); alert("Failed to add task."); return; }
     
-    const { data: assignData, error: assignError } = await supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
-    if (assignError) { console.error(assignError); return; }
+    const { error: assignError } = await supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
+    if (assignError) { updateLog(logId, 'error', { step: 'create_assignment', ...assignError }); return; }
 
-    fetchData(); // Simplest way to refresh state after complex insert
+    updateLog(logId, 'success');
+    fetchData();
   };
   
   const deleteTask = async (projectId: string, moduleId: string, taskId: string) => {
     const previousState = deepClone(projects);
-    const updatedProjects = deepClone(projects);
-    const project = updatedProjects.find(p => p.id === projectId);
+    const project = projects.find(p => p.id === projectId);
     const module = project?.modules.find(m => m.id === moduleId);
-    if (module) {
-        module.tasks = module.tasks.filter(t => t.id !== taskId);
-        setProjects(updatedProjects);
-    }
+    if (module) setProjects(projects.map(p => p.id === projectId ? {...p, modules: p.modules.map(m => m.id === moduleId ? {...m, tasks: m.tasks.filter(t => t.id !== taskId)}: m)} : p));
     
-    const { error } = await supabase.from('tasks').delete().eq('id', taskId);
-    if (error) { 
-        console.error(error); 
-        setProjects(previousState);
-        alert("Failed to delete task.");
-    }
+    const { error } = await callSupabase('DELETE task', { id: taskId }, supabase.from('tasks').delete().eq('id', taskId));
+    if (error) { setProjects(previousState); alert("Failed to delete task."); }
   };
   
   const addAssignment = async (projectId: string, moduleId: string, taskId: string, role: Role) => {
-    const { data, error } = await supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
-    if (error) console.error(error);
-    else fetchData();
+    const { error } = await callSupabase(
+        'CREATE assignment', { taskId, role },
+        supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single()
+    );
+    if (!error) fetchData();
   };
   
   const deleteAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
      const previousState = deepClone(projects);
-     const updatedProjects = deepClone(projects);
-     const project = updatedProjects.find(p => p.id === projectId);
-     const module = project?.modules.find(m => m.id === moduleId);
-     const task = module?.tasks.find(t => t.id === taskId);
-     if (task) {
-        task.assignments = task.assignments.filter(a => a.id !== assignmentId);
-        setProjects(updatedProjects);
-     }
+     setProjects(prev => deepClone(prev).map(p => {
+        if(p.id === projectId) p.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId)?.assignments.filter(a => a.id !== assignmentId);
+        return p;
+     }));
      
-     const { error } = await supabase.from('task_assignments').delete().eq('id', assignmentId);
-     if (error) { 
-         console.error(error); 
-         setProjects(previousState);
-         alert("Failed to delete assignment.");
-     }
+     const { error } = await callSupabase('DELETE assignment', { id: assignmentId }, supabase.from('task_assignments').delete().eq('id', assignmentId));
+     if (error) { setProjects(previousState); alert("Failed to delete assignment."); } else { fetchData(); }
   };
 
   const updateAssignmentResourceName = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => {
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
-    const project = updatedProjects.find(p => p.id === projectId);
-    const module = project?.modules.find(m => m.id === moduleId);
-    const task = module?.tasks.find(t => t.id === taskId);
-    const assignment = task?.assignments.find(a => a.id === assignmentId);
+    // FIX: Do not use optional chaining on the left side of an assignment.
+    const assignment = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId)?.assignments.find(a => a.id === assignmentId);
     if (assignment) {
-        assignment.resourceName = name;
-        setProjects(updatedProjects);
+      assignment.resourceName = name;
     }
+    setProjects(updatedProjects);
 
-    const { error } = await supabase.from('task_assignments').update({ resource_name: name }).eq('id', assignmentId);
-    if (error) {
-        console.error(error);
-        setProjects(previousState);
-        alert("Failed to update resource name.");
-    }
+    const { error } = await callSupabase('UPDATE assignment resource name', { id: assignmentId, name }, supabase.from('task_assignments').update({ resource_name: name }).eq('id', assignmentId));
+    if (error) { setProjects(previousState); alert("Failed to update resource name."); }
   };
 
   const updateAssignmentRole = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, role: Role) => {
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
-    const project = updatedProjects.find(p => p.id === projectId);
-    const module = project?.modules.find(m => m.id === moduleId);
-    const task = module?.tasks.find(t => t.id === taskId);
-    const assignment = task?.assignments.find(a => a.id === assignmentId);
+    // FIX: Do not use optional chaining on the left side of an assignment.
+    const assignment = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId)?.assignments.find(a => a.id === assignmentId);
     if (assignment) {
-        assignment.role = role;
-        setProjects(updatedProjects);
+      assignment.role = role;
     }
+    setProjects(updatedProjects);
 
-    const { error } = await supabase.from('task_assignments').update({ role }).eq('id', assignmentId);
-    if (error) {
-        console.error(error);
-        setProjects(previousState);
-        alert("Failed to update role.");
-    }
+    const { error } = await callSupabase('UPDATE assignment role', { id: assignmentId, role }, supabase.from('task_assignments').update({ role }).eq('id', assignmentId));
+    if (error) { setProjects(previousState); alert("Failed to update role."); }
   };
 
   const updateFunctionPoints = async (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => {
      const previousState = deepClone(projects);
-     const updatedProjects = deepClone(projects);
-     const project = updatedProjects.find(p => p.id === projectId);
-     const module = project?.modules.find(m => m.id === moduleId);
+     const module = projects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId);
      if (module) {
         module.legacyFunctionPoints = legacyFp;
         module.functionPoints = mvpFp;
-        setProjects(updatedProjects);
+        setProjects(deepClone(projects));
      }
      
-     const { error } = await supabase.from('modules').update({ legacy_function_points: legacyFp, function_points: mvpFp }).eq('id', moduleId);
-     if (error) {
-        console.error(error);
-        setProjects(previousState);
-        alert("Failed to update function points.");
-     }
+     const { error } = await callSupabase('UPDATE function points', { id: moduleId, legacyFp, mvpFp }, supabase.from('modules').update({ legacy_function_points: legacyFp, function_points: mvpFp }).eq('id', moduleId));
+     if (error) { setProjects(previousState); alert("Failed to update function points."); }
   };
   
   const reorderModules = async (projectId: string, startIndex: number, endIndex: number) => {
@@ -443,71 +363,39 @@ const App: React.FC = () => {
     
     const [removed] = project.modules.splice(startIndex, 1);
     project.modules.splice(endIndex, 0, removed);
-    
     setProjects(updatedProjects);
     
-    // Update sort_order in DB
-    const updates = project.modules.map((module, index) => 
-      supabase.from('modules').update({ sort_order: index }).eq('id', module.id)
-    );
-    const results = await Promise.all(updates);
-    const hasError = results.some(res => res.error);
-    if (hasError) {
-        console.error("Failed to reorder modules", results);
-        setProjects(previousState);
-        alert("Failed to reorder modules.");
-    }
+    const updates = project.modules.map((module, index) => ({ id: module.id, sort_order: index }));
+    const { error } = await callSupabase('REORDER modules', { updates }, supabase.from('modules').upsert(updates));
+    if (error) { setProjects(previousState); alert("Failed to reorder modules."); }
   };
   
   const updateTaskSchedule = async (projectId: string, moduleId: string, taskId: string, startWeekId: string, duration: number) => {
      const previousState = deepClone(projects);
-     const updatedProjects = deepClone(projects);
-     const project = updatedProjects.find(p => p.id === projectId);
-     const module = project?.modules.find(m => m.id === moduleId);
-     const task = module?.tasks.find(t => t.id === taskId);
-     if (task) {
-        task.startWeekId = startWeekId;
-        task.duration = duration;
-        setProjects(updatedProjects);
-     }
+     const task = projects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
+     if (task) { task.startWeekId = startWeekId; task.duration = duration; setProjects(deepClone(projects)); }
      
-     const { error } = await supabase.from('tasks').update({ start_week_id: startWeekId, duration }).eq('id', taskId);
-     if (error) {
-        console.error(error);
-        setProjects(previousState);
-        alert("Failed to update task schedule.");
-     }
+     const { error } = await callSupabase('UPDATE task schedule', { id: taskId, startWeekId, duration }, supabase.from('tasks').update({ start_week_id: startWeekId, duration }).eq('id', taskId));
+     if (error) { setProjects(previousState); alert("Failed to update task schedule."); }
   };
   
   const handleSaveVersion = async (name: string) => {
-    const { error } = await supabase.from('versions').insert({
-      name,
-      user_id: session!.user.id,
-      data: { projects, holidays }
-    });
-    if (error) {
-      console.error("Failed to save version:", error);
-      alert("Error: Could not save version.");
-    } else {
-      alert(`Version '${name}' saved successfully!`);
-    }
+    const { error } = await callSupabase('SAVE version', { name }, supabase.from('versions').insert({ name, user_id: session!.user.id, data: { projects, holidays } }));
+    if (error) { alert("Error: Could not save version."); } 
+    else { alert(`Version '${name}' saved successfully!`); }
   };
 
   const handleRestoreVersion = async (id: number) => {
-    const { data: version, error } = await supabase.from('versions').select('data').eq('id', id).single();
-    if (error || !version) {
-      alert("Error: Version not found.");
-      return;
-    }
-    // This is destructive. A more complex merge would be better in a real app.
-    // Clear existing data
+    const { data: version, error } = await callSupabase('FETCH version for restore', { id }, supabase.from('versions').select('data').eq('id', id).single());
+    if (error || !version) { alert("Error: Version not found."); return; }
+    
+    log('Start restoring version', { id });
     await supabase.from('projects').delete().eq('user_id', session!.user.id);
     await supabase.from('holidays').delete().eq('user_id', session!.user.id);
-    // Restore
+    
     setProjects(version.data.projects);
     setHolidays(version.data.holidays);
-    // We need to re-insert all this data into the DB, which is a complex operation.
-    // For this app, we will just update the state and let the user save manually.
+    
     alert(`Version restored. Any new changes will be saved to your current state.`);
     setShowHistory(false);
   };
@@ -525,6 +413,7 @@ const App: React.FC = () => {
   return (
     <>
       {showHistory && <VersionHistory onClose={() => setShowHistory(false)} onRestore={handleRestoreVersion} onSaveCurrent={handleSaveVersion}/>}
+      {isDebugLogEnabled && <DebugLog entries={logEntries} setEntries={setLogEntries} />}
       <div className="flex h-screen w-full bg-slate-100">
         <aside className={`${isSidebarCollapsed ? 'w-20' : 'w-64'} bg-slate-900 text-slate-300 flex flex-col shadow-xl transition-all duration-300 ease-in-out`}>
           <div className={`p-4 border-b border-slate-800 flex flex-col gap-4 ${isSidebarCollapsed ? 'items-center' : ''}`}>
@@ -558,7 +447,7 @@ const App: React.FC = () => {
                 {activeTab === 'planner' && <PlannerGrid projects={projects} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={updateAssignmentRole} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onShiftTask={async () => {}} onShiftAssignment={async () => {}} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={() => {}} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} />}
                 {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
                 {activeTab === 'holiday' && <AdminSettings holidays={holidays} onUpdateHolidays={setHolidays} />}
-                {activeTab === 'settings' && <Settings />}
+                {activeTab === 'settings' && <Settings isDebugLogEnabled={isDebugLogEnabled} setIsDebugLogEnabled={setIsDebugLogEnabled} />}
               </>
             )}
           </div>

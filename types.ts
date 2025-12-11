@@ -82,3 +82,11 @@ export interface Holiday {
   name: string;
   country: string; // Country code e.g. 'MY', 'SG', 'Global'
 }
+
+export interface LogEntry {
+  id: number;
+  timestamp: string;
+  message: string;
+  payload?: any;
+  status: 'pending' | 'success' | 'error';
+}
