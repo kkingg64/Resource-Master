@@ -2,7 +2,8 @@
 import React, { useMemo } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { TIMELINE_DATA as GLOBAL_TIMELINE_DATA } from '../constants'; // Import actual data
+// FIX: Import getTimeline and default start/end to generate timeline data.
+import { getTimeline, DEFAULT_START, DEFAULT_END } from '../constants';
 
 interface DashboardProps {
   projects: Project[];
@@ -10,11 +11,16 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
   
+  // FIX: Generate timeline data dynamically as it's not exported from constants.
+  const GLOBAL_TIMELINE_DATA = useMemo(() => getTimeline('week', DEFAULT_START, DEFAULT_END), []);
+
   // Aggregate data for charts
   const chartData = useMemo(() => {
     return GLOBAL_TIMELINE_DATA.map(week => {
+      // FIX: `week.month` is not a valid property. Parse it from `groupLabel`.
+      const [month] = week.groupLabel.split(' ');
       const summary = {
-        name: `${week.label} (${week.month})`,
+        name: `${week.label} (${month})`,
         [Role.DEV]: 0,
         [Role.QA]: 0,
         [Role.UIUX]: 0,
@@ -46,7 +52,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
 
       return summary;
     });
-  }, [projects]);
+  }, [projects, GLOBAL_TIMELINE_DATA]);
 
   const totalFP = projects.reduce((accP, p) => accP + p.modules.reduce((accM, m) => accM + m.functionPoints, 0), 0);
   const totalAllocatedDays = chartData.reduce((acc, week) => acc + week.total, 0);
