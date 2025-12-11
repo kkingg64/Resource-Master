@@ -13,7 +13,6 @@ import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { Session } from '@supabase/supabase-js';
-import { generateId } from './lib/id';
 
 // Helper to structure data from Supabase
 const structureProjectsData = (data: any[]): Project[] => {
@@ -36,7 +35,6 @@ const structureProjectsData = (data: any[]): Project[] => {
           role: a.role,
           resourceName: a.resource_name,
           allocations: a.resource_allocations.map((alloc: any) => ({
-            id: alloc.id,
             weekId: alloc.week_id,
             count: alloc.count,
             days: alloc.days || {},
@@ -109,8 +107,7 @@ const App: React.FC = () => {
       const formattedProjects = structureProjectsData(projectsData);
       if (formattedProjects.length === 0) {
          // Create default project if none exist
-         const defaultProjectId = generateId('proj');
-         const { data, error } = await supabase.from('projects').insert({ id: defaultProjectId, name: 'My First Project', user_id: session!.user.id }).select().single();
+         const { data, error } = await supabase.from('projects').insert({ name: 'My First Project', user_id: session!.user.id }).select().single();
          if (data && !error) {
              setProjects([{ id: data.id, name: data.name, modules: [] }]);
          } else {
@@ -204,7 +201,7 @@ const App: React.FC = () => {
     saveQueueRef.current.clear();
     
     const upsertData = updates.map(item => ({
-        id: item.id,
+        id: item.existingAllocId,
         assignment_id: item.assignmentId,
         user_id: session.user.id,
         week_id: item.weekId,
@@ -229,7 +226,7 @@ const App: React.FC = () => {
   const updateAllocation = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number, dayDate?: string) => {
     // Optimistic update
     const { updatedProjects, allocationToUpdate } = (() => {
-      let allocationToUpdate: ResourceAllocation | null = null;
+      let allocationToUpdate: any = null;
       const updatedProjects = projects.map(p => {
         if (p.id !== projectId) return p;
         return { ...p, modules: p.modules.map(m => {
@@ -260,13 +257,12 @@ const App: React.FC = () => {
                 newAllocations[allocIndex] = alloc;
                 allocationToUpdate = alloc;
               } else if (value > 0) {
-                const newAlloc: ResourceAllocation = { id: generateId('alloc'), weekId, count: value, days: {} };
+                const newAlloc: ResourceAllocation = { weekId, count: value, days: {} };
                  if(dayDate) {
                    const weekdays = getWeekdaysForWeekId(weekId);
                    const days = weekdays.reduce((acc, day) => ({...acc, [day]: 0}), {} as Record<string, number>);
                    days[dayDate] = value;
                    newAlloc.days = days;
-                   newAlloc.count = Object.values(days).reduce((sum: number, v: number) => sum + v, 0);
                  }
                 newAllocations.push(newAlloc);
                 allocationToUpdate = newAlloc;
@@ -282,9 +278,16 @@ const App: React.FC = () => {
 
     // DB update queue
     if (allocationToUpdate) {
+        const { data: existingAlloc } = await supabase
+            .from('resource_allocations')
+            .select('id')
+            .eq('assignment_id', assignmentId)
+            .eq('week_id', weekId)
+            .maybeSingle();
+
         const queueKey = `${assignmentId}-${weekId}`;
         saveQueueRef.current.set(queueKey, {
-            id: allocationToUpdate.id,
+            existingAllocId: existingAlloc?.id,
             assignmentId,
             weekId,
             allocation: allocationToUpdate,
@@ -298,8 +301,7 @@ const App: React.FC = () => {
   };
 
   const addProject = async () => {
-    const newId = generateId('proj');
-    const { data, error } = await supabase.from('projects').insert({ id: newId, name: `New Project ${projects.length + 1}`, user_id: session!.user.id }).select().single();
+    const { data, error } = await supabase.from('projects').insert({ name: `New Project ${projects.length + 1}`, user_id: session!.user.id }).select().single();
     if (error) {
         console.error("Error adding project:", error);
         alert("Could not create project.");
@@ -394,8 +396,7 @@ const App: React.FC = () => {
   };
   
   const addModule = async (projectId: string) => {
-    const newId = generateId('mod');
-    const { data, error } = await supabase.from('modules').insert({ id: newId, name: 'New Module', project_id: projectId, user_id: session!.user.id }).select().single();
+    const { data, error } = await supabase.from('modules').insert({ name: 'New Module', project_id: projectId, user_id: session!.user.id }).select().single();
     if (error) {
         console.error(error);
         alert("Failed to add module.");
@@ -416,23 +417,12 @@ const App: React.FC = () => {
     }
   };
   
-  const addTask = async (projectId: string, moduleId: string) => {
-    const taskId = generateId('task');
-    const assignId = generateId('asgn');
-    const taskName = 'New Task';
-    const role = Role.DEV;
-
+  const addTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
     const { data: taskData, error: taskError } = await supabase.from('tasks').insert({ id: taskId, name: taskName, module_id: moduleId, user_id: session!.user.id }).select().single();
     if (taskError) { console.error(taskError); alert("Failed to add task."); return; }
     
-    const { data: assignData, error: assignError } = await supabase.from('task_assignments').insert({ id: assignId, task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
-    if (assignError) { 
-      console.error(assignError); 
-      // Rollback task creation
-      await supabase.from('tasks').delete().eq('id', taskId);
-      alert("Failed to create task assignment. Rolling back.");
-      return; 
-    }
+    const { data: assignData, error: assignError } = await supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
+    if (assignError) { console.error(assignError); return; }
 
     fetchData(); 
   };
@@ -449,8 +439,7 @@ const App: React.FC = () => {
   };
   
   const addAssignment = async (projectId: string, moduleId: string, taskId: string, role: Role) => {
-    const newId = generateId('asgn');
-    const { data, error } = await supabase.from('task_assignments').insert({ id: newId, task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
+    const { data, error } = await supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
     if (error) console.error(error);
     else fetchData();
   };
