@@ -1,4 +1,5 @@
 
+
 import React, { useMemo } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
@@ -17,8 +18,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
   // Aggregate data for charts
   const chartData = useMemo(() => {
     return GLOBAL_TIMELINE_DATA.map(week => {
-      // FIX: `week.month` is not a valid property. Parse it from `groupLabel`.
-      const [month] = week.groupLabel.split(' ');
+      // FIX: Property 'groupLabel' does not exist on type 'TimelineColumn'. Using 'monthLabel' instead.
+      const [month] = week.monthLabel.split(' ');
       const summary = {
         name: `${week.label} (${month})`,
         [Role.DEV]: 0,

@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ALL_WEEK_IDS, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate } from './constants';
-import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry } from './types';
+import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
 import { Estimator } from './components/Estimator';
 import { AdminSettings } from './components/AdminSettings';
 import { Settings } from './components/Settings';
+import { Resources } from './components/Resources';
 import { VersionHistory } from './components/VersionHistory';
 import { DebugLog } from './components/DebugLog';
-import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, Globe, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
+import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, Globe, ChevronLeft, ChevronRight, LogOut, Users } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
@@ -50,9 +51,10 @@ const App: React.FC = () => {
   const [session, setSession] = useState<any | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'planner' | 'estimator' | 'holiday' | 'settings'>('planner');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'planner' | 'estimator' | 'holiday' | 'settings' | 'resources'>('planner');
   const [showHistory, setShowHistory] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
@@ -74,7 +76,8 @@ const App: React.FC = () => {
   const log = (message: string, payload: any, status: LogEntry['status'] = 'pending'): number => {
     if (!isDebugLogEnabled) return -1;
     const id = nextLogId.current++;
-    const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString(), message, payload, status };
+    // FIX: Pass an empty array to toLocaleTimeString to use the default locale, satisfying environments that require the 'locales' argument.
+    const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString([]), message, payload, status };
     setLogEntries(prev => [newEntry, ...prev.slice(0, 99)]);
     return id;
   };
@@ -127,13 +130,16 @@ const App: React.FC = () => {
     if (isRefresh) setIsRefreshing(true);
     else setLoading(true);
     
-    const { data: projectsData, error: projectsError } = await supabase.from('projects').select('id, name, modules (id, name, legacy_function_points, function_points, sort_order, tasks (id, name, start_week_id, duration, sort_order, task_assignments (id, role, resource_name, resource_allocations ( id, week_id, count, days ))))').order('created_at', { ascending: true });
-    log('FETCH projects', {}, projectsError ? 'error': 'success');
+    const projectsPromise = supabase.from('projects').select('id, name, modules (id, name, legacy_function_points, function_points, sort_order, tasks (id, name, start_week_id, duration, sort_order, task_assignments (id, role, resource_name, resource_allocations ( id, week_id, count, days ))))').eq('user_id', session!.user.id).order('created_at', { ascending: true });
+    const holidaysPromise = supabase.from('holidays').select('*').eq('user_id', session.user.id);
+    const resourcesPromise = supabase.from('resources').select('*').eq('user_id', session.user.id).order('name');
 
-    const { data: holidaysData, error: holidaysError } = await supabase.from('holidays').select('*');
-    log('FETCH holidays', {}, holidaysError ? 'error': 'success');
+    const [{ data: projectsData, error: projectsError }, { data: holidaysData, error: holidaysError }, { data: resourcesData, error: resourcesError }] = await Promise.all([projectsPromise, holidaysPromise, resourcesPromise]);
 
-
+    log('FETCH projects', { user_id: session!.user.id }, projectsError ? 'error': 'success');
+    log('FETCH holidays', { user_id: session!.user.id }, holidaysError ? 'error': 'success');
+    log('FETCH resources', { user_id: session!.user.id }, resourcesError ? 'error': 'success');
+    
     if (projectsData) {
       const formattedProjects = structureProjectsData(projectsData);
       if (formattedProjects.length === 0) {
@@ -148,9 +154,8 @@ const App: React.FC = () => {
           setProjects(formattedProjects);
       }
     }
-    if (holidaysData) {
-      setHolidays(holidaysData.map(h => ({ ...h, id: h.id.toString() })));
-    }
+    if (holidaysData) setHolidays(holidaysData.map(h => ({ ...h, id: h.id.toString() })));
+    if (resourcesData) setResources(resourcesData);
     
     if (isRefresh) setIsRefreshing(false);
     else setLoading(false);
@@ -328,9 +333,6 @@ const App: React.FC = () => {
   
   const deleteAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
      const previousState = deepClone(projects);
-     // FIX: Correctly perform optimistic update for deleting an assignment.
-     // The original implementation had a bug calling deepClone without arguments
-     // and a non-functional update logic.
      setProjects(prev => {
         const updatedProjects = deepClone(prev);
         const project = updatedProjects.find(p => p.id === projectId);
@@ -353,7 +355,6 @@ const App: React.FC = () => {
   const updateAssignmentResourceName = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => {
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
-    // FIX: Do not use optional chaining on the left side of an assignment.
     const assignment = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId)?.assignments.find(a => a.id === assignmentId);
     if (assignment) {
       assignment.resourceName = name;
@@ -367,7 +368,6 @@ const App: React.FC = () => {
   const updateAssignmentRole = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, role: Role) => {
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
-    // FIX: Do not use optional chaining on the left side of an assignment.
     const assignment = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId)?.assignments.find(a => a.id === assignmentId);
     if (assignment) {
       assignment.role = role;
@@ -401,7 +401,6 @@ const App: React.FC = () => {
     project.modules.splice(endIndex, 0, removed);
     setProjects(updatedProjects);
     
-    // FIX: Include user_id and project_id to satisfy RLS policies.
     const updates = project.modules.map((module, index) => ({ 
       id: module.id, 
       sort_order: index, 
@@ -449,7 +448,7 @@ const App: React.FC = () => {
   };
   
   const handleSaveVersion = async (name: string) => {
-    const { error } = await callSupabase('SAVE version', { name }, supabase.from('versions').insert({ name, user_id: session!.user.id, data: { projects, holidays } }));
+    const { error } = await callSupabase('SAVE version', { name }, supabase.from('versions').insert({ name, user_id: session!.user.id, data: { projects, holidays, resources } }));
     if (error) { alert("Error: Could not save version."); } 
     else { alert(`Version '${name}' saved successfully!`); }
   };
@@ -461,13 +460,58 @@ const App: React.FC = () => {
     log('Start restoring version', { id });
     await supabase.from('projects').delete().eq('user_id', session!.user.id);
     await supabase.from('holidays').delete().eq('user_id', session!.user.id);
+    await supabase.from('resources').delete().eq('user_id', session!.user.id);
     
-    setProjects(version.data.projects);
-    setHolidays(version.data.holidays);
+    setProjects(version.data.projects || []);
+    setHolidays(version.data.holidays || []);
+    setResources(version.data.resources || []);
     
     alert(`Version restored. Any new changes will be saved to your current state.`);
     setShowHistory(false);
   };
+
+  // --- Resource Management ---
+  const addResource = async (name: string) => {
+    const { data, error } = await callSupabase(
+      'CREATE resource', { name },
+      supabase.from('resources').insert({ name, user_id: session!.user.id }).select().single()
+    );
+    if (error) { alert('Failed to add resource.'); } 
+    else { setResources(prev => [...prev, data]); }
+  };
+
+  const deleteResource = async (id: string) => {
+    const previousState = deepClone(resources);
+    setResources(prev => prev.filter(r => r.id !== id));
+    const { error } = await callSupabase('DELETE resource', { id }, supabase.from('resources').delete().eq('id', id));
+    if (error) { setResources(previousState); alert('Failed to delete resource.'); }
+  };
+
+  // --- Holiday Management ---
+  const addHolidays = async (holidaysToAdd: Omit<Holiday, 'id'>[]) => {
+    const holidaysWithUserId = holidaysToAdd.map(h => ({ ...h, user_id: session!.user.id }));
+    const { error } = await callSupabase(
+        'SYNC holidays', { count: holidaysWithUserId.length, country: holidaysWithUserId[0]?.country },
+        supabase.from('holidays').upsert(holidaysWithUserId, { onConflict: 'user_id,date' })
+    );
+    if (error) { alert('Failed to sync holidays.'); } 
+    else { fetchData(true); } // Refresh data after sync
+  };
+  
+  const deleteHoliday = async (id: string) => {
+    const previousState = deepClone(holidays);
+    setHolidays(prev => prev.filter(h => h.id !== id));
+    const { error } = await callSupabase('DELETE holiday', { id }, supabase.from('holidays').delete().eq('id', id));
+    if (error) { setHolidays(previousState); alert('Failed to delete holiday.'); }
+  };
+  
+  const deleteHolidaysByCountry = async (country: string) => {
+    const previousState = deepClone(holidays);
+    setHolidays(prev => prev.filter(h => h.country !== country));
+    const { error } = await callSupabase('DELETE holidays by country', { country }, supabase.from('holidays').delete().match({ country: country, user_id: session!.user.id }));
+    if (error) { setHolidays(previousState); alert(`Failed to delete holidays for ${country}.`); }
+  };
+
 
   if (!session) {
     return (
@@ -500,11 +544,26 @@ const App: React.FC = () => {
             <button onClick={() => setActiveTab('dashboard')} title="Dashboard" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><LayoutDashboard size={20} />{!isSidebarCollapsed && <span className="font-medium">Dashboard</span>}</button>
             <button onClick={() => setActiveTab('planner')} title="Planner" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'planner' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><Calendar size={20} />{!isSidebarCollapsed && <span className="font-medium">Planner</span>}</button>
             <button onClick={() => setActiveTab('estimator')} title="Estimator" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'estimator' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><Calculator size={20} />{!isSidebarCollapsed && <span className="font-medium">Estimator</span>}</button>
+            <button onClick={() => setActiveTab('resources')} title="Resources" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'resources' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><Users size={20} />{!isSidebarCollapsed && <span className="font-medium">Resources</span>}</button>
             <button onClick={() => setActiveTab('holiday')} title="Holidays" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'holiday' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><Globe size={20} />{!isSidebarCollapsed && <span className="font-medium">Holidays</span>}</button>
           </nav>
-          <div className="p-4 border-t border-slate-800 space-y-2">
-            <button onClick={() => setActiveTab('settings')} title="Settings" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-2 text-sm rounded-lg ${activeTab === 'settings' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}><SettingsIcon size={16} />{!isSidebarCollapsed && <span>Settings</span>}</button>
-            <button onClick={() => supabase.auth.signOut()} title="Sign Out" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-2 text-sm rounded-lg text-slate-400 hover:text-white`}><LogOut size={16} />{!isSidebarCollapsed && <span>Sign Out</span>}</button>
+          <div className="p-2 border-t border-slate-800">
+            <div className={`p-2 ${isSidebarCollapsed ? '' : 'mb-2'}`}>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-indigo-500 text-white flex items-center justify-center font-bold rounded-full flex-shrink-0">
+                  {session.user.email ? session.user.email[0].toUpperCase() : 'U'}
+                </div>
+                {!isSidebarCollapsed && (
+                  <div className="overflow-hidden">
+                    <p className="text-sm font-semibold text-white truncate" title={session.user.email}>{session.user.email}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <button onClick={() => setActiveTab('settings')} title="Settings" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-3 py-2 text-sm rounded-lg ${activeTab === 'settings' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><SettingsIcon size={16} />{!isSidebarCollapsed && <span>Settings</span>}</button>
+              <button onClick={() => supabase.auth.signOut()} title="Sign Out" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-3 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-800`}><LogOut size={16} />{!isSidebarCollapsed && <span>Sign Out</span>}</button>
+            </div>
           </div>
         </aside>
         <main className="flex-1 flex flex-col overflow-hidden">
@@ -513,9 +572,10 @@ const App: React.FC = () => {
             {loading ? <div className="text-center">Loading your data...</div> : (
               <>
                 {activeTab === 'dashboard' && <Dashboard projects={projects} />}
-                {activeTab === 'planner' && <PlannerGrid projects={projects} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={updateAssignmentRole} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onShiftTask={async () => {}} onShiftAssignment={async () => {}} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={() => {}} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
-                {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
-                {activeTab === 'holiday' && <AdminSettings holidays={holidays} onUpdateHolidays={setHolidays} />}
+                {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={updateAssignmentRole} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onShiftTask={async () => {}} onShiftAssignment={async () => {}} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={() => {}} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
+                {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg-col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
+                {activeTab === 'resources' && <Resources resources={resources} onAddResource={addResource} onDeleteResource={deleteResource} />}
+                {activeTab === 'holiday' && <AdminSettings holidays={holidays} onAddHolidays={addHolidays} onDeleteHoliday={deleteHoliday} onDeleteHolidaysByCountry={deleteHolidaysByCountry} />}
                 {activeTab === 'settings' && <Settings isDebugLogEnabled={isDebugLogEnabled} setIsDebugLogEnabled={setIsDebugLogEnabled} />}
               </>
             )}

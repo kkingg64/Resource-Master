@@ -2,66 +2,66 @@
 import { TimelineColumn, ViewMode, Holiday } from './types';
 
 // Mock "Government Database" - Expanded for 2024-2027
-export const GOV_HOLIDAYS_DB: Record<string, Holiday[]> = {
+export const GOV_HOLIDAYS_DB: Record<string, Omit<Holiday, 'id'>[]> = {
   'HK': [
     // 2024
-    { id: 'hk-2024-12-25', date: '2024-12-25', name: 'Christmas Day', country: 'HK' },
-    { id: 'hk-2024-12-26', date: '2024-12-26', name: 'Boxing Day', country: 'HK' },
+    { date: '2024-12-25', name: 'Christmas Day', country: 'HK' },
+    { date: '2024-12-26', name: 'Boxing Day', country: 'HK' },
     // 2025
-    { id: 'hk-2025-01-01', date: '2025-01-01', name: 'New Year Day', country: 'HK' },
-    { id: 'hk-2025-01-29', date: '2025-01-29', name: 'Lunar New Year (Day 1)', country: 'HK' },
-    { id: 'hk-2025-01-30', date: '2025-01-30', name: 'Lunar New Year (Day 2)', country: 'HK' },
-    { id: 'hk-2025-01-31', date: '2025-01-31', name: 'Lunar New Year (Day 3)', country: 'HK' },
-    { id: 'hk-2025-04-04', date: '2025-04-04', name: 'Ching Ming Festival', country: 'HK' },
-    { id: 'hk-2025-04-18', date: '2025-04-18', name: 'Good Friday', country: 'HK' },
-    { id: 'hk-2025-04-21', date: '2025-04-21', name: 'Easter Monday', country: 'HK' },
-    { id: 'hk-2025-05-01', date: '2025-05-01', name: 'Labour Day', country: 'HK' },
-    { id: 'hk-2025-07-01', date: '2025-07-01', name: 'HKSAR Establishment Day', country: 'HK' },
-    { id: 'hk-2025-10-01', date: '2025-10-01', name: 'National Day', country: 'HK' },
-    { id: 'hk-2025-12-25', date: '2025-12-25', name: 'Christmas Day', country: 'HK' },
-    { id: 'hk-2025-12-26', date: '2025-12-26', name: 'Boxing Day', country: 'HK' },
+    { date: '2025-01-01', name: 'New Year Day', country: 'HK' },
+    { date: '2025-01-29', name: 'Lunar New Year (Day 1)', country: 'HK' },
+    { date: '2025-01-30', name: 'Lunar New Year (Day 2)', country: 'HK' },
+    { date: '2025-01-31', name: 'Lunar New Year (Day 3)', country: 'HK' },
+    { date: '2025-04-04', name: 'Ching Ming Festival', country: 'HK' },
+    { date: '2025-04-18', name: 'Good Friday', country: 'HK' },
+    { date: '2025-04-21', name: 'Easter Monday', country: 'HK' },
+    { date: '2025-05-01', name: 'Labour Day', country: 'HK' },
+    { date: '2025-07-01', name: 'HKSAR Establishment Day', country: 'HK' },
+    { date: '2025-10-01', name: 'National Day', country: 'HK' },
+    { date: '2025-12-25', name: 'Christmas Day', country: 'HK' },
+    { date: '2025-12-26', name: 'Boxing Day', country: 'HK' },
     // 2026
-    { id: 'hk-2026-01-01', date: '2026-01-01', name: 'New Year Day', country: 'HK' },
-    { id: 'hk-2026-02-17', date: '2026-02-17', name: 'Lunar New Year (Day 1)', country: 'HK' },
-    { id: 'hk-2026-02-18', date: '2026-02-18', name: 'Lunar New Year (Day 2)', country: 'HK' },
-    { id: 'hk-2026-02-19', date: '2026-02-19', name: 'Lunar New Year (Day 3)', country: 'HK' },
-    { id: 'hk-2026-04-03', date: '2026-04-03', name: 'Good Friday', country: 'HK' },
-    { id: 'hk-2026-04-04', date: '2026-04-04', name: 'Holy Saturday / Ching Ming', country: 'HK' },
-    { id: 'hk-2026-04-06', date: '2026-04-06', name: 'Easter Monday', country: 'HK' },
-    { id: 'hk-2026-05-01', date: '2026-05-01', name: 'Labour Day', country: 'HK' },
-    { id: 'hk-2026-12-25', date: '2026-12-25', name: 'Christmas Day', country: 'HK' },
-    { id: 'hk-2026-12-26', date: '2026-12-26', name: 'Boxing Day', country: 'HK' },
+    { date: '2026-01-01', name: 'New Year Day', country: 'HK' },
+    { date: '2026-02-17', name: 'Lunar New Year (Day 1)', country: 'HK' },
+    { date: '2026-02-18', name: 'Lunar New Year (Day 2)', country: 'HK' },
+    { date: '2026-02-19', name: 'Lunar New Year (Day 3)', country: 'HK' },
+    { date: '2026-04-03', name: 'Good Friday', country: 'HK' },
+    { date: '2026-04-04', name: 'Holy Saturday / Ching Ming', country: 'HK' },
+    { date: '2026-04-06', name: 'Easter Monday', country: 'HK' },
+    { date: '2026-05-01', name: 'Labour Day', country: 'HK' },
+    { date: '2026-12-25', name: 'Christmas Day', country: 'HK' },
+    { date: '2026-12-26', name: 'Boxing Day', country: 'HK' },
     // 2027
-    { id: 'hk-2027-01-01', date: '2027-01-01', name: 'New Year Day', country: 'HK' },
-    { id: 'hk-2027-02-06', date: '2027-02-06', name: 'Lunar New Year (Day 1)', country: 'HK' },
-    { id: 'hk-2027-02-07', date: '2027-02-07', name: 'Lunar New Year (Day 2)', country: 'HK' },
+    { date: '2027-01-01', name: 'New Year Day', country: 'HK' },
+    { date: '2027-02-06', name: 'Lunar New Year (Day 1)', country: 'HK' },
+    { date: '2027-02-07', name: 'Lunar New Year (Day 2)', country: 'HK' },
   ],
   'CN': [
     // 2025
-    { id: 'cn-2025-01-01', date: '2025-01-01', name: 'New Year Day', country: 'CN' },
-    { id: 'cn-2025-01-29', date: '2025-01-29', name: 'Spring Festival', country: 'CN' },
-    { id: 'cn-2025-01-30', date: '2025-01-30', name: 'Spring Festival', country: 'CN' },
-    { id: 'cn-2025-10-01', date: '2025-10-01', name: 'National Day', country: 'CN' },
+    { date: '2025-01-01', name: 'New Year Day', country: 'CN' },
+    { date: '2025-01-29', name: 'Spring Festival', country: 'CN' },
+    { date: '2025-01-30', name: 'Spring Festival', country: 'CN' },
+    { date: '2025-10-01', name: 'National Day', country: 'CN' },
     // 2026
-    { id: 'cn-2026-01-01', date: '2026-01-01', name: 'New Year Day', country: 'CN' },
-    { id: 'cn-2026-02-17', date: '2026-02-17', name: 'Spring Festival', country: 'CN' },
-    { id: 'cn-2026-02-18', date: '2026-02-18', name: 'Spring Festival', country: 'CN' },
-    { id: 'cn-2026-02-19', date: '2026-02-19', name: 'Spring Festival', country: 'CN' },
+    { date: '2026-01-01', name: 'New Year Day', country: 'CN' },
+    { date: '2026-02-17', name: 'Spring Festival', country: 'CN' },
+    { date: '2026-02-18', name: 'Spring Festival', country: 'CN' },
+    { date: '2026-02-19', name: 'Spring Festival', country: 'CN' },
   ],
   'MY': [
-    { id: 'my-1', date: '2025-12-25', name: 'Christmas Day', country: 'MY' },
-    { id: 'my-2', date: '2026-01-01', name: 'New Year Day', country: 'MY' },
-    { id: 'my-3', date: '2026-02-17', name: 'Chinese New Year', country: 'MY' },
+    { date: '2025-12-25', name: 'Christmas Day', country: 'MY' },
+    { date: '2026-01-01', name: 'New Year Day', country: 'MY' },
+    { date: '2026-02-17', name: 'Chinese New Year', country: 'MY' },
   ],
   'SG': [
-    { id: 'sg-1', date: '2025-12-25', name: 'Christmas Day', country: 'SG' },
-    { id: 'sg-2', date: '2026-01-01', name: 'New Year Day', country: 'SG' },
-    { id: 'sg-3', date: '2026-02-17', name: 'Chinese New Year', country: 'SG' },
+    { date: '2025-12-25', name: 'Christmas Day', country: 'SG' },
+    { date: '2026-01-01', name: 'New Year Day', country: 'SG' },
+    { date: '2026-02-17', name: 'Chinese New Year', country: 'SG' },
   ],
   'US': [
-    { id: 'us-1', date: '2025-11-27', name: 'Thanksgiving Day', country: 'US' },
-    { id: 'us-2', date: '2025-12-25', name: 'Christmas Day', country: 'US' },
-    { id: 'us-3', date: '2026-01-01', name: 'New Year Day', country: 'US' },
+    { date: '2025-11-27', name: 'Thanksgiving Day', country: 'US' },
+    { date: '2025-12-25', name: 'Christmas Day', country: 'US' },
+    { date: '2026-01-01', name: 'New Year Day', country: 'US' },
   ]
 };
 
@@ -121,12 +121,14 @@ const generateWeeks = (start: WeekPoint, end: WeekPoint): TimelineColumn[] => {
     const paddedWeek = current.week.toString().padStart(2, '0');
     const date = getDateFromWeek(current.year, current.week);
     const monthName = MONTH_NAMES[date.getMonth()];
-    const groupLabel = `${monthName} ${current.year}`;
+    const weekLabel = `W${paddedWeek}`;
 
     weeks.push({ 
       id: `${current.year}-${paddedWeek}`, 
-      label: `W${paddedWeek}`, 
-      groupLabel: groupLabel,
+      label: weekLabel,
+      yearLabel: `${current.year}`,
+      monthLabel: `${monthName} ${current.year}`,
+      weekLabel: weekLabel,
       type: 'week'
     });
     current = addWeeksToPoint(current, 1);
@@ -137,10 +139,10 @@ const generateWeeks = (start: WeekPoint, end: WeekPoint): TimelineColumn[] => {
 const generateMonths = (weeks: TimelineColumn[]): TimelineColumn[] => {
   const monthsMap = new Map<string, TimelineColumn & { weekIds: string[] }>();
   weeks.forEach(w => {
-    const [monthName, year] = w.groupLabel.split(' ');
+    const [monthName, year] = w.monthLabel.split(' ');
     const id = `${year}-${MONTH_NAMES.indexOf(monthName) + 1}`;
     if (!monthsMap.has(id)) {
-      monthsMap.set(id, { id, label: monthName, groupLabel: year, type: 'month', weekIds: [] });
+      monthsMap.set(id, { id, label: monthName, yearLabel: year, monthLabel: w.monthLabel, weekLabel: '', type: 'month', weekIds: [] });
     }
     monthsMap.get(id)?.weekIds.push(w.id);
   });
@@ -160,7 +162,9 @@ const generateDays = (weeks: TimelineColumn[]): TimelineColumn[] => {
        days.push({
          id: `${week.id}-d${idx}`,
          label: dayName,
-         groupLabel: week.label,
+         yearLabel: week.yearLabel,
+         monthLabel: week.monthLabel,
+         weekLabel: week.weekLabel,
          type: 'day',
          parentWeekId: week.id,
          date: date

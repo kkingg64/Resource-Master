@@ -6,10 +6,12 @@ import { Globe, Download, Trash2, CalendarDays, CheckCircle, XCircle } from 'luc
 
 interface AdminSettingsProps {
   holidays: Holiday[];
-  onUpdateHolidays: React.Dispatch<React.SetStateAction<Holiday[]>>;
+  onAddHolidays: (holidays: Omit<Holiday, 'id'>[]) => Promise<void>;
+  onDeleteHoliday: (id: string) => Promise<void>;
+  onDeleteHolidaysByCountry: (country: string) => Promise<void>;
 }
 
-export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onUpdateHolidays }) => {
+export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHolidays, onDeleteHoliday, onDeleteHolidaysByCountry }) => {
   const [selectedCountryCode, setSelectedCountryCode] = useState<string>('HK');
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -29,29 +31,24 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onUpdate
   // Filter active holidays to see which ones belong to the selected country
   const activeCountryHolidays = holidays.filter(h => h.country === selectedCountryCode);
 
-  const handleSync = () => {
+  const handleSync = async () => {
     setIsSyncing(true);
-    setTimeout(() => {
-      onUpdateHolidays((prevHolidays) => {
-        const existingIds = new Set(prevHolidays.map(h => h.id));
-        const newHolidays = sourceHolidays.filter(h => !existingIds.has(h.id));
-        return [...prevHolidays, ...newHolidays];
-      });
-      setIsSyncing(false);
-    }, 500);
+    const holidaysToSync = sourceHolidays.filter(sh => !holidays.some(h => h.date === sh.date && h.country === sh.country));
+    if (holidaysToSync.length > 0) {
+      await onAddHolidays(holidaysToSync);
+    }
+    setIsSyncing(false);
   };
 
-  const handleDeleteAllFromCountry = () => {
+  const handleDeleteAllFromCountry = async () => {
     if (window.confirm(`Are you sure you want to remove all holidays for ${selectedCountryName}?`)) {
-      onUpdateHolidays((prevHolidays) => prevHolidays.filter(h => h.country !== selectedCountryCode));
+      await onDeleteHolidaysByCountry(selectedCountryCode);
     }
   };
-
-  const handleDeleteSingle = (id: string) => {
-    onUpdateHolidays((prevHolidays) => prevHolidays.filter(h => h.id !== id));
-  };
-
-  const isHolidayActive = (id: string) => holidays.some(h => h.id === id);
+  
+  const isHolidayActive = (sourceHoliday: Omit<Holiday, 'id'>) => {
+    return holidays.some(h => h.date === sourceHoliday.date && h.country === sourceHoliday.country);
+  }
 
   return (
     <div className="flex h-full gap-6 overflow-hidden">
@@ -102,11 +99,11 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onUpdate
                </button>
                <button 
                  onClick={handleSync}
-                 disabled={isSyncing || sourceHolidays.every(h => isHolidayActive(h.id))}
+                 disabled={isSyncing || sourceHolidays.every(isHolidayActive)}
                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                >
                  {isSyncing ? <span className="animate-spin">⌛</span> : <Download size={16} />}
-                 {sourceHolidays.every(h => isHolidayActive(h.id)) ? 'All Synced' : 'Sync Holidays'}
+                 {sourceHolidays.every(isHolidayActive) ? 'All Synced' : 'Sync Holidays'}
                </button>
              </div>
           </div>
@@ -122,9 +119,9 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onUpdate
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 p-3">
                     {sourceHolidays.map(h => {
-                      const isActive = isHolidayActive(h.id);
+                      const isActive = isHolidayActive(h);
                       return (
-                        <div key={h.id} className={`flex items-center gap-2 p-2 rounded border text-xs ${isActive ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200'}`}>
+                        <div key={h.date} className={`flex items-center gap-2 p-2 rounded border text-xs ${isActive ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200'}`}>
                            {isActive ? <CheckCircle size={14} className="text-green-600" /> : <div className="w-3.5 h-3.5 rounded-full border border-slate-300"></div>}
                            <span className="font-mono text-slate-500">{h.date}</span>
                            <span className="font-medium text-slate-700 truncate">{h.name}</span>
@@ -179,7 +176,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onUpdate
                      </td>
                      <td className="p-3 text-right">
                        <button 
-                         onClick={() => handleDeleteSingle(h.id)}
+                         onClick={() => onDeleteHoliday(h.id)}
                          className="text-slate-400 hover:text-red-600 transition-colors"
                          title="Remove holiday"
                        >

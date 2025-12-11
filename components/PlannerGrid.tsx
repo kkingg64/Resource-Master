@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday } from '../types';
+import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource } from '../types';
 import { getTimeline, ALL_WEEK_IDS, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput } from '../constants';
 import { Layers, Calendar, ChevronRight, ChevronDown, Info, GripVertical, Plus, UserPlus, ChevronLeft, Clock, PlayCircle, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx';
 interface PlannerGridProps {
   projects: Project[];
   holidays: Holiday[];
+  resources: Resource[];
   timelineStart: WeekPoint;
   timelineEnd: WeekPoint;
   onExtendTimeline: (direction: 'start' | 'end') => void;
@@ -60,6 +61,7 @@ const SaveStatusIndicator: React.FC<{ status: PlannerGridProps['saveStatus'] }> 
 export const PlannerGrid: React.FC<PlannerGridProps> = ({ 
   projects, 
   holidays,
+  resources,
   timelineStart,
   timelineEnd,
   onExtendTimeline,
@@ -359,14 +361,34 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
 
   // Compute headers grouping
-  const groupedHeaders = useMemo(() => {
+  const yearHeaders = useMemo(() => {
     return timeline.reduce((acc, col) => {
-      const key = col.groupLabel;
+      const key = col.yearLabel;
       if (!acc[key]) acc[key] = { label: key, colspan: 0 };
       acc[key].colspan++;
       return acc;
     }, {} as Record<string, { label: string, colspan: number }>);
   }, [timeline]);
+
+  const monthHeaders = useMemo(() => {
+    return timeline.reduce((acc, col) => {
+      const key = col.monthLabel;
+      if (!acc[key]) acc[key] = { label: key.split(' ')[0], colspan: 0 };
+      acc[key].colspan++;
+      return acc;
+    }, {} as Record<string, { label: string, colspan: number }>);
+  }, [timeline]);
+
+  const weekHeaders = useMemo(() => {
+    if (viewMode !== 'day') return null;
+    return timeline.reduce((acc, col) => {
+      const key = col.weekLabel;
+      if (!acc[key]) acc[key] = { label: key, colspan: 0 };
+      acc[key].colspan++;
+      return acc;
+    }, {} as Record<string, { label: string, colspan: number }>);
+  }, [timeline, viewMode]);
+
 
   const getRoleColorClass = (role: Role) => {
     switch (role) {
@@ -648,68 +670,63 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
       <div className="overflow-x-auto custom-scrollbar flex-1 relative">
         <div className="min-w-max">
-          {/* Header Row 1: Groups (Months/Years/Weeks) */}
-          <div className="flex bg-slate-100 border-b border-slate-200 sticky top-0 z-40">
-            <div 
-              className="flex-shrink-0 p-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group"
-              style={stickyStyle}
-            >
-              Project Structure
-              <div 
-                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors"
-                onMouseDown={startSidebarResize}
-              ></div>
-            </div>
-            <div 
-              className="flex-shrink-0 p-3 text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative"
-              style={detailsColStyle}
-            >
-              Details
-              <div 
-                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors"
-                onMouseDown={startDetailsResize}
-              ></div>
-            </div>
-            {Object.values(groupedHeaders).map((group, idx) => (
-              <div 
-                key={idx} 
-                className="text-center p-2 text-xs font-bold text-slate-600 border-r border-slate-200 bg-slate-100 uppercase tracking-wide truncate"
-                style={{ width: `${group.colspan * colWidth}px` }} 
-              >
-                {group.label}
+          {/* Header Row: Varies with ViewMode */}
+          {viewMode === 'day' ? (
+            <>
+              {/* Day View: 3-Tier Header */}
+              {/* Year */}
+              <div className="flex bg-slate-200/50 border-b border-slate-200 sticky top-0 z-40">
+                <div className="flex-shrink-0 p-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group" style={stickyStyle}>
+                  Project Structure
+                  <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
+                </div>
+                <div className="flex-shrink-0 p-3 text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative" style={detailsColStyle}>Details
+                  <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
+                </div>
+                {Object.values(yearHeaders).map((group, idx) => (<div key={idx} className="text-center p-1 text-xs font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
               </div>
-            ))}
-          </div>
-
-          {/* Header Row 2: Columns (Weeks/Days) */}
-          <div className="flex bg-slate-50 border-b border-slate-200 sticky top-[41px] z-40 shadow-sm">
-             <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}></div>
-             <div className="flex-shrink-0 border-r border-slate-200" style={detailsColStyle}></div>
-             {timeline.map(col => {
-               const holidayInfo = getHolidayInfo(col.date);
-               const isHol = !!holidayInfo;
-               const isCurrent = isCurrentColumn(col);
-               
-               return (
-                 <div 
-                   key={col.id} 
-                   className={`flex-shrink-0 text-center p-1 text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col
-                     ${isHol ? 'bg-red-50 text-red-600' : ''}
-                     ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}
-                   `}
-                   style={{ width: `${colWidth}px`, height: '32px' }}
-                   title={isHol ? `${holidayInfo?.name} (${holidayInfo?.country})` : isCurrent ? 'Current Date' : ''}
-                 >
-                   <span>{col.label}</span>
-                   {col.date && viewMode === 'day' && (
-                     <span className={`text-[9px] ${isHol ? 'text-red-500 font-bold' : isCurrent ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>
-                        {col.date.getDate()} {col.date.toLocaleString('default', { month: 'short' })}
-                     </span>
-                   )}
-                 </div>
-               );
-             })}
-          </div>
+              {/* Month */}
+              <div className="flex bg-slate-100/70 border-b border-slate-200 sticky top-[33px] z-40">
+                 <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}></div>
+                 <div className="flex-shrink-0 border-r border-slate-200" style={detailsColStyle}></div>
+                 {Object.values(monthHeaders).map((group, idx) => (<div key={idx} className="text-center p-1 text-xs font-bold text-slate-600 border-r border-slate-200 uppercase" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+              </div>
+               {/* Day */}
+              <div className="flex bg-slate-50 border-b border-slate-200 sticky top-[66px] z-40 shadow-sm">
+                 <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}></div>
+                 <div className="flex-shrink-0 border-r border-slate-200" style={detailsColStyle}></div>
+                 {timeline.map(col => {
+                    const holidayInfo = getHolidayInfo(col.date);
+                    const isHol = !!holidayInfo;
+                    const isCurrent = isCurrentColumn(col);
+                    return (<div key={col.id} className={`flex-shrink-0 text-center p-1 text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col ${isHol ? 'bg-red-50 text-red-600' : ''} ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px`, height: '32px' }} title={isHol ? `${holidayInfo?.name} (${holidayInfo?.country})` : isCurrent ? 'Current Date' : ''}>
+                      <span>{col.label}</span>
+                      {col.date && <span className={`text-[9px] ${isHol ? 'text-red-500 font-bold' : isCurrent ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>{col.date.getDate()}</span>}
+                    </div>);
+                 })}
+              </div>
+            </>
+          ) : (
+             <>
+               {/* Week/Month View: 2-Tier Header */}
+               <div className="flex bg-slate-100 border-b border-slate-200 sticky top-0 z-40">
+                  <div className="flex-shrink-0 p-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group" style={stickyStyle}>
+                     Project Structure
+                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
+                  </div>
+                  <div className="flex-shrink-0 p-3 text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative" style={detailsColStyle}>
+                     Details
+                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
+                  </div>
+                  {Object.values(viewMode === 'week' ? monthHeaders : yearHeaders).map((group, idx) => (<div key={idx} className="text-center p-2 text-xs font-bold text-slate-600 border-r border-slate-200 bg-slate-100 uppercase tracking-wide truncate" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+               </div>
+               <div className="flex bg-slate-50 border-b border-slate-200 sticky top-[41px] z-40 shadow-sm">
+                  <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}></div>
+                  <div className="flex-shrink-0 border-r border-slate-200" style={detailsColStyle}></div>
+                  {timeline.map(col => { const isCurrent = isCurrentColumn(col); return (<div key={col.id} className={`flex-shrink-0 text-center p-1 text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px`, height: '32px' }}><span>{col.label}</span></div>); })}
+               </div>
+             </>
+          )}
 
           {/* Projects Loop */}
           {projects.map((project) => {
@@ -1023,33 +1040,21 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                             {/* Assignment Rows */}
                             {!isTaskCollapsed && task.assignments.map(assignment => {
-                              const resourceEditId = `resource::${project.id}::${module.id}::${task.id}::${assignment.id}`;
-                              const isEditingResource = editingId === resourceEditId;
                               return (
                               <div key={assignment.id} className="flex border-b border-slate-100 group/assign">
                                 <div 
                                   className={`flex-shrink-0 py-1 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-10 flex items-center justify-between border-l-[3px] ${getRoleColorClass(assignment.role)} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`}
                                   style={stickyStyle}
                                 >
-                                  <div className="flex-1 overflow-hidden flex items-center">
-                                    {isEditingResource ? (
-                                      <input
-                                        ref={editInputRef}
-                                        value={editValue}
-                                        onChange={(e) => setEditValue(e.target.value)}
-                                        onBlur={saveEdit}
-                                        onKeyDown={handleKeyDown}
-                                        className="bg-white text-slate-700 text-xs font-bold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500 ml-12"
-                                      />
-                                    ) : (
-                                      <span 
-                                        className="text-xs text-slate-600 pl-12 truncate cursor-pointer hover:text-indigo-600 flex-1"
-                                        onDoubleClick={(e) => startEditing(resourceEditId, assignment.resourceName || '', undefined, e)}
-                                        title="Double click to edit resource name"
-                                      >
-                                        ↳ {assignment.resourceName || 'Unassigned'}
-                                      </span>
-                                    )}
+                                  <div className="flex-1 overflow-hidden flex items-center gap-2 pl-12">
+                                     <select
+                                       value={assignment.resourceName || 'Unassigned'}
+                                       onChange={(e) => onUpdateAssignmentResourceName(project.id, module.id, task.id, assignment.id, e.target.value)}
+                                       className="w-full text-xs text-slate-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer hover:text-indigo-600"
+                                     >
+                                        <option>Unassigned</option>
+                                        {resources.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
+                                     </select>
                                      <button 
                                       onClick={(e) => { e.stopPropagation(); onDeleteAssignment(project.id, module.id, task.id, assignment.id); }}
                                       className="opacity-0 group-hover/assign:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-100 transition-opacity ml-2"

@@ -63,7 +63,12 @@ export type ViewMode = 'day' | 'week' | 'month';
 export interface TimelineColumn {
   id: string; // Unique ID for the column (YYYY-MM-DD, YYYY-WW, or YYYY-MM)
   label: string; // Display label (e.g., "01", "Wk 44", "Nov")
-  groupLabel: string; // Parent label (e.g., "Nov 2025", "2025")
+  
+  // Explicit labels for multi-level grouping
+  yearLabel: string;
+  monthLabel: string;
+  weekLabel: string;
+
   date?: Date;
   type: ViewMode;
   weekIds?: string[]; // For Month view: which weeks belong to this month
@@ -90,4 +95,9 @@ export interface LogEntry {
   message: string;
   payload?: any;
   status: 'pending' | 'success' | 'error';
+}
+
+export interface Resource {
+  id: string;
+  name: string;
 }
