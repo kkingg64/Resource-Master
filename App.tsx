@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { INITIAL_PROJECTS, ALL_WEEK_IDS, INITIAL_HOLIDAYS, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint } from './constants';
+import { INITIAL_PROJECTS, ALL_WEEK_IDS, INITIAL_HOLIDAYS, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId } from './constants';
 import { Project, Role, ResourceAllocation, Holiday } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
@@ -56,26 +56,27 @@ const App: React.FC = () => {
           const existingAllocIndex = newAllocations.findIndex((a: any) => a.weekId === weekId);
           
           if (existingAllocIndex > -1) {
-            // Update existing allocation
+            // --- UPDATE EXISTING ALLOCATION ---
             const alloc = { ...newAllocations[existingAllocIndex] };
             
             if (dayDate) {
-              // Handle Daily Update
-              const newDays = { ...(alloc.days || {}) };
+              // Daily Update Logic
+              let newDays = { ...(alloc.days || {}) };
               
-              // If we are switching to daily mode and days map is empty, we should initialize it 
-              // with the previous weekly average for other days, to avoid data loss.
-              // For simplicity in this demo, we assume other days are 0 if not set, or user sets them one by one.
-              // Better UX: Pre-fill Mon-Fri with count/5 if daily map is empty?
-              if (Object.keys(newDays).length === 0 && alloc.count > 0) {
-                 // Initialize assumption: spread existing count to 5 days? 
-                 // We will skip this complex logic for now and just update the specific day.
+              // If we are editing a day but the daily breakdown doesn't exist yet,
+              // "hydrate" it from the weekly total to preserve other days' values.
+              if ((!alloc.days || Object.keys(alloc.days).length === 0) && alloc.count > 0) {
+                const weekdays = getWeekdaysForWeekId(weekId);
+                const dailyValue = alloc.count / 5;
+                weekdays.forEach(dayStr => {
+                  newDays[dayStr] = dailyValue;
+                });
               }
 
+              // Apply the specific daily change
               newDays[dayDate] = value;
               
-              // Recalculate total count for the week based on days
-              // Note: This overrides any manual weekly entry.
+              // Recalculate total weekly count from the sum of all days
               const dailySum = Object.values(newDays).reduce((sum: number, val: number) => sum + val, 0);
               
               newAllocations[existingAllocIndex] = {
@@ -84,23 +85,34 @@ const App: React.FC = () => {
                 days: newDays
               };
             } else {
-              // Standard Weekly Update
+              // Weekly Update Logic
               if (value > 0) {
-                newAllocations[existingAllocIndex] = { ...alloc, count: value, days: undefined }; // Reset days if weekly override
+                // When a week is updated directly, clear any daily breakdown to avoid data conflicts
+                newAllocations[existingAllocIndex] = { ...alloc, count: value, days: {} };
               } else {
                 newAllocations = newAllocations.filter((_, idx) => idx !== existingAllocIndex);
               }
             }
           } else if (value > 0) {
-            // Create new allocation
+            // --- CREATE NEW ALLOCATION ---
             if (dayDate) {
+              // Creating a new allocation by editing a single day.
+              // Initialize all weekdays for data integrity.
+              const weekdays = getWeekdaysForWeekId(weekId);
+              const initialDays: Record<string, number> = {};
+              weekdays.forEach(dayStr => {
+                  initialDays[dayStr] = 0;
+              });
+              initialDays[dayDate] = value;
+
               newAllocations.push({
                 weekId,
-                count: value,
-                days: { [dayDate]: value }
+                count: value, // The count is just the value of the single day edited
+                days: initialDays
               });
             } else {
-              newAllocations.push({ weekId, count: value });
+              // Creating a new weekly allocation
+              newAllocations.push({ weekId, count: value, days: {} });
             }
           }
 

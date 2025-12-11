@@ -431,3 +431,23 @@ export const TIMELINE_DATA: TimelineWeek[] = generateWeeks(DEFAULT_START, DEFAUL
   month: w.groupLabel.split(' ')[0],
   year: parseInt(w.groupLabel.split(' ')[1])
 }));
+
+// Helper to get all 5 weekdays for a given week ID
+export const getWeekdaysForWeekId = (weekId: string): string[] => {
+  const [yearStr, weekNumStr] = weekId.split('-');
+  if (!yearStr || !weekNumStr) return [];
+  
+  const year = parseInt(yearStr);
+  const weekNum = parseInt(weekNumStr);
+  if (isNaN(year) || isNaN(weekNum)) return [];
+
+  const monday = getDateFromWeek(year, weekNum);
+  const weekdays: string[] = [];
+
+  for (let i = 0; i < 5; i++) {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + i);
+    weekdays.push(formatDateForInput(date));
+  }
+  return weekdays;
+};
