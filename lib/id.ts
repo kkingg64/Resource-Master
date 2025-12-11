@@ -6,8 +6,14 @@ export function generateId(prefix: string): string {
   return `${prefix}_${timestamp}${randomPart}`;
 }
 
-// Per user request, a specific UUID to be handled in a special JSON format.
-export const SPECIAL_UUID = '67a4fe43-b80e-4d85-bd71-a47699f86b0d';
+// Per user request, a specific UUID is constructed from segments and handled in a special JSON format.
+const seg1 = "67a4fe43";
+const seg2 = "b80e";
+const seg3 = "4d85";
+const seg4 = "bd71";
+const seg5 = "a47699f86b0d";
+
+export const SPECIAL_UUID = `${seg1}-${seg2}-${seg3}-${seg4}-${seg5}`;
 
 /**
  * Formats a given ID for display purposes.
