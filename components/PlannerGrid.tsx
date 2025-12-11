@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect, useLayoutEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday } from '../types';
 import { getTimeline, ALL_WEEK_IDS, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput } from '../constants';
@@ -496,45 +495,66 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             <div className="h-12 sticky top-0 bg-transparent pointer-events-none"></div>
              {projects.map(p => (
                 <div key={p.id}>
-                    <div className="h-10 flex items-center bg-slate-100 border-b border-slate-200">
+                    <div className="h-10 flex items-center bg-slate-100 border-b border-slate-200 group">
                         <div style={{width: `${sidebarWidth}px`}} className="flex items-center px-2 gap-2">
                             <button onClick={() => toggleProject(p.id)} className="p-1 hover:bg-slate-200 rounded">{collapsedProjects[p.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
                             {editingTarget?.type === 'project' && editingTarget.projectId === p.id ? <InlineInput value={p.name} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="font-bold text-sm text-slate-800 truncate" onDoubleClick={() => setEditingTarget({ type: 'project', projectId: p.id })}>{p.name}</span>}
+                            <div className="ml-auto flex items-center">
+                                <button onClick={() => onAddModule(p.id)} title="Add Module" className="text-slate-400 hover:text-indigo-600 p-1 rounded-full hover:bg-indigo-50">
+                                    <Plus size={14} />
+                                </button>
+                                <button onClick={() => { if(window.confirm(`Are you sure you want to delete project "${p.name}"? This action cannot be undone.`)) onDeleteProject(p.id) }} title="Delete Project" className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-50 transition-opacity">
+                                    <Trash2 size={14} />
+                                </button>
+                            </div>
                         </div>
                     </div>
                     {!collapsedProjects[p.id] && p.modules.map((m, moduleIndex) => (
                         <div key={m.id} draggable onDragStart={(e) => handleModuleDragStart(e, moduleIndex, p.id)} onDragOver={handleModuleDragOver} onDrop={(e) => handleModuleDrop(e, moduleIndex, p.id)} className={`${draggedModuleIndex === moduleIndex ? 'opacity-50' : ''}`}>
-                             <div className="h-8 flex items-center bg-white border-b border-slate-100 hover:bg-slate-50">
+                             <div className="h-8 flex items-center bg-white border-b border-slate-100 hover:bg-slate-50 group">
                                 <div style={{width: `${sidebarWidth}px`}} className="flex items-center px-2 gap-2 pl-6">
                                     <button onClick={() => toggleModule(m.id)} className="p-1 hover:bg-slate-200 rounded">{collapsedModules[m.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
                                     <GripVertical size={12} className="text-slate-300 cursor-grab" />
                                     {editingTarget?.type === 'module' && editingTarget.moduleId === m.id ? <InlineInput value={m.name} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="font-semibold text-xs text-slate-700 truncate" onDoubleClick={() => setEditingTarget({ type: 'module', projectId: p.id, moduleId: m.id })}>{m.name}</span>}
-                                    <button onClick={() => onAddTask(p.id, m.id)} title="Add Task" className="ml-auto text-slate-400 hover:text-indigo-600 p-1 rounded-full hover:bg-indigo-50">
-                                        <Plus size={14} />
-                                    </button>
+                                    <div className="ml-auto flex items-center">
+                                        <button onClick={() => onAddTask(p.id, m.id)} title="Add Task" className="text-slate-400 hover:text-indigo-600 p-1 rounded-full hover:bg-indigo-50">
+                                            <Plus size={14} />
+                                        </button>
+                                        <button onClick={() => { if(window.confirm(`Delete module "${m.name}"?`)) onDeleteModule(p.id, m.id) }} title="Delete Module" className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-50 transition-opacity">
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             {!collapsedModules[m.id] && m.tasks.map(t => (
                                 <div key={t.id}>
-                                    <div className="h-8 flex items-center bg-slate-50/50 border-b border-slate-100 hover:bg-slate-100/70">
+                                    <div className="h-8 flex items-center bg-slate-50/50 border-b border-slate-100 hover:bg-slate-100/70 group">
                                        <div style={{width: `${sidebarWidth}px`}} className="flex items-center px-2 gap-2 pl-12">
                                           <button onClick={() => toggleTask(t.id)} className="p-1 hover:bg-slate-200 rounded">{collapsedTasks[t.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
                                           {editingTarget?.type === 'task' && editingTarget.taskId === t.id ? <InlineInput value={t.name} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="text-xs text-slate-600 truncate" onDoubleClick={() => setEditingTarget({ type: 'task', projectId: p.id, moduleId: m.id, taskId: t.id })}>{t.name}</span>}
-                                          <button onClick={() => openDependencyModal(p.id, m.id, t.id, t.dependencies || [])} className="ml-auto text-slate-400 hover:text-indigo-600 p-0.5 rounded"><Link size={12} /></button>
-                                          <button onClick={() => onAddAssignment(p.id, m.id, t.id, Role.DEV)} className="ml-1 text-slate-400 hover:text-indigo-600 p-0.5 rounded"><UserPlus size={12} /></button>
+                                          <div className="ml-auto flex items-center">
+                                              <button onClick={() => openDependencyModal(p.id, m.id, t.id, t.dependencies || [])} title="Set Dependencies" className="text-slate-400 hover:text-indigo-600 p-0.5 rounded"><Link size={12} /></button>
+                                              <button onClick={() => onAddAssignment(p.id, m.id, t.id, Role.DEV)} title="Add Assignment" className="ml-1 text-slate-400 hover:text-indigo-600 p-0.5 rounded"><UserPlus size={12} /></button>
+                                              <button onClick={() => { if(window.confirm(`Delete task "${t.name}"?`)) onDeleteTask(p.id, m.id, t.id) }} title="Delete Task" className="ml-1 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-0.5 rounded transition-opacity">
+                                                  <Trash2 size={12} />
+                                              </button>
+                                          </div>
                                        </div>
                                     </div>
                                     {!collapsedTasks[t.id] && t.assignments.map(a => (
-                                        <div key={a.id} className="h-8 flex items-center border-b border-slate-100 bg-white hover:bg-slate-50/50">
+                                        <div key={a.id} className="h-8 flex items-center border-b border-slate-100 bg-white hover:bg-slate-50/50 group">
                                              <div style={{width: `${sidebarWidth}px`}} className="pl-16 pr-2"></div>
-                                             <div style={{width: `${detailsWidth}px`}} className="grid grid-cols-2 text-xs px-2 h-full">
+                                             <div style={{width: `${detailsWidth}px`}} className="grid grid-cols-[1fr_1fr] text-xs px-2 h-full">
                                                 <div className="border-r border-slate-100 h-full flex items-center pr-1">
                                                     <select value={a.role} onChange={(e) => onUpdateAssignmentRole(p.id, m.id, t.id, a.id, e.target.value as Role)} className="w-full bg-transparent focus:outline-none focus:bg-white text-xs">
                                                         {Object.values(Role).map(r => <option key={r} value={r}>{r}</option>)}
                                                     </select>
                                                 </div>
-                                                <div className="h-full flex items-center pl-1">
+                                                <div className="h-full flex items-center justify-between pl-1">
                                                    {editingTarget?.type === 'resource' && editingTarget.assignmentId === a.id ? <InlineInput value={a.resourceName || ''} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="truncate" onDoubleClick={() => setEditingTarget({ type: 'resource', projectId: p.id, moduleId: m.id, taskId: t.id, assignmentId: a.id })}>{a.resourceName || 'Unassigned'}</span>}
+                                                    <button onClick={() => { if(window.confirm(`Delete this assignment?`)) onDeleteAssignment(p.id, m.id, t.id, a.id) }} title="Delete Assignment" className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-50 transition-opacity">
+                                                        <Trash2 size={12} />
+                                                    </button>
                                                 </div>
                                              </div>
                                         </div>
