@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { ALL_WEEK_IDS, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId } from './constants';
+import { ALL_WEEK_IDS, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
@@ -13,7 +12,6 @@ import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, Globe,
 import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
-import { Session } from '@supabase/supabase-js';
 
 // Helper to structure data from Supabase
 const structureProjectsData = (data: any[]): Project[] => {
@@ -30,6 +28,7 @@ const structureProjectsData = (data: any[]): Project[] => {
         name: t.name,
         startWeekId: t.start_week_id,
         duration: t.duration,
+        sort_order: t.sort_order,
         assignments: t.task_assignments.map((a: any) => ({
           id: a.id,
           role: a.role,
@@ -40,7 +39,7 @@ const structureProjectsData = (data: any[]): Project[] => {
             days: alloc.days || {},
           })),
         })),
-      })),
+      })).sort((a,b) => (a.sort_order || 0) - (b.sort_order || 0)), // Sort tasks
     })).sort((a,b) => a.sort_order - b.sort_order), // Sort modules
   }));
 };
@@ -48,7 +47,7 @@ const structureProjectsData = (data: any[]): Project[] => {
 const deepClone = <T,>(obj: T): T => JSON.parse(JSON.stringify(obj));
 
 const App: React.FC = () => {
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<any | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,7 +112,7 @@ const App: React.FC = () => {
     
     const { data: projectsData, error: projectsError } = await callSupabase(
       'FETCH projects', {},
-      supabase.from('projects').select('id, name, modules (id, name, legacy_function_points, function_points, sort_order, tasks (id, name, start_week_id, duration, task_assignments (id, role, resource_name, resource_allocations ( id, week_id, count, days ))))').order('created_at', { ascending: true })
+      supabase.from('projects').select('id, name, modules (id, name, legacy_function_points, function_points, sort_order, tasks (id, name, start_week_id, duration, sort_order, task_assignments (id, role, resource_name, resource_allocations ( id, week_id, count, days ))))').order('created_at', { ascending: true })
     );
 
     const { data: holidaysData, error: holidaysError } = await callSupabase(
@@ -275,7 +274,22 @@ const App: React.FC = () => {
   
   const addTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
     const logId = log('TRANSACTION: Add Task', { taskId, taskName, role });
-    const { data: taskData, error: taskError } = await supabase.from('tasks').insert({ id: taskId, name: taskName, module_id: moduleId, user_id: session!.user.id }).select().single();
+    const startWeekId = getWeekIdFromDate(new Date());
+    const duration = 1;
+
+    const project = projects.find(p => p.id === projectId);
+    const module = project?.modules.find(m => m.id === moduleId);
+    const sortOrder = module?.tasks.length || 0;
+
+    const { data: taskData, error: taskError } = await supabase.from('tasks').insert({ 
+      id: taskId, 
+      name: taskName, 
+      module_id: moduleId, 
+      user_id: session!.user.id,
+      start_week_id: startWeekId,
+      duration: duration,
+      sort_order: sortOrder
+    }).select().single();
     if (taskError) { updateLog(logId, 'error', { step: 'create_task', ...taskError }); alert("Failed to add task."); return; }
     
     const { error: assignError } = await supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
@@ -365,9 +379,42 @@ const App: React.FC = () => {
     project.modules.splice(endIndex, 0, removed);
     setProjects(updatedProjects);
     
-    const updates = project.modules.map((module, index) => ({ id: module.id, sort_order: index }));
+    // FIX: Include user_id and project_id to satisfy RLS policies.
+    const updates = project.modules.map((module, index) => ({ 
+      id: module.id, 
+      sort_order: index, 
+      project_id: projectId,
+      user_id: session!.user.id 
+    }));
+    
     const { error } = await callSupabase('REORDER modules', { updates }, supabase.from('modules').upsert(updates));
     if (error) { setProjects(previousState); alert("Failed to reorder modules."); }
+  };
+
+  const reorderTasks = async (projectId: string, moduleId: string, startIndex: number, endIndex: number) => {
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const project = updatedProjects.find(p => p.id === projectId);
+    if (!project) return;
+    const module = project.modules.find(m => m.id === moduleId);
+    if (!module) return;
+
+    const [removed] = module.tasks.splice(startIndex, 1);
+    module.tasks.splice(endIndex, 0, removed);
+    setProjects(updatedProjects);
+
+    const updates = module.tasks.map((task, index) => ({
+      id: task.id,
+      sort_order: index,
+      module_id: moduleId,
+      user_id: session!.user.id
+    }));
+    
+    const { error } = await callSupabase('REORDER tasks', { updates }, supabase.from('tasks').upsert(updates));
+    if (error) { 
+        setProjects(previousState); 
+        alert("Failed to reorder tasks."); 
+    }
   };
   
   const updateTaskSchedule = async (projectId: string, moduleId: string, taskId: string, startWeekId: string, duration: number) => {
@@ -444,7 +491,7 @@ const App: React.FC = () => {
             {loading ? <div className="text-center">Loading your data...</div> : (
               <>
                 {activeTab === 'dashboard' && <Dashboard projects={projects} />}
-                {activeTab === 'planner' && <PlannerGrid projects={projects} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={updateAssignmentRole} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onShiftTask={async () => {}} onShiftAssignment={async () => {}} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={() => {}} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} />}
+                {activeTab === 'planner' && <PlannerGrid projects={projects} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={updateAssignmentRole} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onShiftTask={async () => {}} onShiftAssignment={async () => {}} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={() => {}} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} />}
                 {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
                 {activeTab === 'holiday' && <AdminSettings holidays={holidays} onUpdateHolidays={setHolidays} />}
                 {activeTab === 'settings' && <Settings isDebugLogEnabled={isDebugLogEnabled} setIsDebugLogEnabled={setIsDebugLogEnabled} />}

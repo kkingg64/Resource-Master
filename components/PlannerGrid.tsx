@@ -17,6 +17,7 @@ interface PlannerGridProps {
   onAddTask: (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => void;
   onAddAssignment: (projectId: string, moduleId: string, taskId: string, role: Role) => void;
   onReorderModules: (projectId: string, startIndex: number, endIndex: number) => void;
+  onReorderTasks: (projectId: string, moduleId: string, startIndex: number, endIndex: number) => void;
   onShiftTask: (projectId: string, moduleId: string, taskId: string, direction: 'left' | 'right') => void;
   onShiftAssignment: (projectId: string, moduleId: string, taskId: string, assignmentId: string, direction: 'left' | 'right') => void;
   onUpdateTaskSchedule: (projectId: string, moduleId: string, taskId: string, startWeekId: string, duration: number) => void;
@@ -46,6 +47,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   onAddTask, 
   onAddAssignment,
   onReorderModules,
+  onReorderTasks,
   onShiftTask,
   onShiftAssignment,
   onUpdateTaskSchedule,
@@ -68,6 +70,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [draggedModuleIndex, setDraggedModuleIndex] = useState<number | null>(null);
+  const [draggedTask, setDraggedTask] = useState<{ moduleId: string; index: number } | null>(null);
 
   // Column Width States
   const [colWidthBase, setColWidthBase] = useState<number>(40);
@@ -436,24 +439,49 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }
   };
 
-  const handleDragStart = (e: React.DragEvent, index: number) => {
+  const handleModuleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.setData("text/plain", index.toString());
     e.dataTransfer.effectAllowed = "move";
     setDraggedModuleIndex(index);
   };
 
-  const handleDragOver = (e: React.DragEvent, index: number) => {
+  const handleModuleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
   };
 
-  const handleDrop = (e: React.DragEvent, projectId: string, index: number) => {
+  const handleModuleDrop = (e: React.DragEvent, projectId: string, index: number) => {
     e.preventDefault();
     const startIndex = parseInt(e.dataTransfer.getData("text/plain"), 10);
     if (!isNaN(startIndex) && startIndex !== index) {
       onReorderModules(projectId, startIndex, index);
     }
     setDraggedModuleIndex(null);
+  };
+
+  const handleTaskDragStart = (e: React.DragEvent, moduleId: string, taskIndex: number) => {
+    e.dataTransfer.setData("application/json", JSON.stringify({ moduleId, taskIndex }));
+    e.dataTransfer.effectAllowed = "move";
+    setDraggedTask({ moduleId, index: taskIndex });
+  };
+
+  const handleTaskDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleTaskDrop = (e: React.DragEvent, projectId: string, targetModuleId: string, targetTaskIndex: number) => {
+      e.preventDefault();
+      if (!draggedTask) return;
+      try {
+          const { moduleId: sourceModuleId, taskIndex: sourceTaskIndex } = JSON.parse(e.dataTransfer.getData("application/json"));
+          if (sourceModuleId === targetModuleId && sourceTaskIndex !== targetTaskIndex) {
+              onReorderTasks(projectId, sourceModuleId, sourceTaskIndex, targetTaskIndex);
+          }
+      } catch (err) {
+          console.error("Error dropping task", err);
+      }
+      setDraggedTask(null);
   };
 
   const handleAddTaskClick = (projectId: string, moduleId: string) => {
@@ -728,9 +756,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     <div 
                       key={module.id}
                       draggable
-                      onDragStart={(e) => handleDragStart(e, index)}
-                      onDragOver={(e) => handleDragOver(e, index)}
-                      onDrop={(e) => handleDrop(e, project.id, index)}
+                      onDragStart={(e) => handleModuleDragStart(e, index)}
+                      onDragOver={handleModuleDragOver}
+                      onDrop={(e) => handleModuleDrop(e, project.id, index)}
                       className={`${draggedModuleIndex === index ? 'opacity-50' : 'opacity-100'}`}
                     >
                       {/* Module Header Row */}
@@ -826,7 +854,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                       </div>
 
                       {/* Tasks */}
-                      {!isModuleCollapsed && module.tasks.map((task) => {
+                      {!isModuleCollapsed && module.tasks.map((task, taskIndex) => {
                         const taskEditId = `task::${project.id}::${module.id}::${task.id}`;
                         const isTaskCollapsed = collapsedTasks[task.id];
                         const isEditingTask = editingId === taskEditId;
@@ -841,17 +869,25 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         endDate.setDate(startDate.getDate() + ((task.duration || 1) * 7) - 3); // Approx Friday of last week
 
                         return (
-                          <React.Fragment key={`${module.id}-${task.id}`}>
+                          <React.Fragment key={task.id}>
                             {/* Task Header Row */}
-                            <div className="flex border-b border-slate-100 bg-slate-50/40 group/task">
+                            <div 
+                              draggable
+                              onDragStart={(e) => handleTaskDragStart(e, module.id, taskIndex)}
+                              onDragOver={handleTaskDragOver}
+                              onDrop={(e) => handleTaskDrop(e, project.id, module.id, taskIndex)}
+                              className={`flex border-b border-slate-100 bg-slate-50/40 group/task ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>
                               <div 
-                                className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50/95 z-20 flex items-center justify-between pl-10 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]"
+                                className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50/95 z-20 flex items-center justify-between pl-6 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]"
                                 style={stickyStyle}
                               >
                                  <div 
                                    className="flex items-center gap-2 overflow-hidden cursor-pointer flex-1"
                                    onClick={() => !isEditingTask && toggleTask(task.id)}
                                  >
+                                   <div className="cursor-grab text-slate-400 hover:text-slate-600" title="Drag to reorder task">
+                                      <GripVertical size={14} />
+                                   </div>
                                    {isTaskCollapsed ? <ChevronRight size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
                                    <div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0"></div>
                                    

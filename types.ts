@@ -35,6 +35,7 @@ export interface ProjectTask {
   startWeekId?: string; // Auto-scheduler start
   duration?: number;    // Auto-scheduler duration in weeks
   assignments: TaskAssignment[];
+  sort_order?: number;
 }
 
 export interface ProjectModule {
