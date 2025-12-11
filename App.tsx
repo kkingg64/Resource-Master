@@ -44,6 +44,10 @@ const structureProjectsData = (data: any[]): Project[] => {
   }));
 };
 
+// FIX: Moved helper function outside component scope and fixed JSX parsing ambiguity with a trailing comma in the generic type parameter.
+// Helper function for creating a safe, deep clone of the state
+const deepClone = <T,>(obj: T): T => JSON.parse(JSON.stringify(obj));
+
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -59,7 +63,6 @@ const App: React.FC = () => {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -132,57 +135,59 @@ const App: React.FC = () => {
   };
   
   const updateAllocation = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number, dayDate?: string) => {
-    const currentState = projects;
-    // Optimistic update
-    const { updatedProjects, allocationToUpdate } = (() => {
-      let allocationToUpdate: any = null;
-      const updatedProjects = projects.map(p => {
-        if (p.id !== projectId) return p;
-        return { ...p, modules: p.modules.map(m => {
-          if (m.id !== moduleId) return m;
-          return { ...m, tasks: m.tasks.map(t => {
-            if (t.id !== taskId) return t;
-            return { ...t, assignments: t.assignments.map(a => {
-              if (a.id !== assignmentId) return a;
-              
-              const newAllocations = [...a.allocations];
-              const allocIndex = newAllocations.findIndex(al => al.weekId === weekId);
-              
-              if (allocIndex > -1) {
-                const alloc = { ...newAllocations[allocIndex] };
-                if (dayDate) {
-                  const newDays = { ...(alloc.days || {}) };
-                   if ((!alloc.days || Object.keys(alloc.days).length === 0) && alloc.count > 0) {
-                    const weekdays = getWeekdaysForWeekId(weekId);
-                    weekdays.forEach(d => newDays[d] = alloc.count / 5);
-                  }
-                  newDays[dayDate] = value;
-                  alloc.days = newDays;
-                  alloc.count = Object.values(newDays).reduce((sum: number, v: number) => sum + v, 0);
-                } else {
-                  alloc.count = value;
-                  alloc.days = {};
-                }
-                newAllocations[allocIndex] = alloc;
-                allocationToUpdate = alloc;
-              } else if (value > 0) {
-                const newAlloc = { weekId, count: value, days: {} };
-                 if(dayDate) {
-                   const weekdays = getWeekdaysForWeekId(weekId);
-                   const days = weekdays.reduce((acc, day) => ({...acc, [day]: 0}), {});
-                   days[dayDate] = value;
-                   newAlloc.days = days;
-                 }
-                newAllocations.push(newAlloc);
-                allocationToUpdate = newAlloc;
-              }
-              return { ...a, allocations: newAllocations };
-            })};
-          })};
-        })};
-      });
-      return { updatedProjects, allocationToUpdate };
-    })();
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+
+    const project = updatedProjects.find(p => p.id === projectId);
+    if (!project) return;
+    const module = project.modules.find(m => m.id === moduleId);
+    if (!module) return;
+    const task = module.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const assignment = task.assignments.find(a => a.id === assignmentId);
+    if (!assignment) return;
+
+    let allocationToUpdate: any = null;
+    const allocIndex = assignment.allocations.findIndex(al => al.weekId === weekId);
+    
+    if (allocIndex > -1) {
+        const alloc = assignment.allocations[allocIndex];
+        if (dayDate) {
+            alloc.days = alloc.days || {};
+            if (Object.keys(alloc.days).length === 0 && alloc.count > 0) {
+                const weekdays = getWeekdaysForWeekId(weekId);
+                // FIX: Used {[key: string]: number} to avoid JSX parsing ambiguity.
+                weekdays.forEach(d => (alloc.days as {[key: string]: number})[d] = alloc.count / 5);
+            }
+            // FIX: Used {[key: string]: number} to avoid JSX parsing ambiguity.
+            (alloc.days as {[key: string]: number})[dayDate] = value;
+            alloc.count = Object.values(alloc.days).reduce((sum: number, v: number) => sum + v, 0);
+        } else {
+            alloc.count = value;
+            alloc.days = {};
+        }
+        allocationToUpdate = alloc;
+    } else if (value > 0) {
+        const newAlloc: ResourceAllocation = { weekId, count: value, days: {} };
+        if (dayDate) {
+            const weekdays = getWeekdaysForWeekId(weekId);
+            // FIX: Used {[key: string]: number} to avoid JSX parsing ambiguity.
+            const days = weekdays.reduce((acc, day) => ({...acc, [day]: 0}), {} as {[key: string]: number});
+            days[dayDate] = value;
+            newAlloc.days = days;
+            newAlloc.count = Object.values(days).reduce((sum, v) => sum + v, 0);
+        }
+        assignment.allocations.push(newAlloc);
+        allocationToUpdate = newAlloc;
+    } else { // Handle setting value to 0 for an existing daily allocation
+        const alloc = assignment.allocations[allocIndex];
+        if (alloc && dayDate && alloc.days && alloc.days[dayDate] !== undefined) {
+             delete alloc.days[dayDate];
+             alloc.count = Object.values(alloc.days).reduce((sum: number, v: number) => sum + v, 0);
+             allocationToUpdate = alloc;
+        }
+    }
+
     setProjects(updatedProjects);
 
     // DB update
@@ -207,7 +212,7 @@ const App: React.FC = () => {
 
         if (error) {
             console.error("Failed to update allocation:", error);
-            setProjects(currentState); // Revert on error
+            setProjects(previousState);
             alert("Error: Could not save allocation.");
         }
     }
@@ -225,7 +230,7 @@ const App: React.FC = () => {
   };
   
   const deleteProject = async (projectId: string) => {
-    const previousState = projects;
+    const previousState = deepClone(projects);
     setProjects(prev => prev.filter(p => p.id !== projectId));
     const { error } = await supabase.from('projects').delete().eq('id', projectId);
     if (error) { 
@@ -236,8 +241,14 @@ const App: React.FC = () => {
   };
   
   const updateProjectName = async (projectId: string, name: string) => {
-    const previousState = projects;
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, name } : p));
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const project = updatedProjects.find(p => p.id === projectId);
+    if (project) {
+        project.name = name;
+        setProjects(updatedProjects);
+    }
+
     const { error } = await supabase.from('projects').update({ name }).eq('id', projectId);
     if (error) {
         console.error(error);
@@ -247,8 +258,15 @@ const App: React.FC = () => {
   };
   
   const updateModuleName = async (projectId: string, moduleId: string, name: string) => {
-     const previousState = projects;
-     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? {...m, name} : m) } : p));
+     const previousState = deepClone(projects);
+     const updatedProjects = deepClone(projects);
+     const project = updatedProjects.find(p => p.id === projectId);
+     const module = project?.modules.find(m => m.id === moduleId);
+     if (module) {
+        module.name = name;
+        setProjects(updatedProjects);
+     }
+     
      const { error } = await supabase.from('modules').update({ name }).eq('id', moduleId);
      if (error) {
         console.error(error);
@@ -258,8 +276,16 @@ const App: React.FC = () => {
   };
   
   const updateTaskName = async (projectId: string, moduleId: string, taskId: string, name: string) => {
-    const previousState = projects;
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? {...t, name} : t) } : m) } : p));
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const project = updatedProjects.find(p => p.id === projectId);
+    const module = project?.modules.find(m => m.id === moduleId);
+    const task = module?.tasks.find(t => t.id === taskId);
+    if (task) {
+        task.name = name;
+        setProjects(updatedProjects);
+    }
+    
     const { error } = await supabase.from('tasks').update({ name }).eq('id', taskId);
     if (error) {
         console.error(error);
@@ -280,8 +306,14 @@ const App: React.FC = () => {
   };
   
   const deleteModule = async (projectId: string, moduleId: string) => {
-    const previousState = projects;
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.filter(m => m.id !== moduleId) } : p));
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const project = updatedProjects.find(p => p.id === projectId);
+    if (project) {
+        project.modules = project.modules.filter(m => m.id !== moduleId);
+        setProjects(updatedProjects);
+    }
+    
     const { error } = await supabase.from('modules').delete().eq('id', moduleId);
     if (error) { 
         console.error(error); 
@@ -302,8 +334,15 @@ const App: React.FC = () => {
   };
   
   const deleteTask = async (projectId: string, moduleId: string, taskId: string) => {
-    const previousState = projects;
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? {...m, tasks: m.tasks.filter(t => t.id !== taskId)} : m) } : p));
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const project = updatedProjects.find(p => p.id === projectId);
+    const module = project?.modules.find(m => m.id === moduleId);
+    if (module) {
+        module.tasks = module.tasks.filter(t => t.id !== taskId);
+        setProjects(updatedProjects);
+    }
+    
     const { error } = await supabase.from('tasks').delete().eq('id', taskId);
     if (error) { 
         console.error(error); 
@@ -319,8 +358,16 @@ const App: React.FC = () => {
   };
   
   const deleteAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
-     const previousState = projects;
-     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? {...t, assignments: t.assignments.filter(a => a.id !== assignmentId) } : t)} : m) } : p));
+     const previousState = deepClone(projects);
+     const updatedProjects = deepClone(projects);
+     const project = updatedProjects.find(p => p.id === projectId);
+     const module = project?.modules.find(m => m.id === moduleId);
+     const task = module?.tasks.find(t => t.id === taskId);
+     if (task) {
+        task.assignments = task.assignments.filter(a => a.id !== assignmentId);
+        setProjects(updatedProjects);
+     }
+     
      const { error } = await supabase.from('task_assignments').delete().eq('id', assignmentId);
      if (error) { 
          console.error(error); 
@@ -330,8 +377,16 @@ const App: React.FC = () => {
   };
 
   const updateFunctionPoints = async (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => {
-     const previousState = projects;
-     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? {...m, legacyFunctionPoints: legacyFp, functionPoints: mvpFp} : m) } : p));
+     const previousState = deepClone(projects);
+     const updatedProjects = deepClone(projects);
+     const project = updatedProjects.find(p => p.id === projectId);
+     const module = project?.modules.find(m => m.id === moduleId);
+     if (module) {
+        module.legacyFunctionPoints = legacyFp;
+        module.functionPoints = mvpFp;
+        setProjects(updatedProjects);
+     }
+     
      const { error } = await supabase.from('modules').update({ legacy_function_points: legacyFp, function_points: mvpFp }).eq('id', moduleId);
      if (error) {
         console.error(error);
@@ -341,31 +396,41 @@ const App: React.FC = () => {
   };
   
   const reorderModules = async (projectId: string, startIndex: number, endIndex: number) => {
-    const project = projects.find(p => p.id === projectId);
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const project = updatedProjects.find(p => p.id === projectId);
     if (!project) return;
-    const previousState = projects;
-    const reordered = Array.from(project.modules);
-    const [removed] = reordered.splice(startIndex, 1);
-    reordered.splice(endIndex, 0, removed);
     
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: reordered } : p));
+    const [removed] = project.modules.splice(startIndex, 1);
+    project.modules.splice(endIndex, 0, removed);
+    
+    setProjects(updatedProjects);
     
     // Update sort_order in DB
-    const updates = reordered.map((module, index) => 
+    const updates = project.modules.map((module, index) => 
       supabase.from('modules').update({ sort_order: index }).eq('id', module.id)
     );
-    try {
-        await Promise.all(updates);
-    } catch(e) {
-        console.error(e);
+    const results = await Promise.all(updates);
+    const hasError = results.some(res => res.error);
+    if (hasError) {
+        console.error("Failed to reorder modules", results);
         setProjects(previousState);
         alert("Failed to reorder modules.");
     }
   };
   
   const updateTaskSchedule = async (projectId: string, moduleId: string, taskId: string, startWeekId: string, duration: number) => {
-     const previousState = projects;
-     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? {...t, startWeekId, duration } : t) } : m) } : p));
+     const previousState = deepClone(projects);
+     const updatedProjects = deepClone(projects);
+     const project = updatedProjects.find(p => p.id === projectId);
+     const module = project?.modules.find(m => m.id === moduleId);
+     const task = module?.tasks.find(t => t.id === taskId);
+     if (task) {
+        task.startWeekId = startWeekId;
+        task.duration = duration;
+        setProjects(updatedProjects);
+     }
+     
      const { error } = await supabase.from('tasks').update({ start_week_id: startWeekId, duration }).eq('id', taskId);
      if (error) {
         console.error(error);
