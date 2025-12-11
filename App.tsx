@@ -198,6 +198,33 @@ const App: React.FC = () => {
 
   }, [projects, loading]);
 
+  // --- DEFENSIVE SUPABASE HELPERS ---
+  const updateSupabaseRecord = async (table: string, id: string, data: object) => {
+    console.log(`[DEBUG] Attempting to update table "${table}" for ID: "${id}"`);
+
+    if (typeof id !== 'string' || id.length !== 36) {
+      const errorMsg = `[CRITICAL] Invalid ID format for update. Expected 36-char UUID string, but got: "${id}" (length: ${id.length}). Update cancelled.`;
+      console.error(errorMsg, { table, id, data });
+      alert(errorMsg);
+      return { error: { message: errorMsg } };
+    }
+
+    return await supabase.from(table).update(data).eq('id', id);
+  };
+
+  const deleteSupabaseRecord = async (table: string, id: string) => {
+    console.log(`[DEBUG] Attempting to delete from table "${table}" for ID: "${id}"`);
+    
+    if (typeof id !== 'string' || id.length !== 36) {
+      const errorMsg = `[CRITICAL] Invalid ID format for delete. Expected 36-char UUID string, but got: "${id}" (length: ${id.length}). Delete cancelled.`;
+      console.error(errorMsg, { table, id });
+      alert(errorMsg);
+      return { error: { message: errorMsg } };
+    }
+    
+    return await supabase.from(table).delete().eq('id', id);
+  };
+
   const commitAllocationSaves = useCallback(async () => {
     if (!session || saveQueueRef.current.size === 0) return;
 
@@ -313,18 +340,18 @@ const App: React.FC = () => {
   const deleteProject = async (projectId: string) => {
     const previousState = projects;
     setProjects(prev => prev.filter(p => p.id !== projectId));
-    const { error } = await supabase.from('projects').delete().eq('id', projectId);
+    const { error } = await deleteSupabaseRecord('projects', projectId);
     if (error) { 
         console.error(error); 
         setProjects(previousState);
-        alert("Failed to delete project.");
+        if (!error.message.includes('[CRITICAL]')) alert("Failed to delete project.");
     }
   };
   
   const updateProjectName = async (projectId: string, name: string): Promise<string | null> => {
     const previousState = projects;
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, name } : p));
-    const { error } = await supabase.from('projects').update({ name }).eq('id', projectId);
+    const { error } = await updateSupabaseRecord('projects', projectId, { name });
     if (error) {
         console.error("Update Project Name Error:", error);
         setProjects(previousState);
@@ -336,7 +363,7 @@ const App: React.FC = () => {
   const updateModuleName = async (projectId: string, moduleId: string, name: string): Promise<string | null> => {
      const previousState = projects;
      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? {...m, name} : m) } : p));
-     const { error } = await supabase.from('modules').update({ name }).eq('id', moduleId);
+     const { error } = await updateSupabaseRecord('modules', moduleId, { name });
      if (error) {
         console.error("Update Module Name Error:", error);
         setProjects(previousState);
@@ -348,7 +375,7 @@ const App: React.FC = () => {
   const updateTaskName = async (projectId: string, moduleId: string, taskId: string, name: string): Promise<string | null> => {
     const previousState = projects;
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? {...t, name} : t) } : m) } : p));
-    const { error } = await supabase.from('tasks').update({ name }).eq('id', taskId);
+    const { error } = await updateSupabaseRecord('tasks', taskId, { name });
     if (error) {
         console.error("Update Task Name Error:", error);
         setProjects(previousState);
@@ -369,7 +396,7 @@ const App: React.FC = () => {
         })};
       })};
     }));
-    const { error } = await supabase.from('task_assignments').update({ resource_name: name }).eq('id', assignmentId);
+    const { error } = await updateSupabaseRecord('task_assignments', assignmentId, { resource_name: name });
     if (error) {
       console.error("Update Resource Name Error:", error);
       setProjects(previousState);
@@ -390,11 +417,11 @@ const App: React.FC = () => {
         })};
       })};
     }));
-    const { error } = await supabase.from('task_assignments').update({ role }).eq('id', assignmentId);
+    const { error } = await updateSupabaseRecord('task_assignments', assignmentId, { role });
     if (error) {
       console.error(error);
       setProjects(previousState);
-      alert("Failed to update assignment role.");
+      if (!error.message.includes('[CRITICAL]')) alert("Failed to update assignment role.");
     }
   };
   
@@ -413,11 +440,11 @@ const App: React.FC = () => {
   const deleteModule = async (projectId: string, moduleId: string) => {
     const previousState = projects;
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.filter(m => m.id !== moduleId) } : p));
-    const { error } = await supabase.from('modules').delete().eq('id', moduleId);
+    const { error } = await deleteSupabaseRecord('modules', moduleId);
     if (error) { 
         console.error(error); 
         setProjects(previousState);
-        alert("Failed to delete module.");
+        if (!error.message.includes('[CRITICAL]')) alert("Failed to delete module.");
     }
   };
   
@@ -445,11 +472,11 @@ const App: React.FC = () => {
   const deleteTask = async (projectId: string, moduleId: string, taskId: string) => {
     const previousState = projects;
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? {...m, tasks: m.tasks.filter(t => t.id !== taskId)} : m) } : p));
-    const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+    const { error } = await deleteSupabaseRecord('tasks', taskId);
     if (error) { 
         console.error(error); 
         setProjects(previousState);
-        alert("Failed to delete task.");
+        if (!error.message.includes('[CRITICAL]')) alert("Failed to delete task.");
     }
   };
   
@@ -463,22 +490,22 @@ const App: React.FC = () => {
   const deleteAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
      const previousState = projects;
      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? {...t, assignments: t.assignments.filter(a => a.id !== assignmentId) } : t)} : m) } : p));
-     const { error } = await supabase.from('task_assignments').delete().eq('id', assignmentId);
+     const { error } = await deleteSupabaseRecord('task_assignments', assignmentId);
      if (error) { 
          console.error(error); 
          setProjects(previousState);
-         alert("Failed to delete assignment.");
+         if (!error.message.includes('[CRITICAL]')) alert("Failed to delete assignment.");
      }
   };
 
   const updateFunctionPoints = async (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => {
      const previousState = projects;
      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? {...m, legacyFunctionPoints: legacyFp, functionPoints: mvpFp} : m) } : p));
-     const { error } = await supabase.from('modules').update({ legacy_function_points: legacyFp, function_points: mvpFp }).eq('id', moduleId);
+     const { error } = await updateSupabaseRecord('modules', moduleId, { legacy_function_points: legacyFp, function_points: mvpFp });
      if (error) {
         console.error(error);
         setProjects(previousState);
-        alert("Failed to update function points.");
+        if (!error.message.includes('[CRITICAL]')) alert("Failed to update function points.");
      }
   };
   
@@ -589,12 +616,12 @@ const App: React.FC = () => {
       
       setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? {...t, dependencies } : t) } : m) } : p));
       
-      const { error } = await supabase.from('tasks').update({ dependencies }).eq('id', taskId);
+      const { error } = await updateSupabaseRecord('tasks', taskId, { dependencies });
       
       if (error) {
          console.error(error);
          setProjects(previousState);
-         alert("Failed to update dependencies.");
+         if (!error.message.includes('[CRITICAL]')) alert("Failed to update dependencies.");
       } else {
          // Trigger auto-schedule to align with new dependencies
          const task = projects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
