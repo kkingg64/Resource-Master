@@ -43,6 +43,8 @@ const structureProjectsData = (
       id: a.id,
       role: a.role,
       resourceName: a.resource_name,
+      startWeekId: a.start_week_id,
+      duration: a.duration,
       allocations: allocationsByAssignment.get(a.id) || [],
     });
   });
@@ -55,8 +57,6 @@ const structureProjectsData = (
     tasksByModule.get(t.module_id)!.push({
       id: t.id,
       name: t.name,
-      startWeekId: t.start_week_id,
-      duration: t.duration,
       sort_order: t.sort_order,
       assignments: (assignmentsByTask.get(t.id) || []).sort((a,b) => a.role.localeCompare(b.role)),
     });
@@ -382,21 +382,26 @@ const App: React.FC = () => {
   };
   
   const addTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
-    const startWeekId = getWeekIdFromDate(new Date());
-    const duration = 1;
-
     const { data: taskData, error: taskError } = await callSupabase('CREATE task', { taskId, taskName }, supabase.from('tasks').insert({ 
       id: taskId, 
       name: taskName, 
       module_id: moduleId, 
+      user_id: session!.user.id
+    }).select().single());
+
+    if (taskError) { alert("Failed to add task."); return; }
+    
+    const startWeekId = getWeekIdFromDate(new Date());
+    const duration = 1;
+    const { error: assignError } = await callSupabase('CREATE assignment', { taskId, role }, supabase.from('task_assignments').insert({ 
+      task_id: taskId, 
+      role, 
+      resource_name: 'Unassigned', 
       user_id: session!.user.id,
       start_week_id: startWeekId,
       duration: duration
     }).select().single());
 
-    if (taskError) { alert("Failed to add task."); return; }
-    
-    const { error: assignError } = await callSupabase('CREATE assignment', { taskId, role }, supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single());
     if (assignError) { return; }
 
     fetchData();
@@ -413,9 +418,19 @@ const App: React.FC = () => {
   };
   
   const addAssignment = async (projectId: string, moduleId: string, taskId: string, role: Role) => {
+    const startWeekId = getWeekIdFromDate(new Date());
+    const duration = 1;
+
     const { error } = await callSupabase(
         'CREATE assignment', { taskId, role },
-        supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single()
+        supabase.from('task_assignments').insert({ 
+          task_id: taskId, 
+          role, 
+          resource_name: 'Unassigned', 
+          user_id: session!.user.id,
+          start_week_id: startWeekId,
+          duration: duration 
+        }).select().single()
     );
     if (!error) fetchData();
   };
@@ -465,6 +480,19 @@ const App: React.FC = () => {
 
     const { error } = await callSupabase('UPDATE assignment role', { id: assignmentId, role }, supabase.from('task_assignments').update({ role }).eq('id', assignmentId));
     if (error) { setProjects(previousState); alert("Failed to update role."); }
+  };
+  
+  const updateAssignmentSchedule = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, startWeekId: string, duration: number) => {
+     const previousState = deepClone(projects);
+     const assignment = projects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId)?.assignments.find(a => a.id === assignmentId);
+     if (assignment) { 
+        assignment.startWeekId = startWeekId; 
+        assignment.duration = duration; 
+        setProjects(deepClone(projects)); 
+     }
+     
+     const { error } = await callSupabase('UPDATE assignment schedule', { id: assignmentId, startWeekId, duration }, supabase.from('task_assignments').update({ start_week_id: startWeekId, duration }).eq('id', assignmentId));
+     if (error) { setProjects(previousState); alert("Failed to update assignment schedule."); }
   };
 
   const updateFunctionPoints = async (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => {
@@ -525,15 +553,6 @@ const App: React.FC = () => {
         setProjects(previousState); 
         alert("Failed to reorder tasks."); 
     }
-  };
-  
-  const updateTaskSchedule = async (projectId: string, moduleId: string, taskId: string, startWeekId: string, duration: number) => {
-     const previousState = deepClone(projects);
-     const task = projects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
-     if (task) { task.startWeekId = startWeekId; task.duration = duration; setProjects(deepClone(projects)); }
-     
-     const { error } = await callSupabase('UPDATE task schedule', { id: taskId, startWeekId, duration }, supabase.from('tasks').update({ start_week_id: startWeekId, duration }).eq('id', taskId));
-     if (error) { setProjects(previousState); alert("Failed to update task schedule."); }
   };
   
   const onShiftAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, direction: 'left' | 'right') => {
@@ -638,14 +657,26 @@ const App: React.FC = () => {
     for (const project of importedProjects) {
       const { data: newProject } = await callSupabase('INSERT imported project', {name: project.name}, supabase.from('projects').insert({ name: project.name, user_id: session!.user.id }).select().single());
       if (newProject) {
-        for (const module of project.modules) {
-          const { data: newModule } = await callSupabase('INSERT imported module', {name: module.name}, supabase.from('modules').insert({ name: module.name, project_id: newProject.id, user_id: session!.user.id, function_points: module.functionPoints, legacy_function_points: module.legacyFunctionPoints }).select().single());
+        for (const [moduleIndex, module] of project.modules.entries()) {
+          const { data: newModule } = await callSupabase('INSERT imported module', {name: module.name}, supabase.from('modules').insert({ 
+            name: module.name, 
+            project_id: newProject.id, 
+            user_id: session!.user.id, 
+            function_points: module.functionPoints, 
+            legacy_function_points: module.legacyFunctionPoints,
+            sort_order: moduleIndex,
+          }).select().single());
           if (newModule) {
-            for (const task of module.tasks) {
-              const { data: newTask } = await callSupabase('INSERT imported task', {name: task.name}, supabase.from('tasks').insert({ name: task.name, module_id: newModule.id, user_id: session!.user.id }).select().single());
+            for (const [taskIndex, task] of module.tasks.entries()) {
+              const { data: newTask } = await callSupabase('INSERT imported task', {name: task.name}, supabase.from('tasks').insert({ 
+                name: task.name, 
+                module_id: newModule.id, 
+                user_id: session!.user.id,
+                sort_order: taskIndex,
+              }).select().single());
               if (newTask) {
                 for (const assignment of task.assignments) {
-                  const { data: newAssignment } = await callSupabase('INSERT imported assignment', {role: assignment.role}, supabase.from('task_assignments').insert({ task_id: newTask.id, role: assignment.role, resource_name: assignment.resourceName, user_id: session!.user.id }).select().single());
+                  const { data: newAssignment } = await callSupabase('INSERT imported assignment', {role: assignment.role}, supabase.from('task_assignments').insert({ task_id: newTask.id, role: assignment.role, resource_name: assignment.resourceName, user_id: session!.user.id, start_week_id: getWeekIdFromDate(new Date()), duration: 1 }).select().single());
                   if (newAssignment && assignment.allocations.length > 0) {
                     const allocationsToInsert = assignment.allocations.map(alloc => ({ assignment_id: newAssignment.id, week_id: alloc.weekId, count: alloc.count, days: alloc.days || {}, user_id: session!.user.id, }));
                     await callSupabase('INSERT imported allocations', {}, supabase.from('resource_allocations').insert(allocationsToInsert));
@@ -795,7 +826,7 @@ const App: React.FC = () => {
             {loading ? <div className="text-center p-8 text-slate-500">Loading your data...</div> : (
               <>
                 {activeTab === 'dashboard' && <Dashboard projects={projects} />}
-                {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={updateAssignmentRole} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onShiftTask={onShiftTask} onShiftAssignment={onShiftAssignment} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={onImportPlan} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
+                {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={updateAssignmentRole} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onShiftTask={onShiftTask} onShiftAssignment={onShiftAssignment} onUpdateAssignmentSchedule={updateAssignmentSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={onImportPlan} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
                 {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
                 {activeTab === 'resources' && <Resources resources={resources} onAddResource={addResource} onDeleteResource={deleteResource} />}
                 {activeTab === 'holiday' && <AdminSettings holidays={holidays} onAddHolidays={addHolidays} onDeleteHoliday={deleteHoliday} onDeleteHolidaysByCountry={deleteHolidaysByCountry} />}

@@ -1,4 +1,5 @@
 
+
 export enum Role {
   DEV = 'Dev Team',
   QA = 'QA Team',
@@ -27,13 +28,13 @@ export interface TaskAssignment {
   role: Role;
   resourceName?: string;
   allocations: ResourceAllocation[];
+  startWeekId?: string; // Auto-scheduler start
+  duration?: number;    // Auto-scheduler duration in weeks
 }
 
 export interface ProjectTask {
   id: string;
   name: string;
-  startWeekId?: string; // Auto-scheduler start
-  duration?: number;    // Auto-scheduler duration in weeks
   assignments: TaskAssignment[];
   sort_order?: number;
 }
@@ -44,6 +45,7 @@ export interface ProjectModule {
   legacyFunctionPoints: number; // Total legacy system size (for Fact Findings)
   functionPoints: number; // Target MVP size (for Build)
   tasks: ProjectTask[];
+  sort_order?: number;
 }
 
 export interface Project {

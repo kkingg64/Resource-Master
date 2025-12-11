@@ -22,7 +22,7 @@ interface PlannerGridProps {
   onReorderTasks: (projectId: string, moduleId: string, startIndex: number, endIndex: number) => void;
   onShiftTask: (projectId: string, moduleId: string, taskId: string, direction: 'left' | 'right') => void;
   onShiftAssignment: (projectId: string, moduleId: string, taskId: string, assignmentId: string, direction: 'left' | 'right') => void;
-  onUpdateTaskSchedule: (projectId: string, moduleId: string, taskId: string, startWeekId: string, duration: number) => void;
+  onUpdateAssignmentSchedule: (projectId: string, moduleId: string, taskId: string, assignmentId: string, startWeekId: string, duration: number) => void;
   onAddProject: () => void;
   onAddModule: (projectId: string) => void;
   onUpdateProjectName: (projectId: string, name: string) => void;
@@ -75,7 +75,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   onReorderTasks,
   onShiftTask,
   onShiftAssignment,
-  onUpdateTaskSchedule,
+  onUpdateAssignmentSchedule,
   onAddProject,
   onAddModule,
   onUpdateProjectName,
@@ -104,7 +104,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [colWidthBase, setColWidthBase] = useState<number>(40);
   const [sidebarWidth, setSidebarWidth] = useState<number>(256); // Default w-64
   const sidebarResizing = useRef(false);
-  const [detailsWidth, setDetailsWidth] = useState<number>(128); // Default w-32
+  const [detailsWidth, setDetailsWidth] = useState<number>(200); // Default w-32
   const detailsResizing = useRef(false);
 
   // Editing State
@@ -139,7 +139,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         setSidebarWidth(newWidth);
       }
       if (detailsResizing.current) {
-        const newWidth = Math.max(100, Math.min(500, e.clientX - sidebarWidth));
+        const newWidth = Math.max(150, Math.min(500, e.clientX - sidebarWidth));
         setDetailsWidth(newWidth);
       }
     };
@@ -549,33 +549,30 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       toggleModule(moduleId);
     }
     onAddTask(projectId, moduleId, newTaskId, "New Task", Role.DEV);
+    // FIX: 'project' is not defined in this scope. Use 'projectId' from function arguments.
     startEditing(`task::${projectId}::${moduleId}::${newTaskId}`, "New Task");
   };
 
   // Date Picker Handler
-  const handleStartDateChange = (projectId: string, moduleId: string, task: ProjectTask, newDateStr: string) => {
+  const handleAssignmentStartDateChange = (projectId: string, moduleId: string, taskId: string, assignment: TaskAssignment, newDateStr: string) => {
      if (!newDateStr) return;
      const date = new Date(newDateStr);
      const newStartWeekId = getWeekIdFromDate(date);
-     
-     // Preserve duration
-     onUpdateTaskSchedule(projectId, moduleId, task.id, newStartWeekId, task.duration || 1);
+     onUpdateAssignmentSchedule(projectId, moduleId, taskId, assignment.id, newStartWeekId, assignment.duration || 1);
   };
 
-  const handleEndDateChange = (projectId: string, moduleId: string, task: ProjectTask, newDateStr: string) => {
-     if (!newDateStr || !task.startWeekId) return;
+  const handleAssignmentEndDateChange = (projectId: string, moduleId: string, taskId: string, assignment: TaskAssignment, newDateStr: string) => {
+     if (!newDateStr || !assignment.startWeekId) return;
      const endDate = new Date(newDateStr);
      const endWeekId = getWeekIdFromDate(endDate);
 
-     const [y1, w1] = task.startWeekId.split('-').map(Number);
+     const [y1, w1] = assignment.startWeekId.split('-').map(Number);
      const [y2, w2] = endWeekId.split('-').map(Number);
      
-     // Approx logic assuming 52 weeks/year for simple diff
-     // A more robust library like date-fns would be better, but we stick to zero-dep
      const weekDiff = (y2 - y1) * 52 + (w2 - w1) + 1;
      const newDuration = Math.max(1, weekDiff);
 
-     onUpdateTaskSchedule(projectId, moduleId, task.id, task.startWeekId, newDuration);
+     onUpdateAssignmentSchedule(projectId, moduleId, taskId, assignment.id, assignment.startWeekId, newDuration);
   };
 
   // Dynamic Column Width based on slider and view mode
@@ -923,15 +920,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         const taskEditId = `task::${project.id}::${module.id}::${task.id}`;
                         const isTaskCollapsed = collapsedTasks[task.id];
                         const isEditingTask = editingId === taskEditId;
-                        
-                        // Calculate Date values for inputs
-                        const startDate = task.startWeekId ? getDateFromWeek(
-                          parseInt(task.startWeekId.split('-')[0]), 
-                          parseInt(task.startWeekId.split('-')[1])
-                        ) : new Date();
-                        
-                        const endDate = new Date(startDate);
-                        endDate.setDate(startDate.getDate() + ((task.duration || 1) * 7) - 3); // Approx Friday of last week
 
                         return (
                           <React.Fragment key={task.id}>
@@ -1011,30 +999,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                  </div>
                               </div>
 
-                              {/* Schedule Controls */}
-                              <div className="flex-shrink-0 border-r border-slate-200 bg-slate-50/30 flex items-center gap-1 px-1" style={detailsColStyle}>
-                                  <div className="flex flex-col w-full gap-0.5">
-                                      <div className="flex items-center gap-1" title="Start Date">
-                                          <span className="text-[9px] text-slate-400 w-6">Start</span>
-                                          <input 
-                                            type="date"
-                                            className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer"
-                                            value={formatDateForInput(startDate)}
-                                            onChange={(e) => handleStartDateChange(project.id, module.id, task, e.target.value)}
-                                          />
-                                      </div>
-                                      <div className="flex items-center gap-1 border-t border-slate-200 pt-0.5" title="End Date">
-                                          <span className="text-[9px] text-slate-400 w-6">End</span>
-                                          <input 
-                                            type="date"
-                                            className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer"
-                                            value={formatDateForInput(endDate)}
-                                            min={formatDateForInput(startDate)}
-                                            onChange={(e) => handleEndDateChange(project.id, module.id, task, e.target.value)}
-                                          />
-                                      </div>
-                                  </div>
-                              </div>
+                              {/* Empty Details Column for Task */}
+                              <div className="flex-shrink-0 border-r border-slate-200 bg-slate-50/30" style={detailsColStyle}></div>
                               
                               {/* Task Summaries */}
                               {timeline.map(col => {
@@ -1052,6 +1018,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                             {/* Assignment Rows */}
                             {!isTaskCollapsed && task.assignments.map(assignment => {
+                              const startDate = assignment.startWeekId ? getDateFromWeek(
+                                parseInt(assignment.startWeekId.split('-')[0]), 
+                                parseInt(assignment.startWeekId.split('-')[1])
+                              ) : new Date();
+                              
+                              const endDate = new Date(startDate);
+                              endDate.setDate(startDate.getDate() + ((assignment.duration || 1) * 7) - 3);
+
                               return (
                               <div key={assignment.id} className="flex border-b border-slate-100 group/assign">
                                 <div 
@@ -1081,31 +1055,52 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   </div>
                                 </div>
                                 
-                                <div className="flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-between px-2 py-1 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
-                                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-slate-200/0"></div> 
-                                    <select 
-                                      value={assignment.role}
-                                      onChange={(e) => onUpdateAssignmentRole(project.id, module.id, task.id, assignment.id, e.target.value as Role)}
-                                      className="w-20 text-[10px] p-1 border-none bg-transparent focus:ring-0 text-slate-600 cursor-pointer font-medium"
-                                    >
-                                      {Object.values(Role).map(r => (
-                                        <option key={r} value={r}>{r}</option>
-                                      ))}
-                                    </select>
-
-                                    <div className="flex items-center gap-0.5 opacity-0 group-hover/assign:opacity-100 transition-opacity">
-                                      <button 
-                                          onClick={() => onShiftAssignment(project.id, module.id, task.id, assignment.id, 'left')}
-                                          className="text-slate-300 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
+                                <div className="flex-shrink-0 border-r border-slate-200 bg-white flex flex-col justify-center gap-1 px-2 py-1 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
+                                    <div className="flex items-center justify-between">
+                                      <select 
+                                        value={assignment.role}
+                                        onChange={(e) => onUpdateAssignmentRole(project.id, module.id, task.id, assignment.id, e.target.value as Role)}
+                                        className="w-20 text-[10px] p-0 border-none bg-transparent focus:ring-0 text-slate-600 cursor-pointer font-medium"
                                       >
-                                        <ChevronLeft size={10} />
-                                      </button>
-                                      <button 
-                                          onClick={() => onShiftAssignment(project.id, module.id, task.id, assignment.id, 'right')}
-                                          className="text-slate-300 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
-                                      >
-                                        <ChevronRight size={10} />
-                                      </button>
+                                        {Object.values(Role).map(r => (
+                                          <option key={r} value={r}>{r}</option>
+                                        ))}
+                                      </select>
+                                      <div className="flex items-center gap-0.5 opacity-0 group-hover/assign:opacity-100 transition-opacity">
+                                        <button 
+                                            onClick={() => onShiftAssignment(project.id, module.id, task.id, assignment.id, 'left')}
+                                            className="text-slate-300 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
+                                        >
+                                          <ChevronLeft size={10} />
+                                        </button>
+                                        <button 
+                                            onClick={() => onShiftAssignment(project.id, module.id, task.id, assignment.id, 'right')}
+                                            className="text-slate-300 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
+                                        >
+                                          <ChevronRight size={10} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-col gap-0.5 border-t border-slate-100 mt-1 pt-1">
+                                      <div className="flex items-center gap-1" title="Start Date">
+                                        <span className="text-[9px] text-slate-400 w-6">Start</span>
+                                        <input 
+                                          type="date"
+                                          className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer"
+                                          value={formatDateForInput(startDate)}
+                                          onChange={(e) => handleAssignmentStartDateChange(project.id, module.id, task.id, assignment, e.target.value)}
+                                        />
+                                      </div>
+                                      <div className="flex items-center gap-1" title="End Date">
+                                        <span className="text-[9px] text-slate-400 w-6">End</span>
+                                        <input 
+                                          type="date"
+                                          className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer"
+                                          value={formatDateForInput(endDate)}
+                                          min={formatDateForInput(startDate)}
+                                          onChange={(e) => handleAssignmentEndDateChange(project.id, module.id, task.id, assignment, e.target.value)}
+                                        />
+                                      </div>
                                     </div>
                                 </div>
                                 
