@@ -14,7 +14,6 @@ interface PlannerGridProps {
   timelineEnd: WeekPoint;
   onExtendTimeline: (direction: 'start' | 'end') => void;
   onUpdateAllocation: (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number, dayDate?: string) => void;
-  onUpdateAssignmentRole: (projectId: string, moduleId: string, taskId: string, assignmentId: string, role: Role) => void;
   onUpdateAssignmentResourceName: (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => void;
   onAddTask: (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => void;
   onAddAssignment: (projectId: string, moduleId: string, taskId: string, role: Role) => void;
@@ -67,7 +66,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   timelineEnd,
   onExtendTimeline,
   onUpdateAllocation, 
-  onUpdateAssignmentRole, 
   onUpdateAssignmentResourceName,
   onAddTask, 
   onAddAssignment,
@@ -984,7 +982,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                    <button 
                                       onClick={() => onAddAssignment(project.id, module.id, task.id, Role.DEV)}
                                       className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
-                                      title="Add another role to this task"
+                                      title="Add another resource to this task"
                                    >
                                      <UserPlus size={14} />
                                    </button>
@@ -1057,15 +1055,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 
                                 <div className="flex-shrink-0 border-r border-slate-200 bg-white flex flex-col justify-center gap-1 px-2 py-1 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
                                     <div className="flex items-center justify-between">
-                                      <select 
-                                        value={assignment.role}
-                                        onChange={(e) => onUpdateAssignmentRole(project.id, module.id, task.id, assignment.id, e.target.value as Role)}
-                                        className="w-20 text-[10px] p-0 border-none bg-transparent focus:ring-0 text-slate-600 cursor-pointer font-medium"
-                                      >
-                                        {Object.values(Role).map(r => (
-                                          <option key={r} value={r}>{r}</option>
-                                        ))}
-                                      </select>
+                                      <span className="w-20 text-[10px] p-0 text-slate-600 font-medium truncate" title={assignment.role}>
+                                        {assignment.role}
+                                      </span>
                                       <div className="flex items-center gap-0.5 opacity-0 group-hover/assign:opacity-100 transition-opacity">
                                         <button 
                                             onClick={() => onShiftAssignment(project.id, module.id, task.id, assignment.id, 'left')}

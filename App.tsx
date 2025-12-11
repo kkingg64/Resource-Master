@@ -127,7 +127,7 @@ const App: React.FC = () => {
   const log = (message: string, payload: any, status: LogEntry['status'] = 'pending'): number => {
     if (!isDebugLogEnabled) return -1;
     const id = nextLogId.current++;
-    // FIX: Pass an empty array to toLocaleTimeString to satisfy TypeScript's argument expectation for locales.
+    // FIX: `toLocaleTimeString` was called without arguments. Passing an empty array to satisfy the requirement.
     const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString([]), message, payload, status };
     setLogEntries(prev => [newEntry, ...prev.slice(0, 99)]);
     return id;
@@ -460,26 +460,29 @@ const App: React.FC = () => {
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
     const assignment = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId)?.assignments.find(a => a.id === assignmentId);
-    if (assignment) {
-      assignment.resourceName = name;
+    
+    if (!assignment) return;
+
+    assignment.resourceName = name;
+    
+    // Find the resource and update the role
+    const selectedResource = resources.find(r => r.name === name);
+    let newRole = assignment.role; // Default to current role
+    if (selectedResource) {
+      newRole = selectedResource.category;
+      assignment.role = newRole;
     }
+    
     setProjects(updatedProjects);
 
-    const { error } = await callSupabase('UPDATE assignment resource name', { id: assignmentId, name }, supabase.from('task_assignments').update({ resource_name: name }).eq('id', assignmentId));
-    if (error) { setProjects(previousState); alert("Failed to update resource name."); }
-  };
-
-  const updateAssignmentRole = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, role: Role) => {
-    const previousState = deepClone(projects);
-    const updatedProjects = deepClone(projects);
-    const assignment = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId)?.assignments.find(a => a.id === assignmentId);
-    if (assignment) {
-      assignment.role = role;
+    // Update both name and role in Supabase
+    const updatePayload = { resource_name: name, role: newRole };
+    const { error } = await callSupabase('UPDATE assignment resource & role', { id: assignmentId, ...updatePayload }, supabase.from('task_assignments').update(updatePayload).eq('id', assignmentId));
+    
+    if (error) { 
+      setProjects(previousState); 
+      alert("Failed to update resource assignment."); 
     }
-    setProjects(updatedProjects);
-
-    const { error } = await callSupabase('UPDATE assignment role', { id: assignmentId, role }, supabase.from('task_assignments').update({ role }).eq('id', assignmentId));
-    if (error) { setProjects(previousState); alert("Failed to update role."); }
   };
   
   const updateAssignmentSchedule = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, startWeekId: string, duration: number) => {
@@ -826,7 +829,7 @@ const App: React.FC = () => {
             {loading ? <div className="text-center p-8 text-slate-500">Loading your data...</div> : (
               <>
                 {activeTab === 'dashboard' && <Dashboard projects={projects} />}
-                {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={updateAssignmentRole} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onShiftTask={onShiftTask} onShiftAssignment={onShiftAssignment} onUpdateAssignmentSchedule={updateAssignmentSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={onImportPlan} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
+                {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onShiftTask={onShiftTask} onShiftAssignment={onShiftAssignment} onUpdateAssignmentSchedule={updateAssignmentSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={onImportPlan} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
                 {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
                 {activeTab === 'resources' && <Resources resources={resources} onAddResource={addResource} onDeleteResource={deleteResource} />}
                 {activeTab === 'holiday' && <AdminSettings holidays={holidays} onAddHolidays={addHolidays} onDeleteHoliday={deleteHoliday} onDeleteHolidaysByCountry={deleteHolidaysByCountry} />}
