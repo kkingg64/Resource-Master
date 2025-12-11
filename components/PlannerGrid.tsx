@@ -457,7 +457,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
 
   const handleAddTaskClick = (projectId: string, moduleId: string) => {
-    const newTaskId = `task-${Date.now()}`;
+    const newTaskId = crypto.randomUUID();
     if (collapsedModules[moduleId]) {
       toggleModule(moduleId);
     }

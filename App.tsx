@@ -376,6 +376,46 @@ const App: React.FC = () => {
      }
   };
 
+  const updateAssignmentResourceName = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => {
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const project = updatedProjects.find(p => p.id === projectId);
+    const module = project?.modules.find(m => m.id === moduleId);
+    const task = module?.tasks.find(t => t.id === taskId);
+    const assignment = task?.assignments.find(a => a.id === assignmentId);
+    if (assignment) {
+        assignment.resourceName = name;
+        setProjects(updatedProjects);
+    }
+
+    const { error } = await supabase.from('task_assignments').update({ resource_name: name }).eq('id', assignmentId);
+    if (error) {
+        console.error(error);
+        setProjects(previousState);
+        alert("Failed to update resource name.");
+    }
+  };
+
+  const updateAssignmentRole = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, role: Role) => {
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const project = updatedProjects.find(p => p.id === projectId);
+    const module = project?.modules.find(m => m.id === moduleId);
+    const task = module?.tasks.find(t => t.id === taskId);
+    const assignment = task?.assignments.find(a => a.id === assignmentId);
+    if (assignment) {
+        assignment.role = role;
+        setProjects(updatedProjects);
+    }
+
+    const { error } = await supabase.from('task_assignments').update({ role }).eq('id', assignmentId);
+    if (error) {
+        console.error(error);
+        setProjects(previousState);
+        alert("Failed to update role.");
+    }
+  };
+
   const updateFunctionPoints = async (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => {
      const previousState = deepClone(projects);
      const updatedProjects = deepClone(projects);
@@ -515,7 +555,7 @@ const App: React.FC = () => {
             {loading ? <div className="text-center">Loading your data...</div> : (
               <>
                 {activeTab === 'dashboard' && <Dashboard projects={projects} />}
-                {activeTab === 'planner' && <PlannerGrid projects={projects} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={async () => {}} onUpdateAssignmentResourceName={async () => {}} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onShiftTask={async () => {}} onShiftAssignment={async () => {}} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={() => {}} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} />}
+                {activeTab === 'planner' && <PlannerGrid projects={projects} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={updateAssignmentRole} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onShiftTask={async () => {}} onShiftAssignment={async () => {}} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={() => {}} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} />}
                 {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
                 {activeTab === 'holiday' && <AdminSettings holidays={holidays} onUpdateHolidays={setHolidays} />}
                 {activeTab === 'settings' && <Settings />}
