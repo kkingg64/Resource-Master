@@ -122,31 +122,36 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
           </div>
         </div>
 
-        <div className="border-t border-slate-100 pt-6">
-          <div className="grid grid-cols-2 gap-4 mb-4">
-             <div>
-               <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Legacy System Size (FP)</label>
-               <input 
-                  type="number" 
-                  value={selectedModule?.legacyFunctionPoints || 0}
-                  onChange={(e) => selectedModule && onUpdateFunctionPoints(selectedProjectId, selectedModule.id, parseInt(e.target.value) || 0, selectedModule.functionPoints)}
-                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-               />
-               <p className="text-[10px] text-slate-400 mt-1">For Fact Finding Tasks</p>
-            </div>
-            <div>
-               <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">MVP Scope Size (FP)</label>
-               <input 
-                  type="number" 
-                  value={selectedModule?.functionPoints || 0}
-                  onChange={(e) => selectedModule && onUpdateFunctionPoints(selectedProjectId, selectedModule.id, selectedModule.legacyFunctionPoints || 0, parseInt(e.target.value) || 0)}
-                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-               />
-               <p className="text-[10px] text-slate-400 mt-1">For Build/QA Tasks</p>
+        <div className="border-t border-slate-200 pt-6">
+           <h3 className="text-md font-semibold text-slate-700 mb-3">Edit Module Function Points</h3>
+          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">Legacy System Size (FP)</label>
+                <input 
+                    type="number" 
+                    value={selectedModule?.legacyFunctionPoints || 0}
+                    onChange={(e) => selectedModule && onUpdateFunctionPoints(selectedProjectId, selectedModule.id, parseInt(e.target.value) || 0, selectedModule.functionPoints)}
+                    className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                    disabled={!selectedModule}
+                />
+                <p className="text-[10px] text-slate-400 mt-1">For Fact Finding Tasks</p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1 uppercase">MVP Scope Size (FP)</label>
+                <input 
+                    type="number" 
+                    value={selectedModule?.functionPoints || 0}
+                    onChange={(e) => selectedModule && onUpdateFunctionPoints(selectedProjectId, selectedModule.id, selectedModule.legacyFunctionPoints || 0, parseInt(e.target.value) || 0)}
+                    className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                    disabled={!selectedModule}
+                />
+                <p className="text-[10px] text-slate-400 mt-1">For Build/QA Tasks</p>
+              </div>
             </div>
           </div>
           
-          <div className="mb-6">
+          <div className="my-6">
              <label className="block text-sm font-medium text-slate-600 mb-2">Team Velocity (FP/Day)</label>
              <input 
                 type="number" 
@@ -174,10 +179,12 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
             </div>
           </div>
 
-          <div className="flex items-start gap-2 mt-4 text-xs text-slate-500 bg-yellow-50 p-2 rounded border border-yellow-100">
-            <AlertCircle className="w-4 h-4 text-yellow-500 flex-shrink-0" />
-            <p>Select a project and module above to estimate efforts.</p>
-          </div>
+          {!selectedModule && (
+            <div className="flex items-start gap-2 mt-4 text-xs text-slate-500 bg-yellow-50 p-2 rounded border border-yellow-100">
+              <AlertCircle className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
+              <p>Select a project and module above to estimate efforts and edit Function Points.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

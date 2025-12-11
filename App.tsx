@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate } from './constants';
+import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
@@ -127,7 +127,9 @@ const App: React.FC = () => {
   const log = (message: string, payload: any, status: LogEntry['status'] = 'pending'): number => {
     if (!isDebugLogEnabled) return -1;
     const id = nextLogId.current++;
-    // FIX: `toLocaleTimeString` was called without arguments. Passing an empty array to satisfy the requirement.
+    // FIX: Pass an empty array to toLocaleTimeString to satisfy TypeScript's argument expectation for locales.
+    // FIX: Pass an empty array to toLocaleTimeString to satisfy the function signature which expects arguments.
+    // FIX: Pass an empty array to toLocaleTimeString to satisfy TypeScript's argument expectation for locales.
     const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString([]), message, payload, status };
     setLogEntries(prev => [newEntry, ...prev.slice(0, 99)]);
     return id;
@@ -486,17 +488,97 @@ const App: React.FC = () => {
   };
   
   const updateAssignmentSchedule = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, startWeekId: string, duration: number) => {
-     const previousState = deepClone(projects);
-     const assignment = projects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId)?.assignments.find(a => a.id === assignmentId);
-     if (assignment) { 
-        assignment.startWeekId = startWeekId; 
-        assignment.duration = duration; 
-        setProjects(deepClone(projects)); 
-     }
-     
-     const { error } = await callSupabase('UPDATE assignment schedule', { id: assignmentId, startWeekId, duration }, supabase.from('task_assignments').update({ start_week_id: startWeekId, duration }).eq('id', assignmentId));
-     if (error) { setProjects(previousState); alert("Failed to update assignment schedule."); }
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const assignment = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId)?.assignments.find(a => a.id === assignmentId);
+  
+    if (!assignment) return;
+  
+    // Update schedule properties in local state
+    assignment.startWeekId = startWeekId;
+    assignment.duration = duration;
+  
+    // Auto-generate allocations
+    const newAllocations: ResourceAllocation[] = [];
+    if (startWeekId && duration > 0) {
+      const startDate = getDateFromWeek(parseInt(startWeekId.split('-')[0]), parseInt(startWeekId.split('-')[1]));
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + (duration * 7) - 1);
+  
+      const allocationsMap = new Map<string, { days: Record<string, number> }>();
+      const holidayDates = new Set(holidays.map(h => h.date));
+  
+      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+        const dayOfWeek = d.getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) continue; // Skip weekends
+  
+        const dateStr = formatDateForInput(d);
+        if (holidayDates.has(dateStr)) continue; // Skip holidays
+  
+        const weekId = getWeekIdFromDate(d);
+        if (!allocationsMap.has(weekId)) {
+          allocationsMap.set(weekId, { days: {} });
+        }
+        allocationsMap.get(weekId)!.days[dateStr] = 1;
+      }
+  
+      for (const [weekId, allocData] of allocationsMap.entries()) {
+        const count = Object.keys(allocData.days).length;
+        if (count > 0) {
+          newAllocations.push({ weekId, count, days: allocData.days });
+        }
+      }
+    }
+    assignment.allocations = newAllocations;
+  
+    setProjects(updatedProjects);
+  
+    // --- DB Operations ---
+    // 1. Update assignment schedule
+    const { error: scheduleError } = await callSupabase(
+      'UPDATE assignment schedule', 
+      { id: assignmentId, startWeekId, duration }, 
+      supabase.from('task_assignments').update({ start_week_id: startWeekId, duration }).eq('id', assignmentId)
+    );
+  
+    if (scheduleError) {
+      setProjects(previousState);
+      alert("Failed to update task schedule.");
+      return;
+    }
+  
+    // 2. Delete old allocations
+    const { error: deleteError } = await callSupabase(
+      'DELETE old allocations', 
+      { assignmentId }, 
+      supabase.from('resource_allocations').delete().eq('assignment_id', assignmentId)
+    );
+  
+    if (deleteError) {
+      fetchData(true); // Re-fetch to sync state if deletion fails
+      return;
+    }
+  
+    // 3. Insert new allocations
+    if (newAllocations.length > 0) {
+      const toInsert = newAllocations.map(a => ({
+        assignment_id: assignmentId,
+        user_id: session!.user.id,
+        week_id: a.weekId,
+        count: a.count,
+        days: a.days || {}
+      }));
+      const { error: insertError } = await callSupabase(
+        'INSERT new allocations', 
+        { count: toInsert.length }, 
+        supabase.from('resource_allocations').insert(toInsert)
+      );
+      if (insertError) {
+        fetchData(true); // Re-fetch to sync state
+      }
+    }
   };
+  
 
   const updateFunctionPoints = async (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => {
      const previousState = deepClone(projects);
@@ -729,6 +811,16 @@ const App: React.FC = () => {
     else { setResources(prev => [...prev, data]); }
   };
 
+  const updateResourceCategory = async (id: string, category: Role) => {
+    const previousState = deepClone(resources);
+    setResources(prev => prev.map(r => r.id === id ? { ...r, category } : r));
+    const { error } = await callSupabase(
+      'UPDATE resource category', { id, category },
+      supabase.from('resources').update({ category }).eq('id', id)
+    );
+    if (error) { setResources(previousState); alert('Failed to update resource category.'); }
+  };
+
   const deleteResource = async (id: string) => {
     const previousState = deepClone(resources);
     setResources(prev => prev.filter(r => r.id !== id));
@@ -829,9 +921,9 @@ const App: React.FC = () => {
             {loading ? <div className="text-center p-8 text-slate-500">Loading your data...</div> : (
               <>
                 {activeTab === 'dashboard' && <Dashboard projects={projects} />}
-                {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onShiftTask={onShiftTask} onShiftAssignment={onShiftAssignment} onUpdateAssignmentSchedule={updateAssignmentSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={onImportPlan} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
+                {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onShiftTask={onShiftTask} onShiftAssignment={onShiftAssignment} onUpdateAssignmentSchedule={updateAssignmentSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={onImportPlan} onShowHistory={() => setShowHistory(true)} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
                 {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
-                {activeTab === 'resources' && <Resources resources={resources} onAddResource={addResource} onDeleteResource={deleteResource} />}
+                {activeTab === 'resources' && <Resources resources={resources} onAddResource={addResource} onDeleteResource={deleteResource} onUpdateResourceCategory={updateResourceCategory} />}
                 {activeTab === 'holiday' && <AdminSettings holidays={holidays} onAddHolidays={addHolidays} onDeleteHoliday={deleteHoliday} onDeleteHolidaysByCountry={deleteHolidaysByCountry} />}
                 {activeTab === 'settings' && <Settings isDebugLogEnabled={isDebugLogEnabled} setIsDebugLogEnabled={setIsDebugLogEnabled} />}
               </>

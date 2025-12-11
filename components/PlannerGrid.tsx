@@ -33,7 +33,6 @@ interface PlannerGridProps {
   onDeleteAssignment: (projectId: string, moduleId: string, taskId: string, assignmentId: string) => void;
   onImportPlan: (projects: Project[], holidays: Holiday[]) => void;
   onShowHistory: () => void;
-  onUpdateFunctionPoints: (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => void;
   onRefresh: () => void;
   saveStatus: 'idle' | 'saving' | 'success' | 'error';
   isRefreshing: boolean;
@@ -85,7 +84,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   onDeleteAssignment,
   onImportPlan,
   onShowHistory,
-  onUpdateFunctionPoints,
   onRefresh,
   saveStatus,
   isRefreshing,
@@ -108,7 +106,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   // Editing State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
-  const [editValue2, setEditValue2] = useState<string>(''); // Secondary value for double inputs (e.g. FP)
   const editInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   
@@ -181,13 +178,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     setCollapsedTasks(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const startEditing = (id: string, initialValue: string, initialValue2?: string, e?: React.MouseEvent) => {
+  const startEditing = (id: string, initialValue: string, e?: React.MouseEvent) => {
     e?.stopPropagation(); // Prevent toggling collapse
     setEditingId(id);
     setEditValue(initialValue);
-    if (initialValue2 !== undefined) {
-      setEditValue2(initialValue2);
-    }
   };
   
   const saveEdit = () => {
@@ -202,11 +196,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     } else if (type === 'module') {
       const [_, projectId, moduleId] = parts;
       onUpdateModuleName(projectId, moduleId, editValue);
-    } else if (type === 'fp') {
-      const [_, projectId, moduleId] = parts;
-      const legacy = parseInt(editValue) || 0;
-      const mvp = parseInt(editValue2) || 0;
-      onUpdateFunctionPoints(projectId, moduleId, legacy, mvp);
     } else if (type === 'task') {
       const [_, projectId, moduleId, taskId] = parts;
       onUpdateTaskName(projectId, moduleId, taskId, editValue);
@@ -767,7 +756,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                        ) : (
                           <span 
                             className="font-bold text-sm truncate select-none flex-1" 
-                            onDoubleClick={(e) => startEditing(`project::${project.id}`, project.name, undefined, e)}
+                            onDoubleClick={(e) => startEditing(`project::${project.id}`, project.name, e)}
                             title="Double click to rename"
                           >
                             {project.name}
@@ -808,9 +797,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   const isModuleCollapsed = collapsedModules[module.id];
                   const moduleEditId = `module::${project.id}::${module.id}`;
                   const isEditingModule = editingId === moduleEditId;
-                  
-                  const fpEditId = `fp::${project.id}::${module.id}`;
-                  const isEditingFp = editingId === fpEditId;
 
                   return (
                     <div 
@@ -850,7 +836,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             ) : (
                               <span 
                                 className="font-semibold text-sm text-slate-800 truncate select-none flex-1 hover:text-indigo-600" 
-                                onDoubleClick={(e) => startEditing(moduleEditId, module.name, undefined, e)}
+                                onDoubleClick={(e) => startEditing(moduleEditId, module.name, e)}
                                 title="Double click to rename"
                               >
                                 {module.name}
@@ -866,37 +852,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             </button>
                         </div>
                         <div 
-                          className="flex-shrink-0 p-3 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/30 cursor-pointer hover:bg-indigo-100/50"
+                          className="flex-shrink-0 p-3 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/30"
                           style={detailsColStyle}
-                          onDoubleClick={(e) => startEditing(fpEditId, module.legacyFunctionPoints.toString(), module.functionPoints.toString(), e)}
-                          title="Double click to edit FP"
                         >
-                          {isEditingFp ? (
-                             <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                                <input 
-                                  ref={editInputRef}
-                                  type="number"
-                                  className="w-10 p-0.5 text-[10px] border rounded"
-                                  value={editValue}
-                                  onChange={e => setEditValue(e.target.value)}
-                                  placeholder="Legacy"
-                                  title="Legacy FP"
-                                  onKeyDown={handleKeyDown}
-                                />
-                                <input 
-                                  type="number"
-                                  className="w-10 p-0.5 text-[10px] border rounded"
-                                  value={editValue2}
-                                  onChange={e => setEditValue2(e.target.value)}
-                                  placeholder="MVP"
-                                  title="MVP FP"
-                                  onKeyDown={handleKeyDown}
-                                  onBlur={saveEdit}
-                                />
-                             </div>
-                          ) : (
-                            <span>{module.functionPoints} FP</span>
-                          )}
+                          <span>{module.functionPoints} FP</span>
                         </div>
                         
                         {/* Module Summaries */}
@@ -955,7 +914,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                       <span 
                                         className="text-xs text-slate-700 font-bold truncate select-none hover:text-indigo-600 flex-1" 
                                         title="Double click to rename"
-                                        onDoubleClick={(e) => startEditing(taskEditId, task.name, undefined, e)}
+                                        onDoubleClick={(e) => startEditing(taskEditId, task.name, e)}
                                       >
                                         {task.name}
                                       </span>

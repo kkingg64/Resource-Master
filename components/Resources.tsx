@@ -9,9 +9,10 @@ interface ResourcesProps {
   // FIX: Changed category type from ResourceCategory to Role.
   onAddResource: (name: string, category: Role) => Promise<void>;
   onDeleteResource: (id: string) => Promise<void>;
+  onUpdateResourceCategory: (id: string, category: Role) => Promise<void>;
 }
 
-export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, onDeleteResource }) => {
+export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, onDeleteResource, onUpdateResourceCategory }) => {
   const [newResourceName, setNewResourceName] = useState('');
   // FIX: Changed state to use Role enum and a default value from it.
   const [newResourceCategory, setNewResourceCategory] = useState<Role>(Role.DEV);
@@ -29,13 +30,13 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
   
   // FIX: Updated categoryColors to match the Role enum.
   const categoryColors: Record<Role, string> = {
-    [Role.DEV]: 'bg-blue-100 text-blue-800',
-    [Role.QA]: 'bg-green-100 text-green-800',
-    [Role.UIUX]: 'bg-orange-100 text-orange-800',
-    [Role.PM]: 'bg-gray-100 text-gray-800',
-    [Role.BA]: 'bg-purple-100 text-purple-800',
-    [Role.DATA]: 'bg-cyan-100 text-cyan-800',
-    [Role.APP_SUPPORT]: 'bg-red-100 text-red-800',
+    [Role.DEV]: 'bg-blue-100 text-blue-800 border-blue-200 focus:ring-blue-500',
+    [Role.QA]: 'bg-green-100 text-green-800 border-green-200 focus:ring-green-500',
+    [Role.UIUX]: 'bg-orange-100 text-orange-800 border-orange-200 focus:ring-orange-500',
+    [Role.PM]: 'bg-gray-100 text-gray-800 border-gray-200 focus:ring-gray-500',
+    [Role.BA]: 'bg-purple-100 text-purple-800 border-purple-200 focus:ring-purple-500',
+    [Role.DATA]: 'bg-cyan-100 text-cyan-800 border-cyan-200 focus:ring-cyan-500',
+    [Role.APP_SUPPORT]: 'bg-red-100 text-red-800 border-red-200 focus:ring-red-500',
   };
 
   return (
@@ -85,10 +86,15 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
                 <li key={resource.id} className="p-3 flex items-center justify-between hover:bg-slate-50">
                   <div className="flex items-center gap-3">
                     <span className="font-medium text-slate-700">{resource.name}</span>
-                    {/* FIX: Use correct category colors for Role. The key is now of type Role. */}
-                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${categoryColors[resource.category] || 'bg-slate-100 text-slate-600'}`}>
-                      {resource.category}
-                    </span>
+                    <select
+                        value={resource.category}
+                        onChange={(e) => onUpdateResourceCategory(resource.id, e.target.value as Role)}
+                        className={`text-xs font-semibold rounded-full appearance-none bg-transparent border px-2 py-0.5 focus:ring-2 cursor-pointer ${categoryColors[resource.category] || 'bg-slate-100 text-slate-600 border-slate-200 focus:ring-slate-500'}`}
+                    >
+                        {Object.values(Role).map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                    </select>
                   </div>
                   <button
                     onClick={() => onDeleteResource(resource.id)}
