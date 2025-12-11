@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ALL_WEEK_IDS, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getDateFromWeek, getWeekIdFromDate } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment } from './types';
@@ -13,7 +14,7 @@ import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { Session } from '@supabase/supabase-js';
-import { generateId } from './lib/id';
+import { generateId, SPECIAL_UUID } from './lib/id';
 
 // Helper to structure data from Supabase
 const structureProjectsData = (data: any[]): Project[] => {
@@ -109,7 +110,7 @@ const App: React.FC = () => {
       const formattedProjects = structureProjectsData(projectsData);
       if (formattedProjects.length === 0) {
          // Create default project if none exist
-         const defaultProjectId = generateId('proj');
+         const defaultProjectId = SPECIAL_UUID;
          const { data, error } = await supabase.from('projects').insert({ id: defaultProjectId, name: 'My First Project', user_id: session!.user.id }).select().single();
          if (data && !error) {
              setProjects([{ id: data.id, name: data.name, modules: [] }]);

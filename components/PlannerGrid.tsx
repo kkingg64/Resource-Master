@@ -3,6 +3,7 @@ import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, Ti
 import { getTimeline, ALL_WEEK_IDS, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput } from '../constants';
 import { Layers, Calendar, ChevronRight, ChevronDown, Info, GripVertical, Plus, UserPlus, ChevronLeft, Clock, PlayCircle, Folder, Settings2, Trash2, Download, Upload, History, Link, Check, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { formatIdForDisplay } from '../lib/id';
 
 // --- Optimized Sub-Components ---
 
@@ -498,7 +499,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     <div className="h-10 flex items-center bg-slate-100 border-b border-slate-200 group">
                         <div style={{width: `${sidebarWidth}px`}} className="flex items-center px-2 gap-2">
                             <button onClick={() => toggleProject(p.id)} className="p-1 hover:bg-slate-200 rounded">{collapsedProjects[p.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
-                            {editingTarget?.type === 'project' && editingTarget.projectId === p.id ? <InlineInput value={p.name} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="font-bold text-sm text-slate-800 truncate" onDoubleClick={() => setEditingTarget({ type: 'project', projectId: p.id })}>{p.name}</span>}
+                            {editingTarget?.type === 'project' && editingTarget.projectId === p.id ? <InlineInput value={p.name} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="font-bold text-sm text-slate-800 truncate" title={`ID:\n${formatIdForDisplay(p.id)}`} onDoubleClick={() => setEditingTarget({ type: 'project', projectId: p.id })}>{p.name}</span>}
                             <div className="ml-auto flex items-center">
                                 <button onClick={() => onAddModule(p.id)} title="Add Module" className="text-slate-400 hover:text-indigo-600 p-1 rounded-full hover:bg-indigo-50">
                                     <Plus size={14} />
@@ -515,7 +516,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 <div style={{width: `${sidebarWidth}px`}} className="flex items-center px-2 gap-2 pl-6">
                                     <button onClick={() => toggleModule(m.id)} className="p-1 hover:bg-slate-200 rounded">{collapsedModules[m.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
                                     <GripVertical size={12} className="text-slate-300 cursor-grab" />
-                                    {editingTarget?.type === 'module' && editingTarget.moduleId === m.id ? <InlineInput value={m.name} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="font-semibold text-xs text-slate-700 truncate" onDoubleClick={() => setEditingTarget({ type: 'module', projectId: p.id, moduleId: m.id })}>{m.name}</span>}
+                                    {editingTarget?.type === 'module' && editingTarget.moduleId === m.id ? <InlineInput value={m.name} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="font-semibold text-xs text-slate-700 truncate" title={`ID:\n${formatIdForDisplay(m.id)}`} onDoubleClick={() => setEditingTarget({ type: 'module', projectId: p.id, moduleId: m.id })}>{m.name}</span>}
                                     <div className="ml-auto flex items-center">
                                         <button onClick={() => onAddTask(p.id, m.id)} title="Add Task" className="text-slate-400 hover:text-indigo-600 p-1 rounded-full hover:bg-indigo-50">
                                             <Plus size={14} />
@@ -531,7 +532,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     <div className="h-8 flex items-center bg-slate-50/50 border-b border-slate-100 hover:bg-slate-100/70 group">
                                        <div style={{width: `${sidebarWidth}px`}} className="flex items-center px-2 gap-2 pl-12">
                                           <button onClick={() => toggleTask(t.id)} className="p-1 hover:bg-slate-200 rounded">{collapsedTasks[t.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
-                                          {editingTarget?.type === 'task' && editingTarget.taskId === t.id ? <InlineInput value={t.name} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="text-xs text-slate-600 truncate" onDoubleClick={() => setEditingTarget({ type: 'task', projectId: p.id, moduleId: m.id, taskId: t.id })}>{t.name}</span>}
+                                          {editingTarget?.type === 'task' && editingTarget.taskId === t.id ? <InlineInput value={t.name} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="text-xs text-slate-600 truncate" title={`ID:\n${formatIdForDisplay(t.id)}`} onDoubleClick={() => setEditingTarget({ type: 'task', projectId: p.id, moduleId: m.id, taskId: t.id })}>{t.name}</span>}
                                           <div className="ml-auto flex items-center">
                                               <button onClick={() => openDependencyModal(p.id, m.id, t.id, t.dependencies || [])} title="Set Dependencies" className="text-slate-400 hover:text-indigo-600 p-0.5 rounded"><Link size={12} /></button>
                                               <button onClick={() => onAddAssignment(p.id, m.id, t.id, Role.DEV)} title="Add Assignment" className="ml-1 text-slate-400 hover:text-indigo-600 p-0.5 rounded"><UserPlus size={12} /></button>
