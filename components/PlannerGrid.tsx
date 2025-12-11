@@ -66,13 +66,15 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [collapsedModules, setCollapsedModules] = useState<Record<string, boolean>>({});
   const [collapsedTasks, setCollapsedTasks] = useState<Record<string, boolean>>({});
   
-  const [viewMode, setViewMode] = useState<ViewMode>('week');
+  const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [draggedModuleIndex, setDraggedModuleIndex] = useState<number | null>(null);
 
   // Column Width States
   const [colWidthBase, setColWidthBase] = useState<number>(40);
   const [sidebarWidth, setSidebarWidth] = useState<number>(256); // Default w-64
   const sidebarResizing = useRef(false);
+  const [detailsWidth, setDetailsWidth] = useState<number>(128); // Default w-32
+  const detailsResizing = useRef(false);
 
   // Editing State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -87,16 +89,22 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }
   }, [editingId]);
 
-  // Handle Sidebar Resize
+  // Handle Column Resizing
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!sidebarResizing.current) return;
-      const newWidth = Math.max(150, Math.min(600, e.clientX - 32)); // 32px padding offset approx
-      setSidebarWidth(newWidth);
+      if (sidebarResizing.current) {
+        const newWidth = Math.max(200, Math.min(600, e.clientX));
+        setSidebarWidth(newWidth);
+      }
+      if (detailsResizing.current) {
+        const newWidth = Math.max(100, Math.min(500, e.clientX - sidebarWidth));
+        setDetailsWidth(newWidth);
+      }
     };
 
     const handleMouseUp = () => {
       sidebarResizing.current = false;
+      detailsResizing.current = false;
       document.body.style.cursor = 'default';
     };
 
@@ -107,11 +115,17 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, []);
+  }, [sidebarWidth]);
 
   const startSidebarResize = (e: React.MouseEvent) => {
     e.preventDefault();
     sidebarResizing.current = true;
+    document.body.style.cursor = 'col-resize';
+  };
+  
+  const startDetailsResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    detailsResizing.current = true;
     document.body.style.cursor = 'col-resize';
   };
 
@@ -466,6 +480,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const colWidth = viewMode === 'month' ? colWidthBase * 2 : colWidthBase;
 
   const stickyStyle = { width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth };
+  const detailsColStyle = { width: detailsWidth, minWidth: detailsWidth, maxWidth: detailsWidth };
 
   return (
     <div className="flex flex-col h-full bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
@@ -561,14 +576,20 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
               style={stickyStyle}
             >
               Project Structure
-              {/* Drag Handle */}
               <div 
                 className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors"
                 onMouseDown={startSidebarResize}
               ></div>
             </div>
-            <div className="w-32 flex-shrink-0 p-3 text-center text-xs font-semibold text-slate-600 border-r border-slate-200">
+            <div 
+              className="flex-shrink-0 p-3 text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative"
+              style={detailsColStyle}
+            >
               Details
+              <div 
+                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors"
+                onMouseDown={startDetailsResize}
+              ></div>
             </div>
             {Object.values(groupedHeaders).map((group, idx) => (
               <div 
@@ -584,7 +605,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           {/* Header Row 2: Columns (Weeks/Days) */}
           <div className="flex bg-slate-50 border-b border-slate-200 sticky top-[41px] z-40 shadow-sm">
              <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}></div>
-             <div className="w-32 flex-shrink-0 border-r border-slate-200"></div>
+             <div className="flex-shrink-0 border-r border-slate-200" style={detailsColStyle}></div>
              {timeline.map(col => {
                const holidayInfo = getHolidayInfo(col.date);
                const isHol = !!holidayInfo;
@@ -655,7 +676,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                        <Trash2 size={12} />
                      </button>
                   </div>
-                  <div className="w-32 flex-shrink-0 p-3 text-center text-xs font-bold text-slate-300 border-r border-slate-600 flex items-center justify-center gap-2">
+                  <div className="flex-shrink-0 p-3 text-center text-xs font-bold text-slate-300 border-r border-slate-600 flex items-center justify-center gap-2" style={detailsColStyle}>
                      <button 
                        onClick={(e) => { e.stopPropagation(); onAddModule(project.id); }}
                        className="flex items-center gap-1 text-[10px] bg-slate-600 hover:bg-slate-500 px-2 py-0.5 rounded transition-colors"
@@ -738,7 +759,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             </button>
                         </div>
                         <div 
-                          className="w-32 flex-shrink-0 p-3 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/30 cursor-pointer hover:bg-indigo-100/50"
+                          className="flex-shrink-0 p-3 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/30 cursor-pointer hover:bg-indigo-100/50"
+                          style={detailsColStyle}
                           onDoubleClick={(e) => startEditing(fpEditId, module.legacyFunctionPoints.toString(), module.functionPoints.toString(), e)}
                           title="Double click to edit FP"
                         >
@@ -869,7 +891,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               </div>
 
                               {/* Schedule Controls */}
-                              <div className="w-32 flex-shrink-0 border-r border-slate-200 bg-slate-50/30 flex items-center gap-1 px-1">
+                              <div className="flex-shrink-0 border-r border-slate-200 bg-slate-50/30 flex items-center gap-1 px-1" style={detailsColStyle}>
                                   <div className="flex flex-col w-full gap-0.5">
                                       <div className="flex items-center gap-1" title="Start Date">
                                           <span className="text-[9px] text-slate-400 w-6">Start</span>
@@ -945,7 +967,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   </div>
                                 </div>
                                 
-                                <div className="w-32 flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-between px-2 py-1 relative group-hover/assign:bg-slate-50">
+                                <div className="flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-between px-2 py-1 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
                                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-slate-200/0"></div> 
                                     <select 
                                       value={assignment.role}
@@ -1022,7 +1044,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               Add New Task
                             </button>
                           </div>
-                           <div className="w-32 flex-shrink-0 border-r border-slate-200 bg-slate-50/20"></div>
+                           <div className="flex-shrink-0 border-r border-slate-200 bg-slate-50/20" style={detailsColStyle}></div>
                            {timeline.map(col => (
                              <div key={`add-${module.id}-${col.id}`} className="flex-shrink-0 border-r border-slate-100" style={{ width: `${colWidth}px` }}></div>
                            ))}
@@ -1043,7 +1065,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
              >
                GRAND TOTAL
              </div>
-             <div className="w-32 flex-shrink-0 border-r border-slate-700"></div>
+             <div className="flex-shrink-0 border-r border-slate-700" style={detailsColStyle}></div>
              {timeline.map(col => {
                // Calculate total for this column across all projects
                const total = projects.reduce((acc, p) => acc + getProjectTotal(p, col), 0);
