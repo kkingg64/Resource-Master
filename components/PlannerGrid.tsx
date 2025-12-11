@@ -22,8 +22,6 @@ interface PlannerGridProps {
   onAddProject: () => void;
   onAddModule: (projectId: string) => void;
   onUpdateProjectName: (projectId: string, name: string) => void;
-  onUpdateModuleName: (projectId: string, moduleId: string, name: string) => void;
-  onUpdateModuleFunctionPoints: (projectId: string, moduleId: string, functionPoints: number) => void;
   onUpdateTaskName: (projectId: string, moduleId: string, taskId: string, name: string) => void;
   onDeleteProject: (projectId: string) => void;
   onDeleteModule: (projectId: string, moduleId: string) => void;
@@ -51,8 +49,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   onAddProject,
   onAddModule,
   onUpdateProjectName,
-  onUpdateModuleName,
-  onUpdateModuleFunctionPoints,
   onUpdateTaskName,
   onDeleteProject,
   onDeleteModule,
@@ -71,8 +67,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   // Column Width States
   const [colWidthBase, setColWidthBase] = useState<number>(40);
   const [sidebarWidth, setSidebarWidth] = useState<number>(256); // Default w-64
-  const [detailsWidth, setDetailsWidth] = useState<number>(128); // Default w-32
-  const resizeInfo = useRef<{ type: 'sidebar' | 'details'; startX: number; startWidth: number } | null>(null);
+  const sidebarResizing = useRef(false);
 
   // Editing State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -86,23 +81,16 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }
   }, [editingId]);
 
-  // Handle Column Resizing
+  // Handle Sidebar Resize
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!resizeInfo.current) return;
-
-      const dx = e.clientX - resizeInfo.current.startX;
-      const newWidth = resizeInfo.current.startWidth + dx;
-
-      if (resizeInfo.current.type === 'sidebar') {
-        setSidebarWidth(Math.max(150, Math.min(600, newWidth)));
-      } else if (resizeInfo.current.type === 'details') {
-        setDetailsWidth(Math.max(80, Math.min(300, newWidth)));
-      }
+      if (!sidebarResizing.current) return;
+      const newWidth = Math.max(150, Math.min(600, e.clientX - 32)); // 32px padding offset approx
+      setSidebarWidth(newWidth);
     };
 
     const handleMouseUp = () => {
-      resizeInfo.current = null;
+      sidebarResizing.current = false;
       document.body.style.cursor = 'default';
     };
 
@@ -117,13 +105,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const startSidebarResize = (e: React.MouseEvent) => {
     e.preventDefault();
-    resizeInfo.current = { type: 'sidebar', startX: e.clientX, startWidth: sidebarWidth };
-    document.body.style.cursor = 'col-resize';
-  };
-
-  const startDetailsResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    resizeInfo.current = { type: 'details', startX: e.clientX, startWidth: detailsWidth };
+    sidebarResizing.current = true;
     document.body.style.cursor = 'col-resize';
   };
 
@@ -154,18 +136,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     if (type === 'project') {
       const projectId = parts[1];
       onUpdateProjectName(projectId, editValue);
-    } else if (type === 'module') {
-      const [_, projectId, moduleId] = parts;
-      onUpdateModuleName(projectId, moduleId, editValue);
     } else if (type === 'task') {
       const [_, projectId, moduleId, taskId] = parts;
       onUpdateTaskName(projectId, moduleId, taskId, editValue);
-    } else if (type === 'fp') {
-      const [_, projectId, moduleId] = parts;
-      const fpValue = parseInt(editValue, 10);
-      if (!isNaN(fpValue) && fpValue >= 0) {
-        onUpdateModuleFunctionPoints(projectId, moduleId, fpValue);
-      }
     } else if (type === 'resource') {
       const [_, projectId, moduleId, taskId, assignmentId] = parts;
       onUpdateAssignmentResourceName(projectId, moduleId, taskId, assignmentId, editValue);
@@ -223,22 +196,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     // 4. Trigger Download
     XLSX.writeFile(wb, `oms-resource-plan-${new Date().toISOString().split('T')[0]}.xlsx`);
   };
-  
-  const handleExportJson = () => {
-    const dataToExport = { projects, holidays };
-    const jsonString = JSON.stringify(dataToExport, null, 2);
-    const blob = new Blob([jsonString], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `oms-resource-plan-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
 
-  const importFromExcel = (file: File) => {
+  const handleImportExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -306,7 +268,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             currentTask.assignments.push(assignment);
         });
 
-        if (window.confirm('This will overwrite your current plan with the selected Excel file. Are you sure?')) {
+        if (window.confirm('This will overwrite your current plan. Are you sure?')) {
             onImportPlan(importedProjects, importedHolidays);
         }
 
@@ -316,43 +278,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       }
     };
     reader.readAsArrayBuffer(file);
-  };
-
-  const importFromJson = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try {
-            const text = e.target?.result as string;
-            const data = JSON.parse(text);
-
-            // Basic validation
-            if (!data.projects || !data.holidays || !Array.isArray(data.projects)) {
-                throw new Error('Invalid JSON format. Must contain "projects" and "holidays" arrays.');
-            }
-            
-            if (window.confirm('This will overwrite your current plan with the selected JSON file. Are you sure?')) {
-                onImportPlan(data.projects, data.holidays);
-            }
-        } catch (error: any) {
-            alert(`Failed to import JSON: ${error.message}`);
-            console.error(error);
-        }
-    };
-    reader.readAsText(file);
-  };
-
-  const handleImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (file.name.endsWith('.json')) {
-      importFromJson(file);
-    } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-      importFromExcel(file);
-    } else {
-      alert('Unsupported file type. Please select an Excel (.xlsx, .xls) or JSON (.json) file.');
-    }
-    
     event.target.value = ''; // Reset input to allow re-importing same file
   };
 
@@ -499,7 +424,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const colWidth = viewMode === 'month' ? colWidthBase * 2 : colWidthBase;
 
   const stickyStyle = { width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth };
-  const detailsStyle = { width: detailsWidth, minWidth: detailsWidth, maxWidth: detailsWidth };
 
   return (
     <div className="flex flex-col h-full bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
@@ -548,25 +472,18 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
               <button 
                   onClick={handleExportExcel}
                   className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors"
-                  title="Export the current plan as an Excel file (.xlsx)"
+                  title="Export the current plan as an Excel file"
               >
-                  <Download size={12} /> Export XLSX
-              </button>
-              <button 
-                  onClick={handleExportJson}
-                  className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors"
-                  title="Export the current plan as a JSON file (.json)"
-              >
-                  <Download size={12} /> Export JSON
+                  <Download size={12} /> Export Excel
               </button>
               <button 
                   onClick={() => importInputRef.current?.click()}
                   className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors"
-                  title="Import a plan from an Excel or JSON file"
+                  title="Import a plan from an Excel file"
               >
-                  <Upload size={12} /> Import
+                  <Upload size={12} /> Import Excel
               </button>
-              <input type="file" ref={importInputRef} onChange={handleImportFile} accept=".xlsx, .xls, .json" className="hidden" />
+              <input type="file" ref={importInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
           </div>
           <div className="w-px h-4 bg-slate-300"></div>
           <button 
@@ -608,15 +525,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                 onMouseDown={startSidebarResize}
               ></div>
             </div>
-            <div 
-              className="flex-shrink-0 p-3 text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative"
-              style={detailsStyle}
-            >
+            <div className="w-32 flex-shrink-0 p-3 text-center text-xs font-semibold text-slate-600 border-r border-slate-200">
               Details
-              <div 
-                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors z-10"
-                onMouseDown={startDetailsResize}
-              ></div>
             </div>
             {Object.values(groupedHeaders).map((group, idx) => (
               <div 
@@ -632,7 +542,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           {/* Header Row 2: Columns (Weeks/Days) */}
           <div className="flex bg-slate-50 border-b border-slate-200 sticky top-[41px] z-40 shadow-sm">
              <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}></div>
-             <div className="flex-shrink-0 border-r border-slate-200" style={detailsStyle}></div>
+             <div className="w-32 flex-shrink-0 border-r border-slate-200"></div>
              {timeline.map(col => {
                const holidayInfo = getHolidayInfo(col.date);
                const isHol = !!holidayInfo;
@@ -703,7 +613,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                        <Trash2 size={12} />
                      </button>
                   </div>
-                  <div className="flex-shrink-0 p-3 text-center text-xs font-bold text-slate-300 border-r border-slate-600 flex items-center justify-center gap-2" style={detailsStyle}>
+                  <div className="w-32 flex-shrink-0 p-3 text-center text-xs font-bold text-slate-300 border-r border-slate-600 flex items-center justify-center gap-2">
                      <button 
                        onClick={(e) => { e.stopPropagation(); onAddModule(project.id); }}
                        className="flex items-center gap-1 text-[10px] bg-slate-600 hover:bg-slate-500 px-2 py-0.5 rounded transition-colors"
@@ -726,11 +636,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                 {!isProjectCollapsed && project.modules.map((module, index) => {
                   const isModuleCollapsed = collapsedModules[module.id];
-                  const moduleEditId = `module-${project.id}-${module.id}`;
-                  const isEditingModule = editingId === moduleEditId;
-                  const fpEditId = `fp-${project.id}-${module.id}`;
-                  const isEditingFp = editingId === fpEditId;
-                  
                   return (
                     <div 
                       key={module.id}
@@ -748,30 +653,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         >
                           <div 
                             className="flex items-center gap-2 flex-1 overflow-hidden cursor-pointer"
-                            onClick={() => !isEditingModule && toggleModule(module.id)}
+                            onClick={() => toggleModule(module.id)}
                           >
                             <div className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500" title="Drag to reorder">
                               <GripVertical className="w-4 h-4" />
                             </div>
                             {isModuleCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-indigo-500" />}
                             <Layers className="w-4 h-4 text-indigo-600" />
-                            {isEditingModule ? (
-                              <input 
-                                ref={editInputRef}
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onBlur={saveEdit}
-                                onKeyDown={handleKeyDown}
-                                onClick={(e) => e.stopPropagation()}
-                                className="bg-white text-slate-700 text-sm font-bold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                              />
-                            ) : (
-                              <span 
-                                className="font-semibold text-sm text-slate-800 truncate select-none flex-1"
-                                onDoubleClick={(e) => startEditing(moduleEditId, module.name, e)}
-                                title="Double click to rename"
-                              >{module.name}</span>
-                            )}
+                            <span className="font-semibold text-sm text-slate-800 truncate select-none">{module.name}</span>
                           </div>
                            <button
                               onClick={(e) => { e.stopPropagation(); onDeleteModule(project.id, module.id); }}
@@ -781,27 +670,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               <Trash2 size={14} />
                             </button>
                         </div>
-                        <div className="flex-shrink-0 p-3 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/30" style={detailsStyle}>
-                          {isEditingFp ? (
-                            <input
-                              ref={editInputRef}
-                              type="number"
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              onBlur={saveEdit}
-                              onKeyDown={handleKeyDown}
-                              onClick={(e) => e.stopPropagation()}
-                              className="bg-white text-slate-700 text-xs font-bold border border-indigo-300 rounded px-1 w-20 text-center focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                            />
-                          ) : (
-                            <span
-                              onDoubleClick={(e) => startEditing(fpEditId, module.functionPoints.toString(), e)}
-                              className="cursor-pointer p-1 rounded hover:bg-indigo-200/50"
-                              title="Double click to edit Function Points"
-                            >
-                              {module.functionPoints} FP
-                            </span>
-                          )}
+                        <div className="w-32 flex-shrink-0 p-3 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/30">
+                          {module.functionPoints} FP
                         </div>
                         
                         {/* Module Summaries */}
@@ -894,7 +764,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               </div>
 
                               {/* Schedule Controls */}
-                              <div className="flex-shrink-0 border-r border-slate-200 bg-slate-50/30 flex items-center gap-1 px-1" style={detailsStyle}>
+                              <div className="w-32 flex-shrink-0 border-r border-slate-200 bg-slate-50/30 flex items-center gap-1 px-1">
                                   <div className="flex flex-col w-full">
                                       <div className="flex items-center gap-1">
                                           <PlayCircle size={10} className="text-slate-400" />
@@ -976,7 +846,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   </div>
                                 </div>
                                 
-                                <div className="flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-between px-2 py-1 relative group-hover/assign:bg-slate-50" style={detailsStyle}>
+                                <div className="w-32 flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-between px-2 py-1 relative group-hover/assign:bg-slate-50">
                                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-slate-200/0"></div> 
                                     <select 
                                       value={assignment.role}
@@ -1053,7 +923,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               Add New Task
                             </button>
                           </div>
-                           <div className="flex-shrink-0 border-r border-slate-200 bg-slate-50/20" style={detailsStyle}></div>
+                           <div className="w-32 flex-shrink-0 border-r border-slate-200 bg-slate-50/20"></div>
                            {timeline.map(col => (
 // FIX: Changed `moduleId` to `module.id` to correctly reference the module's ID.
                              <div key={`add-${module.id}-${col.id}`} className="flex-shrink-0 border-r border-slate-100" style={{ width: `${colWidth}px` }}></div>
@@ -1075,7 +945,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
              >
                GRAND TOTAL
              </div>
-             <div className="flex-shrink-0 border-r border-slate-700" style={detailsStyle}></div>
+             <div className="w-32 flex-shrink-0 border-r border-slate-700"></div>
              {timeline.map(col => {
                // Calculate total for this column across all projects
                const total = projects.reduce((acc, p) => acc + getProjectTotal(p, col), 0);

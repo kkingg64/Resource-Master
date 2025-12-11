@@ -104,16 +104,6 @@ const App: React.FC = () => {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, name } : p));
   };
 
-  const updateModuleName = (projectId: string, moduleId: string, name: string) => {
-    setProjects(prev => prev.map(p => {
-      if (p.id !== projectId) return p;
-      return {
-        ...p,
-        modules: p.modules.map(m => m.id === moduleId ? { ...m, name } : m)
-      };
-    }));
-  };
-
   const updateTaskName = (projectId: string, moduleId: string, taskId: string, name: string) => {
     updateProjectModule(projectId, moduleId, (m) => ({
       ...m,
@@ -194,10 +184,6 @@ const App: React.FC = () => {
 
   const updateFunctionPoints = (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => {
     updateProjectModule(projectId, moduleId, (m) => ({ ...m, legacyFunctionPoints: legacyFp, functionPoints: mvpFp }));
-  };
-
-  const updateModuleFunctionPoints = (projectId: string, moduleId: string, functionPoints: number) => {
-    updateProjectModule(projectId, moduleId, (m) => ({ ...m, functionPoints }));
   };
 
   const reorderModules = (projectId: string, startIndex: number, endIndex: number) => {
@@ -447,8 +433,6 @@ const App: React.FC = () => {
                   onAddProject={addProject}
                   onAddModule={addModule}
                   onUpdateProjectName={updateProjectName}
-                  onUpdateModuleName={updateModuleName}
-                  onUpdateModuleFunctionPoints={updateModuleFunctionPoints}
                   onUpdateTaskName={updateTaskName}
                   onDeleteProject={deleteProject}
                   onDeleteModule={deleteModule}
