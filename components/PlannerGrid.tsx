@@ -5,6 +5,93 @@ import { getTimeline, ALL_WEEK_IDS, WeekPoint, getDateFromWeek, getWeekIdFromDat
 import { Layers, Calendar, ChevronRight, ChevronDown, Info, GripVertical, Plus, UserPlus, ChevronLeft, Clock, PlayCircle, Folder, Settings2, Trash2, Download, Upload, History, Link, Check, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+// --- Optimized Sub-Components ---
+
+const InlineInput = ({ value, onSave, onCancel, type = 'text', autoFocus = true }: { value: string, onSave: (val: string) => void, onCancel: () => void, type?: string, autoFocus?: boolean }) => {
+  const [localValue, setLocalValue] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useLayoutEffect(() => {
+    if (autoFocus && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [autoFocus]);
+
+  const handleSave = () => {
+    const trimmedValue = localValue.trim();
+    if (trimmedValue && trimmedValue !== value) {
+      onSave(trimmedValue);
+    } else {
+      onCancel();
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSave();
+    } else if (e.key === 'Escape') {
+      onCancel();
+    }
+  };
+
+  return (
+    <input
+      ref={inputRef}
+      type={type}
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={handleSave}
+      onKeyDown={handleKeyDown}
+      onClick={(e) => e.stopPropagation()}
+      className="bg-white text-slate-900 text-xs font-bold border border-indigo-500 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm"
+    />
+  );
+};
+
+const AllocationCell = React.memo(({ value, onChange, disabled, isHoliday, isCurrent, width }: { value: number, onChange: (val: string) => void, disabled: boolean, isHoliday: boolean, isCurrent: boolean, width: number }) => {
+  const [localValue, setLocalValue] = useState(value === 0 ? '' : value.toString());
+  
+  useEffect(() => {
+     setLocalValue(value === 0 ? '' : value.toString());
+  }, [value]);
+
+  const handleBlur = () => {
+      const numericValue = parseFloat(localValue);
+      const originalValue = value;
+      
+      if (localValue === '' && originalValue !== 0) {
+        onChange('0');
+      } else if (!isNaN(numericValue) && numericValue !== originalValue) {
+        onChange(localValue);
+      } else if (localValue !== originalValue.toString()) {
+        // Revert if not a valid number and it was changed
+        setLocalValue(originalValue === 0 ? '' : originalValue.toString());
+      }
+  };
+  
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+      if(e.key === 'Enter') {
+          (e.target as HTMLInputElement).blur();
+      }
+  };
+
+  return (
+    <div className={`flex-shrink-0 border-r border-slate-100 relative ${isHoliday ? 'bg-[repeating-linear-gradient(45deg,#fee2e2,#fee2e2_5px,#fef2f2_5px,#fef2f2_10px)]' : isCurrent ? 'bg-amber-50/50' : ''}`} style={{ width: `${width}px` }}>
+       <input 
+         type="text" 
+         disabled={disabled}
+         className={`w-full h-full text-center text-xs focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors ${value > 0 ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50'} ${disabled ? 'bg-transparent cursor-not-allowed' : ''}`}
+         value={localValue} 
+         onChange={(e) => setLocalValue(e.target.value)}
+         onBlur={handleBlur}
+         onKeyDown={handleKeyDown}
+       />
+    </div>
+  );
+});
+
+
 interface PlannerGridProps {
   projects: Project[];
   holidays: Holiday[];
@@ -80,11 +167,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   // Editing State
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState<string>('');
-  const [editValue2, setEditValue2] = useState<string>(''); // Secondary value for double inputs (e.g. FP)
-  const editInputRef = useRef<HTMLInputElement>(null);
-  const importInputRef = useRef<HTMLInputElement>(null);
-
+  
   // Dependency Modal State
   const [depModalOpen, setDepModalOpen] = useState(false);
   const [currentDepTask, setCurrentDepTask] = useState<{projectId: string, moduleId: string, taskId: string, currentDeps: string[]} | null>(null);
@@ -93,12 +176,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   // SVG Lines State
   const containerRef = useRef<HTMLDivElement>(null);
   const [dependencyLines, setDependencyLines] = useState<{x1: number, y1: number, x2: number, y2: number}[]>([]);
-
-  useEffect(() => {
-    if (editingId && editInputRef.current) {
-      editInputRef.current.focus();
-    }
-  }, [editingId]);
 
   // Handle Column Resizing
   useEffect(() => {
@@ -217,16 +294,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     setCollapsedTasks(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const startEditing = (id: string, initialValue: string, initialValue2?: string, e?: React.MouseEvent) => {
+  const startEditing = (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation(); 
     setEditingId(id);
-    setEditValue(initialValue);
-    if (initialValue2 !== undefined) {
-      setEditValue2(initialValue2);
-    }
   };
   
-  const saveEdit = () => {
+  const saveEdit = (value: string, value2?: string) => {
     if (!editingId) return;
 
     const parts = editingId.split('-');
@@ -234,169 +307,64 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
     if (type === 'project') {
       const projectId = parts[1];
-      onUpdateProjectName(projectId, editValue);
+      onUpdateProjectName(projectId, value);
     } else if (type === 'module') {
       const [_, projectId, moduleId] = parts;
-      onUpdateModuleName(projectId, moduleId, editValue);
+      onUpdateModuleName(projectId, moduleId, value);
     } else if (type === 'fp') {
       const [_, projectId, moduleId] = parts;
-      const legacy = parseInt(editValue) || 0;
-      const mvp = parseInt(editValue2) || 0;
+      const legacy = parseInt(value) || 0;
+      const mvp = parseInt(value2 || '0') || 0;
       onUpdateFunctionPoints(projectId, moduleId, legacy, mvp);
     } else if (type === 'task') {
       const [_, projectId, moduleId, taskId] = parts;
-      onUpdateTaskName(projectId, moduleId, taskId, editValue);
+      onUpdateTaskName(projectId, moduleId, taskId, value);
     } else if (type === 'resource') {
       const [_, projectId, moduleId, taskId, assignmentId] = parts;
-      onUpdateAssignmentResourceName(projectId, moduleId, taskId, assignmentId, editValue);
+      onUpdateAssignmentResourceName(projectId, moduleId, taskId, assignmentId, value);
     }
 
     setEditingId(null);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      saveEdit();
-    } else if (e.key === 'Escape') {
-      setEditingId(null);
-    }
+  const cancelEdit = () => {
+    setEditingId(null);
   };
 
   const openDependencyModal = (projectId: string, moduleId: string, taskId: string, currentDeps: string[]) => {
-      setCurrentDepTask({ projectId, moduleId, taskId, currentDeps });
-      setSelectedDeps([...currentDeps]);
-      setDepModalOpen(true);
+    setCurrentDepTask({ projectId, moduleId, taskId, currentDeps });
+    setSelectedDeps(currentDeps);
+    setDepModalOpen(true);
+  };
+  
+  const handleDepChange = (depId: string) => {
+    setSelectedDeps(prev => 
+      prev.includes(depId) ? prev.filter(d => d !== depId) : [...prev, depId]
+    );
   };
 
   const saveDependencies = () => {
-      if (currentDepTask) {
-          onUpdateTaskDependencies(currentDepTask.projectId, currentDepTask.moduleId, currentDepTask.taskId, selectedDeps);
-      }
-      setDepModalOpen(false);
-  };
-
-  // ... (Export/Import logic remains same)
-
-  const today = new Date();
-  const currentWeekId = getWeekIdFromDate(today);
-
-  const isCurrentColumn = (col: TimelineColumn) => {
-    if (viewMode === 'day' && col.date) {
-        return col.date.getDate() === today.getDate() && 
-               col.date.getMonth() === today.getMonth() && 
-               col.date.getFullYear() === today.getFullYear();
+    if (currentDepTask) {
+      onUpdateTaskDependencies(
+        currentDepTask.projectId,
+        currentDepTask.moduleId,
+        currentDepTask.taskId,
+        selectedDeps
+      );
     }
-    if (viewMode === 'week') {
-        return col.id === currentWeekId;
-    }
-    return false;
-  };
-
-  const groupedHeaders = useMemo(() => {
-    return timeline.reduce((acc, col) => {
-      const key = col.groupLabel;
-      if (!acc[key]) acc[key] = { label: key, colspan: 0 };
-      acc[key].colspan++;
-      return acc;
-    }, {} as Record<string, { label: string, colspan: number }>);
-  }, [timeline]);
-
-  const getRoleColorClass = (role: Role) => {
-    switch (role) {
-      case Role.DEV: return 'border-l-blue-500';
-      case Role.UIUX: return 'border-l-orange-500';
-      case Role.QA: return 'border-l-green-500';
-      case Role.BA: return 'border-l-purple-500';
-      default: return 'border-l-slate-300';
-    }
-  };
-
-  const getHolidayInfo = (date?: Date) => {
-    if (!date) return null;
-    const dateStr = date.toISOString().split('T')[0];
-    return holidays.find(h => h.date === dateStr);
-  };
-
-  const isHoliday = (date?: Date) => {
-    return !!getHolidayInfo(date);
-  };
-
-  const getRawCellValue = (assignment: TaskAssignment, col: TimelineColumn): number => {
-    if (viewMode === 'week') {
-      const alloc = assignment.allocations.find(a => a.weekId === col.id);
-      return alloc ? alloc.count : 0;
-    }
-    
-    if (viewMode === 'month') {
-      if (!col.weekIds) return 0;
-      return assignment.allocations
-        .filter(a => col.weekIds!.includes(a.weekId))
-        .reduce((sum, a) => sum + a.count, 0);
-    }
-
-    if (viewMode === 'day') {
-      if (isHoliday(col.date)) return 0;
-      if (!col.parentWeekId || !col.date) return 0;
-      
-      const alloc = assignment.allocations.find(a => a.weekId === col.parentWeekId);
-      if (!alloc) return 0;
-
-      const dateStr = col.date.toISOString().split('T')[0];
-      if (alloc.days && alloc.days[dateStr] !== undefined) {
-          return alloc.days[dateStr];
-      }
-      if (alloc.count > 0) {
-          return alloc.count / 5;
-      }
-      return 0;
-    }
-
-    return 0;
-  };
-
-  const formatValue = (val: number): string => {
-    if (val === 0) return '';
-    return Number.isInteger(val) ? val.toString() : val.toFixed(1);
-  };
-
-  // Aggregation Helpers (getTaskTotal, getModuleTotal, getProjectTotal remain same)
-  const getTaskTotal = (task: ProjectTask, col: TimelineColumn) => {
-    return task.assignments.reduce((sum, assign) => sum + getRawCellValue(assign, col), 0);
-  };
-  const getModuleTotal = (module: ProjectModule, col: TimelineColumn) => {
-    return module.tasks.reduce((sum, task) => sum + getTaskTotal(task, col), 0);
-  };
-  const getProjectTotal = (project: Project, col: TimelineColumn) => {
-    return project.modules.reduce((sum, module) => sum + getModuleTotal(module, col), 0);
-  };
-
-  const handleCellUpdate = (projectId: string, moduleId: string, taskId: string, assignmentId: string, col: TimelineColumn, value: string) => {
-    const numValue = value === '' ? 0 : parseFloat(value);
-    if (isNaN(numValue)) return;
-    if (viewMode === 'week') {
-      onUpdateAllocation(projectId, moduleId, taskId, assignmentId, col.id, numValue);
-    } else if (viewMode === 'month') {
-       if (!col.weekIds || col.weekIds.length === 0) return;
-       const valuePerWeek = numValue / col.weekIds.length;
-       col.weekIds.forEach(weekId => {
-         onUpdateAllocation(projectId, moduleId, taskId, assignmentId, weekId, valuePerWeek);
-       });
-    } else if (viewMode === 'day') {
-      if (!col.parentWeekId || !col.date) return;
-      const dateStr = col.date.toISOString().split('T')[0];
-      onUpdateAllocation(projectId, moduleId, taskId, assignmentId, col.parentWeekId, numValue, dateStr);
-    }
+    setDepModalOpen(false);
+    setCurrentDepTask(null);
   };
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.setData("text/plain", index.toString());
-    e.dataTransfer.effectAllowed = "move";
     setDraggedModuleIndex(index);
   };
-  const handleDragOver = (e: React.DragEvent, index: number) => {
+
+  const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
   };
+
   const handleDrop = (e: React.DragEvent, projectId: string, index: number) => {
     e.preventDefault();
     const startIndex = parseInt(e.dataTransfer.getData("text/plain"), 10);
@@ -405,349 +373,261 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }
     setDraggedModuleIndex(null);
   };
+  
+  const availableTasksForDependencies = useMemo(() => {
+    if (!currentDepTask) return [];
+    const allTasks: {id: string, name: string}[] = [];
+    projects.forEach(p => p.modules.forEach(m => m.tasks.forEach(t => {
+      // A task cannot depend on itself
+      if (t.id !== currentDepTask.taskId) {
+        allTasks.push({ id: t.id, name: t.name });
+      }
+    })));
+    return allTasks;
+  }, [projects, currentDepTask]);
 
-  const handleAddTaskClick = (projectId: string, moduleId: string) => {
-    const newTaskId = `task-${Date.now()}`;
-    if (collapsedModules[moduleId]) {
-      toggleModule(moduleId);
-    }
-    onAddTask(projectId, moduleId, newTaskId, "New Task", Role.DEV);
-    startEditing(`task-${projectId}-${moduleId}-${newTaskId}`, "New Task");
+  const holidayDates = useMemo(() => new Set(holidays.map(h => h.date)), [holidays]);
+  const todayDate = useMemo(() => formatDateForInput(new Date()), []);
+
+  const handleAllocationChange = (
+    pId: string, mId: string, tId: string, aId: string, 
+    col: TimelineColumn,
+    value: string
+  ) => {
+     const parsedValue = parseFloat(value) || 0;
+     const weekId = viewMode === 'day' ? col.parentWeekId! : col.id;
+     const dayDate = viewMode === 'day' ? formatDateForInput(col.date!) : undefined;
+     onUpdateAllocation(pId, mId, tId, aId, weekId, parsedValue, dayDate);
   };
-
-  const handleStartDateChange = (projectId: string, moduleId: string, task: ProjectTask, newDateStr: string) => {
-     if (!newDateStr) return;
-     const date = new Date(newDateStr);
-     const newStartWeekId = getWeekIdFromDate(date);
-     onUpdateTaskSchedule(projectId, moduleId, task.id, newStartWeekId, task.duration || 1);
-  };
-
-  const handleEndDateChange = (projectId: string, moduleId: string, task: ProjectTask, newDateStr: string) => {
-     if (!newDateStr || !task.startWeekId) return;
-     const endDate = new Date(newDateStr);
-     const endWeekId = getWeekIdFromDate(endDate);
-     const [y1, w1] = task.startWeekId.split('-').map(Number);
-     const [y2, w2] = endWeekId.split('-').map(Number);
-     const weekDiff = (y2 - y1) * 52 + (w2 - w1) + 1;
-     const newDuration = Math.max(1, weekDiff);
-     onUpdateTaskSchedule(projectId, moduleId, task.id, task.startWeekId, newDuration);
-  };
-
-  const stickyStyle = { width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth };
-  const detailsColStyle = { width: detailsWidth, minWidth: detailsWidth, maxWidth: detailsWidth };
-
+  
   return (
-    <>
-    {/* Dependency Modal */}
-    {depModalOpen && currentDepTask && (
-        <div className="fixed inset-0 bg-black/30 z-[100] flex items-center justify-center animate-in fade-in duration-200">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg flex flex-col max-h-[80vh]">
-                <div className="p-4 border-b border-slate-200 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2"><Link size={16} /> Task Dependencies</h3>
-                    <button onClick={() => setDepModalOpen(false)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
-                </div>
-                <div className="p-4 flex-1 overflow-y-auto">
-                    <p className="text-sm text-slate-500 mb-4">Select tasks that must be completed before <span className="font-semibold text-indigo-600">{
-                        projects.find(p=>p.id===currentDepTask.projectId)?.modules.find(m=>m.id===currentDepTask.moduleId)?.tasks.find(t=>t.id===currentDepTask.taskId)?.name
-                    }</span> can start.</p>
-                    <div className="space-y-3">
-                        {projects.map(p => (
-                            <div key={p.id}>
-                                <div className="text-xs font-bold text-slate-400 uppercase mb-1">{p.name}</div>
-                                {p.modules.map(m => (
-                                    <div key={m.id} className="ml-2 mb-2">
-                                        <div className="text-xs font-semibold text-slate-500 mb-1">{m.name}</div>
-                                        <div className="space-y-1 ml-2">
-                                            {m.tasks.filter(t => t.id !== currentDepTask.taskId).map(t => (
-                                                <label key={t.id} className="flex items-center gap-2 text-sm text-slate-700 hover:bg-slate-50 p-1 rounded cursor-pointer">
-                                                    <input 
-                                                        type="checkbox" 
-                                                        checked={selectedDeps.includes(t.id)}
-                                                        onChange={(e) => {
-                                                            if (e.target.checked) setSelectedDeps([...selectedDeps, t.id]);
-                                                            else setSelectedDeps(selectedDeps.filter(id => id !== t.id));
-                                                        }}
-                                                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                                    />
-                                                    {t.name}
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-                <div className="p-4 border-t border-slate-200 flex justify-end gap-2">
-                    <button onClick={() => setDepModalOpen(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-                    <button onClick={saveDependencies} className="px-4 py-2 text-sm text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg">Save Dependencies</button>
-                </div>
-            </div>
-        </div>
-    )}
-
-    <div className="flex flex-col h-full bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+    <div ref={containerRef} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full flex flex-col relative">
       {/* Toolbar */}
-      <div className="px-4 py-3 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-slate-500" />
-            <span className="text-sm font-semibold text-slate-700">Timeline</span>
-          </div>
-          <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden">
-             <button onClick={() => onExtendTimeline('start')} className="px-2 py-1 hover:bg-slate-100 text-xs text-slate-600 border-r border-slate-200"> &lt; +Month </button>
-             <button onClick={() => onExtendTimeline('end')} className="px-2 py-1 hover:bg-slate-100 text-xs text-slate-600"> +Month &gt; </button>
-          </div>
-          <div className="h-4 w-px bg-slate-300"></div>
-          <div className="flex items-center gap-2" title="Adjust Column Width">
-             <Settings2 size={14} className="text-slate-400" />
-             <input type="range" min="20" max="100" value={colWidthBase} onChange={(e) => setColWidthBase(parseInt(e.target.value))} className="w-20 h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-indigo-600"/>
-          </div>
-        </div>
-        <div className="flex gap-4 items-center">
-           <div className="flex items-center gap-2">
-              <button onClick={onShowHistory} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors"><History size={12} /> History</button>
-              {/* Export/Import Buttons omitted for brevity but logic exists */}
-          </div>
-          <div className="w-px h-4 bg-slate-300"></div>
-          <button onClick={onAddProject} className="text-xs flex items-center gap-1 bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 transition-colors"><Plus size={12} /> Add Project</button>
-          <div className="flex bg-slate-200 p-1 rounded-lg">
-            {(['day', 'week', 'month'] as ViewMode[]).map((mode) => (
-              <button key={mode} onClick={() => setViewMode(mode)} className={`px-3 py-1 text-xs font-medium rounded-md transition-all capitalize ${viewMode === mode ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{mode}</button>
-            ))}
-          </div>
-        </div>
+      <div className="p-2 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between flex-shrink-0">
+         <div className="flex items-center gap-2">
+           <button onClick={onAddProject} className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200"><Folder size={14} className="text-indigo-500"/> Add Project</button>
+           <div className="w-px h-5 bg-slate-200" />
+           <button onClick={onShowHistory} className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200"><History size={14} /> History</button>
+           <button onClick={() => {}} className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200"><Upload size={14} /> Import</button>
+           <button onClick={() => {}} className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200"><Download size={14} /> Export</button>
+         </div>
+         <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500">Zoom:</span>
+            <input type="range" min="20" max="100" value={colWidthBase} onChange={e => setColWidthBase(Number(e.target.value))} className="w-24 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"/>
+            <div className="flex items-center bg-white border border-slate-200 rounded-md p-0.5">
+              <button onClick={() => setViewMode('day')} className={`px-2 py-1 text-xs font-medium rounded ${viewMode === 'day' ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}>Day</button>
+              <button onClick={() => setViewMode('week')} className={`px-2 py-1 text-xs font-medium rounded ${viewMode === 'week' ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}>Week</button>
+              <button onClick={() => setViewMode('month')} className={`px-2 py-1 text-xs font-medium rounded ${viewMode === 'month' ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}>Month</button>
+            </div>
+         </div>
       </div>
-
-      <div className="overflow-x-auto custom-scrollbar flex-1 relative" ref={containerRef}>
-        
-        {/* SVG Layer for Dependencies */}
-        <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-[60]" style={{minWidth: '100%', minHeight: '100%'}}>
-            {dependencyLines.map((line, idx) => (
-                <path 
-                    key={idx}
-                    d={`M ${line.x1} ${line.y1} C ${line.x1 + 20} ${line.y1}, ${line.x2 - 20} ${line.y2}, ${line.x2} ${line.y2}`}
-                    fill="none"
-                    stroke="#6366f1"
-                    strokeWidth="2"
-                    markerEnd="url(#arrowhead)"
-                    opacity="0.6"
-                />
-            ))}
-            <defs>
-                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                    <polygon points="0 0, 10 3.5, 0 7" fill="#6366f1" opacity="0.6" />
-                </marker>
-            </defs>
-        </svg>
-
-        <div className="min-w-max">
-          {/* Header Rows */}
-          <div className="flex bg-slate-100 border-b border-slate-200 sticky top-0 z-40">
-            <div className="flex-shrink-0 p-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group" style={stickyStyle}>
-              Project Structure
-              <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
+      
+      {/* Main Grid */}
+      <div className="flex-1 overflow-auto custom-scrollbar">
+        {/* Header */}
+        <div className="sticky top-0 z-20 bg-white">
+          <div className="flex text-center text-xs font-semibold text-slate-500 border-b border-slate-200 bg-slate-50/70 select-none">
+            <div style={{ width: `${sidebarWidth}px` }} className="sticky left-0 bg-slate-50/70 border-r border-slate-200 p-2 z-10 flex items-center justify-between">
+                <span>PROJECT STRUCTURE</span>
+                <div onMouseDown={startSidebarResize} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize" />
             </div>
-            <div className="flex-shrink-0 p-3 text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative" style={detailsColStyle}>
-              Details
-              <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
+            {/* FIX: Merged duplicate style attributes */}
+            <div className="sticky z-10 border-r border-slate-200 p-2 flex items-center justify-between" style={{ width: `${detailsWidth}px`, left: `${sidebarWidth}px`, backgroundColor: '#fafafa' }}>
+                <span>DETAILS</span>
+                <div onMouseDown={startDetailsResize} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize" />
             </div>
-            {Object.values(groupedHeaders).map((group, idx) => (
-              <div key={idx} className="text-center p-2 text-xs font-bold text-slate-600 border-r border-slate-200 bg-slate-100 uppercase tracking-wide truncate" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>
+            {Object.entries(timeline.reduce((acc, col) => ({...acc, [col.groupLabel]: [...(acc[col.groupLabel] || []), col]}), {} as Record<string, TimelineColumn[]>)).map(([group, cols]) => (
+              <div key={group} style={{ width: `${cols.length * colWidth}px` }} className="border-r border-slate-100 flex-shrink-0 p-1">
+                {group}
+              </div>
             ))}
           </div>
+          <div className="flex text-center text-xs font-medium text-slate-400 border-b border-slate-200 shadow-sm">
+            <div style={{ width: `${sidebarWidth}px` }} className="sticky left-0 bg-white border-r border-slate-200 p-2 z-10"></div>
+            {/* FIX: Merged duplicate style attributes */}
+            <div style={{ width: `${detailsWidth}px`, left: `${sidebarWidth}px`, backgroundColor: '#ffffff' }} className="sticky z-10 border-r border-slate-200 p-2"></div>
+            {timeline.map(col => (
+              <div key={col.id} style={{ width: `${colWidth}px` }} className={`border-r border-slate-100 flex-shrink-0 p-1 ${col.type === 'day' && (new Date(col.date!).getDay() === 0 || new Date(col.date!).getDay() === 6) ? 'bg-slate-50' : ''}`}>
+                {col.label}
+              </div>
+            ))}
+          </div>
+        </div>
 
-          <div className="flex bg-slate-50 border-b border-slate-200 sticky top-[41px] z-40 shadow-sm">
-             <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}></div>
-             <div className="flex-shrink-0 border-r border-slate-200" style={detailsColStyle}></div>
-             {timeline.map(col => {
-               const holidayInfo = getHolidayInfo(col.date);
-               const isCurrent = isCurrentColumn(col);
-               return (
-                 <div key={col.id} className={`flex-shrink-0 text-center p-1 text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col ${!!holidayInfo ? 'bg-red-50 text-red-600' : ''} ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px`, height: '32px' }}>
-                   <span>{col.label}</span>
-                   {col.date && viewMode === 'day' && <span className={`text-[9px] ${!!holidayInfo ? 'text-red-500 font-bold' : isCurrent ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>{col.date.getDate()}</span>}
+        {/* Body */}
+        <div className="text-xs">
+          {projects.map((p, pIndex) => (
+            <React.Fragment key={p.id}>
+              {/* Project Row */}
+              <div className="flex border-b-2 border-slate-200 bg-slate-100/50 font-bold sticky top-[65px] z-10">
+                 <div style={{ width: `${sidebarWidth}px` }} className="sticky left-0 bg-slate-100/50 border-r border-slate-200 p-2 z-10 flex items-center gap-2">
+                    <button onClick={() => toggleProject(p.id)} className="p-0.5 rounded hover:bg-slate-200">{collapsedProjects[p.id] ? <ChevronRight size={14} /> : <ChevronDown size={14}/>}</button>
+                    {editingId === `project-${p.id}` ? (
+                      <InlineInput value={p.name} onSave={(val) => saveEdit(val)} onCancel={cancelEdit} />
+                    ) : (
+                      <span className="truncate" onDoubleClick={() => startEditing(`project-${p.id}`)}>{p.name}</span>
+                    )}
                  </div>
-               );
-             })}
-          </div>
-
-          {/* Projects Loop */}
-          {projects.map((project) => {
-            const isProjectCollapsed = collapsedProjects[project.id];
-            const isEditingProject = editingId === `project-${project.id}`;
-            return (
-              <React.Fragment key={project.id}>
-                {/* Project Header */}
-                <div className="flex bg-slate-700 border-b border-slate-600 sticky z-30 group">
-                  <div className="flex-shrink-0 p-3 pr-2 border-r border-slate-600 sticky left-0 bg-slate-700 z-40 cursor-pointer flex items-center justify-between text-white shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]" style={stickyStyle}>
-                     <div className="flex items-center gap-2 overflow-hidden flex-1" onClick={() => !isEditingProject && toggleProject(project.id)}>
-                       {isProjectCollapsed ? <ChevronRight className="w-4 h-4 text-slate-300" /> : <ChevronDown className="w-4 h-4 text-slate-300" />}
-                       <Folder className="w-4 h-4 text-slate-200" />
-                       {isEditingProject ? (
-                          <input ref={editInputRef} value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown} className="bg-slate-600 text-white text-sm font-bold border border-slate-500 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-                       ) : (
-                          <span className="font-bold text-sm truncate select-none flex-1" onDoubleClick={(e) => startEditing(`project-${project.id}`, project.name, undefined, e)}>{project.name}</span>
-                       )}
-                     </div>
-                     <button onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); }} className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] text-red-300 hover:bg-red-500 hover:text-white p-1 rounded transition-colors"><Trash2 size={12} /></button>
-                  </div>
-                  <div className="flex-shrink-0 p-3 text-center text-xs font-bold text-slate-300 border-r border-slate-600 flex items-center justify-center gap-2" style={detailsColStyle}>
-                     <button onClick={(e) => { e.stopPropagation(); onAddModule(project.id); }} className="flex items-center gap-1 text-[10px] bg-slate-600 hover:bg-slate-500 px-2 py-0.5 rounded transition-colors"><Plus size={10} /> Module</button>
-                  </div>
-                   {timeline.map(col => (
-                        <div key={col.id} className={`flex-shrink-0 border-r border-slate-600 flex items-center justify-center bg-slate-700 ${isCurrentColumn(col) ? 'bg-slate-600 ring-1 ring-inset ring-amber-400/50' : ''}`} style={{ width: `${colWidth}px` }}>
-                           {getProjectTotal(project, col) > 0 && <span className="text-[10px] font-bold text-slate-200">{formatValue(getProjectTotal(project, col))}</span>}
-                        </div>
-                   ))}
-                </div>
-
-                {!isProjectCollapsed && project.modules.map((module, index) => {
-                  const isModuleCollapsed = collapsedModules[module.id];
-                  return (
-                    <div key={module.id} draggable onDragStart={(e) => handleDragStart(e, index)} onDragOver={(e) => handleDragOver(e, index)} onDrop={(e) => handleDrop(e, project.id, index)} className={`${draggedModuleIndex === index ? 'opacity-50' : 'opacity-100'}`}>
-                      {/* Module Header */}
-                      <div className="flex bg-indigo-50/80 border-b border-slate-100 hover:bg-indigo-100/50 transition-colors group">
-                        <div className="flex-shrink-0 p-3 pl-6 border-r border-slate-200 sticky left-0 bg-indigo-50/95 backdrop-blur-sm z-30 flex items-center justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}>
-                          <div className="flex items-center gap-2 flex-1 overflow-hidden cursor-pointer" onClick={() => !(editingId === `module-${project.id}-${module.id}`) && toggleModule(module.id)}>
-                            <GripVertical className="w-4 h-4 text-slate-300" />
-                            {isModuleCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-indigo-500" />}
-                            <Layers className="w-4 h-4 text-indigo-600" />
-                            {editingId === `module-${project.id}-${module.id}` ? (
-                              <input ref={editInputRef} value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown} className="bg-white text-slate-800 text-sm font-semibold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500" onClick={(e) => e.stopPropagation()} />
+                 {/* FIX: Merged duplicate style attributes */}
+                 <div style={{ width: `${detailsWidth}px`, left: `${sidebarWidth}px`, backgroundColor: '#f1f5f9' }} className="sticky flex items-center gap-2 p-2">
+                    <button onClick={() => onAddModule(p.id)} title="Add Module" className="text-slate-400 hover:text-indigo-600"><Plus size={14}/></button>
+                    <button onClick={() => onDeleteProject(p.id)} title="Delete Project" className="text-slate-400 hover:text-red-600"><Trash2 size={14}/></button>
+                 </div>
+                 <div className="flex-1 h-full"></div>
+              </div>
+              {/* Modules */}
+              {!collapsedProjects[p.id] && p.modules.map((m, mIndex) => (
+                 <React.Fragment key={m.id}>
+                    <div 
+                      className="flex border-b border-slate-100" 
+                      draggable onDragStart={(e) => handleDragStart(e, mIndex)} 
+                      onDragOver={handleDragOver} 
+                      onDrop={(e) => handleDrop(e, p.id, mIndex)}
+                      style={{ opacity: draggedModuleIndex === mIndex ? 0.5 : 1}}
+                    >
+                      <div style={{ width: `${sidebarWidth}px` }} className="sticky left-0 bg-white border-r border-slate-200 p-2 z-10 flex items-center gap-2">
+                        <GripVertical size={14} className="text-slate-300 cursor-grab" />
+                        <button onClick={() => toggleModule(m.id)} className="p-0.5 rounded hover:bg-slate-100">{collapsedModules[m.id] ? <ChevronRight size={14} /> : <ChevronDown size={14}/>}</button>
+                        {editingId === `module-${p.id}-${m.id}` ? (
+                            <InlineInput value={m.name} onSave={(val) => saveEdit(val)} onCancel={cancelEdit} />
+                        ) : (
+                           <span className="font-semibold text-slate-700 truncate" onDoubleClick={() => startEditing(`module-${p.id}-${m.id}`)}>{m.name}</span>
+                        )}
+                      </div>
+                      {/* FIX: Merged duplicate style attributes */}
+                      <div style={{ width: `${detailsWidth}px`, left: `${sidebarWidth}px` }} className="sticky flex items-center gap-2 p-2 bg-white">
+                        <button onClick={() => onAddTask(p.id, m.id, `task-${Date.now()}`, 'New Task', Role.DEV)} title="Add Task" className="text-slate-400 hover:text-indigo-600"><Plus size={14}/></button>
+                        <button onClick={() => onDeleteModule(p.id, m.id)} title="Delete Module" className="text-slate-400 hover:text-red-600"><Trash2 size={14}/></button>
+                      </div>
+                      <div className="flex-1 flex h-full">
+                        {timeline.map(col => <div key={col.id} style={{width: `${colWidth}px`}} className="border-r border-slate-100 flex-shrink-0" />)}
+                      </div>
+                    </div>
+                    {/* Tasks */}
+                    {!collapsedModules[m.id] && m.tasks.map((t, tIndex) => (
+                      <React.Fragment key={t.id}>
+                        <div className="flex border-b border-slate-100 bg-slate-50/30" id={`task-row-${t.id}`}>
+                          <div style={{ width: `${sidebarWidth}px` }} className="sticky left-0 bg-slate-50/30 border-r border-slate-200 p-2 z-10 flex items-center gap-2">
+                            <span className="pl-8"><button onClick={() => toggleTask(t.id)} className="p-0.5 rounded hover:bg-slate-200">{collapsedTasks[t.id] ? <ChevronRight size={14} /> : <ChevronDown size={14}/>}</button></span>
+                            {editingId === `task-${p.id}-${m.id}-${t.id}` ? (
+                                <InlineInput value={t.name} onSave={(val) => saveEdit(val)} onCancel={cancelEdit} />
                             ) : (
-                              <span className="font-semibold text-sm text-slate-800 truncate select-none flex-1 hover:text-indigo-600" onDoubleClick={(e) => startEditing(`module-${project.id}-${module.id}`, module.name, undefined, e)}>{module.name}</span>
+                              <span className="text-slate-600 truncate" onDoubleClick={() => startEditing(`task-${p.id}-${m.id}-${t.id}`)}>{t.name}</span>
                             )}
                           </div>
-                           <button onClick={(e) => { e.stopPropagation(); onDeleteModule(project.id, module.id); }} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-100 transition-opacity"><Trash2 size={14} /></button>
-                        </div>
-                        <div className="flex-shrink-0 p-3 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/30 cursor-pointer hover:bg-indigo-100/50" style={detailsColStyle} onDoubleClick={(e) => startEditing(`fp-${project.id}-${module.id}`, module.legacyFunctionPoints.toString(), module.functionPoints.toString(), e)}>
-                          {editingId === `fp-${project.id}-${module.id}` ? (
-                             <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                                <input ref={editInputRef} type="number" className="w-10 p-0.5 text-[10px] border rounded" value={editValue} onChange={e => setEditValue(e.target.value)} onKeyDown={handleKeyDown}/>
-                                <input type="number" className="w-10 p-0.5 text-[10px] border rounded" value={editValue2} onChange={e => setEditValue2(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown}/>
-                             </div>
-                          ) : <span>{module.functionPoints} FP</span>}
-                        </div>
-                        {timeline.map(col => (
-                           <div key={col.id} className={`flex-shrink-0 border-r border-slate-200/50 flex items-center justify-center bg-indigo-50/20 ${isCurrentColumn(col) ? 'bg-amber-50/30' : ''}`} style={{ width: `${colWidth}px` }}>
-                              {getModuleTotal(module, col) > 0 && <span className="text-[10px] font-bold text-indigo-900">{formatValue(getModuleTotal(module, col))}</span>}
-                           </div>
-                        ))}
-                      </div>
-
-                      {/* Tasks */}
-                      {!isModuleCollapsed && module.tasks.map((task) => {
-                        const startDate = task.startWeekId ? getDateFromWeek(parseInt(task.startWeekId.split('-')[0]), parseInt(task.startWeekId.split('-')[1])) : new Date();
-                        const endDate = new Date(startDate);
-                        endDate.setDate(startDate.getDate() + ((task.duration || 1) * 7) - 3);
-
-                        return (
-                          <React.Fragment key={`${module.id}-${task.id}`}>
-                            {/* Task Row */}
-                            <div id={`task-row-${task.id}`} className="flex border-b border-slate-100 bg-slate-50/40 group/task">
-                              <div className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50/95 z-20 flex items-center justify-between pl-10 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}>
-                                 <div className="flex items-center gap-2 overflow-hidden cursor-pointer flex-1" onClick={() => !(editingId === `task-${project.id}-${module.id}-${task.id}`) && toggleTask(task.id)}>
-                                   {collapsedTasks[task.id] ? <ChevronRight size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
-                                   <div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0"></div>
-                                   {editingId === `task-${project.id}-${module.id}-${task.id}` ? (
-                                      <input ref={editInputRef} value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown} className="bg-white text-slate-700 text-xs font-bold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-                                   ) : (
-                                      <span className="text-xs text-slate-700 font-bold truncate select-none hover:text-indigo-600 flex-1" onDoubleClick={(e) => startEditing(`task-${project.id}-${module.id}-${task.id}`, task.name, undefined, e)}>{task.name}</span>
-                                   )}
-                                 </div>
-                                 <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity">
-                                   <button onClick={() => onShiftTask(project.id, module.id, task.id, 'left')} className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"><ChevronLeft size={12} /></button>
-                                   <button onClick={() => onShiftTask(project.id, module.id, task.id, 'right')} className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"><ChevronRight size={12} /></button>
-                                   <div className="w-px h-3 bg-slate-300 mx-1"></div>
-                                   <button onClick={() => onAddAssignment(project.id, module.id, task.id, Role.DEV)} className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"><UserPlus size={14} /></button>
-                                   <div className="w-px h-3 bg-slate-300 mx-1"></div>
-                                   <button onClick={() => onDeleteTask(project.id, module.id, task.id)} className="text-slate-400 hover:text-red-600 p-0.5 rounded hover:bg-slate-200"><Trash2 size={12} /></button>
-                                 </div>
-                              </div>
-
-                              {/* Details Column: Date Inputs & Dependency Link */}
-                              <div className="flex-shrink-0 border-r border-slate-200 bg-slate-50/30 flex items-center gap-1 px-1" style={detailsColStyle}>
-                                  <div className="flex flex-col w-full gap-0.5">
-                                      <div className="flex items-center gap-1">
-                                          <span className="text-[9px] text-slate-400 w-6">Start</span>
-                                          <input type="date" className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer" value={formatDateForInput(startDate)} onChange={(e) => handleStartDateChange(project.id, module.id, task, e.target.value)} />
-                                          <button 
-                                              onClick={() => openDependencyModal(project.id, module.id, task.id, task.dependencies || [])}
-                                              className={`p-0.5 rounded hover:bg-indigo-100 ${task.dependencies && task.dependencies.length > 0 ? 'text-indigo-600' : 'text-slate-300'}`}
-                                              title="Manage Dependencies"
-                                          >
-                                              <Link size={10} />
-                                          </button>
-                                      </div>
-                                      <div className="flex items-center gap-1 border-t border-slate-200 pt-0.5">
-                                          <span className="text-[9px] text-slate-400 w-6">End</span>
-                                          <input type="date" className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer" value={formatDateForInput(endDate)} min={formatDateForInput(startDate)} onChange={(e) => handleEndDateChange(project.id, module.id, task, e.target.value)} />
-                                      </div>
-                                  </div>
-                              </div>
-                              
-                              {timeline.map(col => (
-                                <div key={`th-${task.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 flex items-center justify-center bg-slate-50/30 ${isCurrentColumn(col) ? 'bg-amber-50/30' : ''}`} style={{ width: `${colWidth}px` }}>
-                                   {getTaskTotal(task, col) > 0 && <span className="text-[10px] font-semibold text-slate-600">{formatValue(getTaskTotal(task, col))}</span>}
-                                </div>
-                              ))}
-                            </div>
-
-                            {/* Assignment Rows (Omitted code logic remains same) */}
-                            {!collapsedTasks[task.id] && task.assignments.map(assignment => (
-                               <div key={assignment.id} className="flex border-b border-slate-100 group/assign">
-                                 <div className={`flex-shrink-0 py-1 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-10 flex items-center justify-between border-l-[3px] ${getRoleColorClass(assignment.role)} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`} style={stickyStyle}>
-                                    <div className="flex-1 overflow-hidden flex items-center">
-                                       {editingId === `resource-${project.id}-${module.id}-${task.id}-${assignment.id}` ? (
-                                           <input ref={editInputRef} value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown} className="bg-white text-slate-700 text-xs font-bold border border-indigo-300 rounded px-1 w-full ml-12" />
-                                       ) : <span className="text-xs text-slate-600 pl-12 truncate cursor-pointer hover:text-indigo-600 flex-1" onDoubleClick={(e) => startEditing(`resource-${project.id}-${module.id}-${task.id}-${assignment.id}`, assignment.resourceName || '', undefined, e)}>↳ {assignment.resourceName || 'Unassigned'}</span>}
-                                       <button onClick={(e) => { e.stopPropagation(); onDeleteAssignment(project.id, module.id, task.id, assignment.id); }} className="opacity-0 group-hover/assign:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-100 transition-opacity ml-2"><Trash2 size={14} /></button>
-                                    </div>
-                                 </div>
-                                 <div className="flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-between px-2 py-1 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
-                                     <select value={assignment.role} onChange={(e) => onUpdateAssignmentRole(project.id, module.id, task.id, assignment.id, e.target.value as Role)} className="w-20 text-[10px] p-1 border-none bg-transparent focus:ring-0 text-slate-600 cursor-pointer font-medium">
-                                       {Object.values(Role).map(r => <option key={r} value={r}>{r}</option>)}
-                                     </select>
-                                 </div>
-                                 {timeline.map(col => (
-                                    <div key={`${assignment.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 relative ${!!getHolidayInfo(col.date) ? 'bg-[repeating-linear-gradient(45deg,#fee2e2,#fee2e2_5px,#fef2f2_5px,#fef2f2_10px)]' : isCurrentColumn(col) ? 'bg-amber-50/50' : ''}`} style={{ width: `${colWidth}px` }}>
-                                       <input type="text" disabled={!!getHolidayInfo(col.date)} className={`w-full h-full text-center text-xs focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors ${getRawCellValue(assignment, col) > 0 ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50'} ${!!getHolidayInfo(col.date) ? 'bg-transparent cursor-not-allowed' : ''}`} value={formatValue(getRawCellValue(assignment, col))} onChange={(e) => handleCellUpdate(project.id, module.id, task.id, assignment.id, col, e.target.value)} />
-                                    </div>
-                                 ))}
-                               </div>
-                            ))}
-                          </React.Fragment>
-                        );
-                      })}
-                       {!isModuleCollapsed && (
-                        <div className="flex border-b border-slate-100 bg-slate-50/20">
-                          <div className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50/80 z-20 pl-12 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}>
-                            <button onClick={() => handleAddTaskClick(project.id, module.id)} className="text-[11px] text-slate-500 hover:text-indigo-600 font-medium flex items-center gap-1 py-1 px-2 rounded hover:bg-slate-100 transition-colors"><Plus size={12} /> Add New Task</button>
+                          {/* FIX: Merged duplicate style attributes */}
+                          <div style={{ width: `${detailsWidth}px`, left: `${sidebarWidth}px` }} className="sticky flex items-center gap-2 p-2 bg-slate-50/30">
+                            <button onClick={() => onAddAssignment(p.id, m.id, t.id, Role.DEV)} title="Add Assignment" className="text-slate-400 hover:text-indigo-600"><UserPlus size={14}/></button>
+                            <button onClick={() => openDependencyModal(p.id, m.id, t.id, t.dependencies || [])} title="Manage Dependencies" className="text-slate-400 hover:text-indigo-600"><Link size={14}/></button>
+                            <button onClick={() => onDeleteTask(p.id, m.id, t.id)} title="Delete Task" className="text-slate-400 hover:text-red-600"><Trash2 size={14}/></button>
                           </div>
-                          <div className="flex-shrink-0 border-r border-slate-200 bg-slate-50/20" style={detailsColStyle}></div>
-                           {timeline.map(col => <div key={`add-${module.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 ${isCurrentColumn(col) ? 'bg-amber-50/30' : ''}`} style={{ width: `${colWidth}px` }}></div>)}
+                          <div className="flex-1 flex h-full">
+                            {timeline.map(col => <div key={col.id} style={{width: `${colWidth}px`}} className="border-r border-slate-100 flex-shrink-0" />)}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </React.Fragment>
-            );
-          })}
-           <div className="flex bg-slate-800 text-white border-t border-slate-700 sticky bottom-0 z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.2)] mt-0.5">
-             <div className="flex-shrink-0 p-3 border-r border-slate-700 sticky left-0 bg-slate-800 z-50 font-bold text-sm shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]" style={stickyStyle}> GRAND TOTAL </div>
-             <div className="flex-shrink-0 border-r border-slate-700" style={detailsColStyle}></div>
-             {timeline.map(col => (
-                 <div key={`total-${col.id}`} className={`flex-shrink-0 border-r border-slate-700 flex items-center justify-center text-xs font-mono font-bold ${isCurrentColumn(col) ? 'bg-slate-700 ring-1 ring-inset ring-amber-400/50' : ''}`} style={{ width: `${colWidth}px` }}>
-                   {projects.reduce((acc, p) => acc + getProjectTotal(p, col), 0) > 0 ? formatValue(projects.reduce((acc, p) => acc + getProjectTotal(p, col), 0)) : ''}
-                 </div>
-             ))}
-           </div>
+                        {/* Assignments */}
+                        {!collapsedTasks[t.id] && t.assignments.map((a, aIndex) => (
+                          <div key={a.id} className="flex border-b border-slate-100 hover:bg-sky-50/20">
+                            <div style={{ width: `${sidebarWidth}px` }} className="sticky left-0 bg-white hover:bg-sky-50/20 border-r border-slate-200 p-2 z-10 flex items-center gap-2">
+                              <span className="pl-14"></span>
+                               {editingId === `resource-${p.id}-${m.id}-${t.id}-${a.id}` ? (
+                                  <InlineInput value={a.resourceName || ''} onSave={(val) => saveEdit(val)} onCancel={cancelEdit} />
+                               ) : (
+                                 <span className="text-slate-500 truncate" onDoubleClick={() => startEditing(`resource-${p.id}-${m.id}-${t.id}-${a.id}`)}>{a.resourceName}</span>
+                               )}
+                            </div>
+                            {/* FIX: Merged duplicate style attributes */}
+                            <div style={{ width: `${detailsWidth}px`, left: `${sidebarWidth}px` }} className="sticky flex items-center gap-2 p-2 bg-white hover:bg-sky-50/20">
+                               <select value={a.role} onChange={e => onUpdateAssignmentRole(p.id, m.id, t.id, a.id, e.target.value as Role)} className="text-xs p-0.5 border border-transparent hover:border-slate-200 rounded bg-transparent">
+                                 {Object.values(Role).map(r => <option key={r} value={r}>{r}</option>)}
+                               </select>
+                               <button onClick={() => onDeleteAssignment(p.id, m.id, t.id, a.id)} title="Delete Assignment" className="text-slate-300 hover:text-red-600"><Trash2 size={12}/></button>
+                            </div>
+                            <div className="flex-1 flex h-full">
+                               {timeline.map(col => {
+                                 const allocation = a.allocations.find(al => al.weekId === (col.parentWeekId || col.id));
+                                 const dayDate = viewMode === 'day' ? formatDateForInput(col.date!) : undefined;
+                                 
+                                 const value = viewMode === 'day' 
+                                   ? (allocation?.days?.[dayDate!] ?? 0)
+                                   : (allocation?.count ?? 0);
+
+                                 const isCurrent = viewMode === 'day' && dayDate === todayDate;
+                                 const isHoliday = viewMode === 'day' && holidayDates.has(dayDate!);
+
+                                 return (
+                                    <AllocationCell 
+                                      key={col.id}
+                                      value={value}
+                                      onChange={(val) => handleAllocationChange(p.id, m.id, t.id, a.id, col, val)}
+                                      disabled={viewMode === 'month'}
+                                      isHoliday={isHoliday}
+                                      isCurrent={isCurrent}
+                                      width={colWidth}
+                                    />
+                                  );
+                               })}
+                            </div>
+                          </div>
+                        ))}
+                      </React.Fragment>
+                    ))}
+                 </React.Fragment>
+              ))}
+            </React.Fragment>
+          ))}
         </div>
+        
+        {/* Timeline Extend Triggers */}
+        <div className="h-8 flex items-center justify-between px-4">
+            <button onClick={() => onExtendTimeline('start')} className="text-xs text-indigo-600 hover:underline">Load Previous</button>
+            <button onClick={() => onExtendTimeline('end')} className="text-xs text-indigo-600 hover:underline">Load More</button>
+        </div>
+
+        {/* Dependency Lines SVG */}
+        <svg className="absolute top-0 left-0 w-full h-full pointer-events-none" style={{ zIndex: 5 }}>
+          {dependencyLines.map((line, i) => (
+             <path 
+               key={i} 
+               d={`M ${line.x1} ${line.y1} C ${line.x1 + 30} ${line.y1}, ${line.x2 - 30} ${line.y2}, ${line.x2} ${line.y2}`}
+               stroke="#4f46e5" 
+               strokeWidth="1.5"
+               fill="none" 
+               markerEnd="url(#arrow)"
+             />
+          ))}
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#4f46e5" />
+            </marker>
+          </defs>
+        </svg>
+
       </div>
+      
+      {depModalOpen && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => setDepModalOpen(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <header className="p-4 border-b border-slate-200">
+              <h3 className="font-bold text-slate-800">Manage Dependencies for: {currentDepTask?.taskId}</h3>
+            </header>
+            <main className="p-6 max-h-96 overflow-y-auto">
+              <div className="grid grid-cols-2 gap-2">
+                {availableTasksForDependencies.map(task => (
+                  <label key={task.id} className="flex items-center gap-2 p-2 border rounded-md hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" checked={selectedDeps.includes(task.id)} onChange={() => handleDepChange(task.id)} className="accent-indigo-600"/>
+                    <span className="text-sm text-slate-700">{task.name}</span>
+                  </label>
+                ))}
+              </div>
+            </main>
+            <footer className="p-4 bg-slate-50 border-t flex justify-end gap-3">
+              <button onClick={() => setDepModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border rounded-lg hover:bg-slate-50">Cancel</button>
+              <button onClick={saveDependencies} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">Save Dependencies</button>
+            </footer>
+          </div>
+        </div>
+      )}
     </div>
-    </>
   );
 };
