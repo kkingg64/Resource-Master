@@ -315,6 +315,22 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const timeline = useMemo(() => getTimeline(viewMode, timelineStart, timelineEnd), [viewMode, timelineStart, timelineEnd]);
 
+  const today = new Date();
+  const currentWeekId = getWeekIdFromDate(today);
+
+  // Helper to check if a column represents the current date/week
+  const isCurrentColumn = (col: TimelineColumn) => {
+    if (viewMode === 'day' && col.date) {
+        return col.date.getDate() === today.getDate() && 
+               col.date.getMonth() === today.getMonth() && 
+               col.date.getFullYear() === today.getFullYear();
+    }
+    if (viewMode === 'week') {
+        return col.id === currentWeekId;
+    }
+    return false;
+  };
+
   // Compute headers grouping
   const groupedHeaders = useMemo(() => {
     return timeline.reduce((acc, col) => {
@@ -609,18 +625,21 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
              {timeline.map(col => {
                const holidayInfo = getHolidayInfo(col.date);
                const isHol = !!holidayInfo;
+               const isCurrent = isCurrentColumn(col);
+               
                return (
                  <div 
                    key={col.id} 
                    className={`flex-shrink-0 text-center p-1 text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col
-                     ${isHol ? 'bg-red-50 text-red-600' : 'text-slate-500'}
+                     ${isHol ? 'bg-red-50 text-red-600' : ''}
+                     ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}
                    `}
                    style={{ width: `${colWidth}px`, height: '32px' }}
-                   title={isHol ? `${holidayInfo?.name} (${holidayInfo?.country})` : ''}
+                   title={isHol ? `${holidayInfo?.name} (${holidayInfo?.country})` : isCurrent ? 'Current Date' : ''}
                  >
                    <span>{col.label}</span>
                    {col.date && viewMode === 'day' && (
-                     <span className={`text-[9px] ${isHol ? 'text-red-500 font-bold' : 'text-slate-400'}`}>
+                     <span className={`text-[9px] ${isHol ? 'text-red-500 font-bold' : isCurrent ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>
                         {col.date.getDate()} {col.date.toLocaleString('default', { month: 'short' })}
                      </span>
                    )}
@@ -687,8 +706,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                    {/* Project Summaries */}
                    {timeline.map(col => {
                      const total = getProjectTotal(project, col);
+                     const isCurrent = isCurrentColumn(col);
                      return (
-                        <div key={col.id} className="flex-shrink-0 border-r border-slate-600 flex items-center justify-center bg-slate-700" style={{ width: `${colWidth}px` }}>
+                        <div key={col.id} className={`flex-shrink-0 border-r border-slate-600 flex items-center justify-center bg-slate-700 ${isCurrent ? 'bg-slate-600 ring-1 ring-inset ring-amber-400/50' : ''}`} style={{ width: `${colWidth}px` }}>
                            {total > 0 && (
                              <span className="text-[10px] font-bold text-slate-200">{formatValue(total)}</span>
                            )}
@@ -795,8 +815,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         {/* Module Summaries */}
                         {timeline.map(col => {
                            const total = getModuleTotal(module, col);
+                           const isCurrent = isCurrentColumn(col);
                            return (
-                              <div key={col.id} className="flex-shrink-0 border-r border-slate-200/50 flex items-center justify-center bg-indigo-50/20" style={{ width: `${colWidth}px` }}>
+                              <div key={col.id} className={`flex-shrink-0 border-r border-slate-200/50 flex items-center justify-center bg-indigo-50/20 ${isCurrent ? 'bg-amber-50/30' : ''}`} style={{ width: `${colWidth}px` }}>
                                  {total > 0 && (
                                    <span className="text-[10px] font-bold text-indigo-900">{formatValue(total)}</span>
                                  )}
@@ -918,8 +939,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               {/* Task Summaries */}
                               {timeline.map(col => {
                                 const total = getTaskTotal(task, col);
+                                const isCurrent = isCurrentColumn(col);
                                 return (
-                                  <div key={`th-${task.id}-${col.id}`} className="flex-shrink-0 border-r border-slate-100 flex items-center justify-center bg-slate-50/30" style={{ width: `${colWidth}px` }}>
+                                  <div key={`th-${task.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 flex items-center justify-center bg-slate-50/30 ${isCurrent ? 'bg-amber-50/30' : ''}`} style={{ width: `${colWidth}px` }}>
                                      {total > 0 && (
                                        <span className="text-[10px] font-semibold text-slate-600">{formatValue(total)}</span>
                                      )}
@@ -1001,11 +1023,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   const hasValue = raw > 0;
                                   const holidayInfo = getHolidayInfo(col.date);
                                   const isHol = !!holidayInfo;
+                                  const isCurrent = isCurrentColumn(col);
 
                                   return (
                                     <div 
                                       key={`${assignment.id}-${col.id}`} 
-                                      className={`flex-shrink-0 border-r border-slate-100 relative ${isHol ? 'bg-[repeating-linear-gradient(45deg,#fee2e2,#fee2e2_5px,#fef2f2_5px,#fef2f2_10px)]' : ''}`} 
+                                      className={`flex-shrink-0 border-r border-slate-100 relative ${isHol ? 'bg-[repeating-linear-gradient(45deg,#fee2e2,#fee2e2_5px,#fef2f2_5px,#fef2f2_10px)]' : isCurrent ? 'bg-amber-50/50' : ''}`} 
                                       style={{ width: `${colWidth}px` }}
                                       title={isHol ? holidayInfo?.name : ''}
                                     >
@@ -1045,9 +1068,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             </button>
                           </div>
                            <div className="flex-shrink-0 border-r border-slate-200 bg-slate-50/20" style={detailsColStyle}></div>
-                           {timeline.map(col => (
-                             <div key={`add-${module.id}-${col.id}`} className="flex-shrink-0 border-r border-slate-100" style={{ width: `${colWidth}px` }}></div>
-                           ))}
+                           {timeline.map(col => {
+                             const isCurrent = isCurrentColumn(col);
+                             return (
+                               <div key={`add-${module.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 ${isCurrent ? 'bg-amber-50/30' : ''}`} style={{ width: `${colWidth}px` }}></div>
+                             );
+                           })}
                         </div>
                       )}
                     </div>
@@ -1069,9 +1095,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
              {timeline.map(col => {
                // Calculate total for this column across all projects
                const total = projects.reduce((acc, p) => acc + getProjectTotal(p, col), 0);
+               const isCurrent = isCurrentColumn(col);
                
                return (
-                 <div key={`total-${col.id}`} className="flex-shrink-0 border-r border-slate-700 flex items-center justify-center text-xs font-mono font-bold" style={{ width: `${colWidth}px` }}>
+                 <div key={`total-${col.id}`} className={`flex-shrink-0 border-r border-slate-700 flex items-center justify-center text-xs font-mono font-bold ${isCurrent ? 'bg-slate-700 ring-1 ring-inset ring-amber-400/50' : ''}`} style={{ width: `${colWidth}px` }}>
                    {total > 0 ? formatValue(total) : ''}
                  </div>
                );
