@@ -255,57 +255,55 @@ const App: React.FC = () => {
   };
   
   const updateAllocation = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number, dayDate?: string) => {
-    // Optimistic update
-    const { updatedProjects, allocationToUpdate } = (() => {
-      let allocationToUpdate: ResourceAllocation | null = null;
-      const updatedProjects = projects.map(p => {
-        if (p.id !== projectId) return p;
-        return { ...p, modules: p.modules.map(m => {
-          if (m.id !== moduleId) return m;
-          return { ...m, tasks: m.tasks.map(t => {
-            if (t.id !== taskId) return t;
-            return { ...t, assignments: t.assignments.map(a => {
-              if (a.id !== assignmentId) return a;
-              
-              const newAllocations = [...a.allocations];
-              const allocIndex = newAllocations.findIndex(al => al.weekId === weekId);
-              
-              if (allocIndex > -1) {
-                const alloc = { ...newAllocations[allocIndex] };
-                if (dayDate) {
-                  const newDays = { ...(alloc.days || {}) };
-                   if ((!alloc.days || Object.keys(alloc.days).length === 0) && alloc.count > 0) {
-                    const weekdays = getWeekdaysForWeekId(weekId);
-                    weekdays.forEach(d => newDays[d] = alloc.count / 5);
-                  }
-                  newDays[dayDate] = value;
-                  alloc.days = newDays;
-                  alloc.count = Object.values(newDays).reduce((sum: number, v: number) => sum + v, 0);
-                } else {
-                  alloc.count = value;
-                  alloc.days = {};
-                }
-                newAllocations[allocIndex] = alloc;
-                allocationToUpdate = alloc;
-              } else if (value > 0) {
-                const newAlloc: ResourceAllocation = { id: generateId('alloc'), weekId, count: value, days: {} };
-                 if(dayDate) {
-                   const weekdays = getWeekdaysForWeekId(weekId);
-                   const days = weekdays.reduce((acc, day) => ({...acc, [day]: 0}), {} as Record<string, number>);
-                   days[dayDate] = value;
-                   newAlloc.days = days;
-                   newAlloc.count = Object.values(days).reduce((sum: number, v: number) => sum + v, 0);
-                 }
-                newAllocations.push(newAlloc);
-                allocationToUpdate = newAlloc;
-              }
-              return { ...a, allocations: newAllocations };
-            })};
-          })};
-        })};
-      });
-      return { updatedProjects, allocationToUpdate };
-    })();
+    // Optimistic update with deep copy to prevent mutation bugs
+    const updatedProjects = JSON.parse(JSON.stringify(projects));
+    let allocationToUpdate: ResourceAllocation | null = null;
+
+    const project = updatedProjects.find((p: Project) => p.id === projectId);
+    if (!project) return;
+    const module = project.modules.find((m: ProjectModule) => m.id === moduleId);
+    if (!module) return;
+    const task = module.tasks.find((t: ProjectTask) => t.id === taskId);
+    if (!task) return;
+    const assignment = task.assignments.find((a: TaskAssignment) => a.id === assignmentId);
+    if (!assignment) return;
+
+    const allocIndex = assignment.allocations.findIndex((al: ResourceAllocation) => al.weekId === weekId);
+
+    if (allocIndex > -1) {
+        const alloc = assignment.allocations[allocIndex];
+        if (dayDate) {
+            const newDays = { ...(alloc.days || {}) };
+            if ((!alloc.days || Object.keys(alloc.days).length === 0) && alloc.count > 0) {
+                const weekdays = getWeekdaysForWeekId(weekId);
+                weekdays.forEach(d => newDays[d] = alloc.count / 5);
+            }
+            newDays[dayDate] = value;
+            alloc.days = newDays;
+            alloc.count = Object.values(newDays).reduce((sum: number, v: number) => sum + v, 0);
+        } else {
+            alloc.count = value;
+            alloc.days = {};
+        }
+        allocationToUpdate = alloc;
+    } else if (value > 0) {
+        const newAlloc: ResourceAllocation = { id: generateId('alloc'), weekId, count: value, days: {} };
+        if (dayDate) {
+            const weekdays = getWeekdaysForWeekId(weekId);
+            const days = weekdays.reduce((acc, day) => ({ ...acc, [day]: 0 }), {} as Record<string, number>);
+            days[dayDate] = value;
+            newAlloc.days = days;
+            newAlloc.count = Object.values(days).reduce((sum: number, v: number) => sum + v, 0);
+        }
+        assignment.allocations.push(newAlloc);
+        allocationToUpdate = newAlloc;
+    }
+
+    // Clean up allocations with zero values
+    assignment.allocations = assignment.allocations.filter(
+        (al: ResourceAllocation) => al.count > 0 || (al.days && Object.values(al.days).some(d => (d as number) > 0))
+    );
+    
     setProjects(updatedProjects);
 
     // DB update queue
@@ -362,7 +360,14 @@ const App: React.FC = () => {
   
   const updateModuleName = async (projectId: string, moduleId: string, name: string): Promise<string | null> => {
      const previousState = projects;
-     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? {...m, name} : m) } : p));
+     const updatedProjects = JSON.parse(JSON.stringify(projects));
+     const project = updatedProjects.find((p: Project) => p.id === projectId);
+     if (project) {
+        const module = project.modules.find((m: ProjectModule) => m.id === moduleId);
+        if (module) module.name = name;
+     }
+     setProjects(updatedProjects);
+
      const { error } = await updateSupabaseRecord('modules', moduleId, { name });
      if (error) {
         console.error("Update Module Name Error:", error);
@@ -374,7 +379,17 @@ const App: React.FC = () => {
   
   const updateTaskName = async (projectId: string, moduleId: string, taskId: string, name: string): Promise<string | null> => {
     const previousState = projects;
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? {...t, name} : t) } : m) } : p));
+    const updatedProjects = JSON.parse(JSON.stringify(projects));
+    const project = updatedProjects.find((p: Project) => p.id === projectId);
+    if (project) {
+        const module = project.modules.find((m: ProjectModule) => m.id === moduleId);
+        if (module) {
+            const task = module.tasks.find((t: ProjectTask) => t.id === taskId);
+            if (task) task.name = name;
+        }
+    }
+    setProjects(updatedProjects);
+    
     const { error } = await updateSupabaseRecord('tasks', taskId, { name });
     if (error) {
         console.error("Update Task Name Error:", error);
@@ -386,16 +401,20 @@ const App: React.FC = () => {
 
   const updateAssignmentResourceName = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string): Promise<string | null> => {
     const previousState = projects;
-    setProjects(prev => prev.map(p => {
-      if (p.id !== projectId) return p;
-      return { ...p, modules: p.modules.map(m => {
-        if (m.id !== moduleId) return m;
-        return { ...m, tasks: m.tasks.map(t => {
-          if (t.id !== taskId) return t;
-          return { ...t, assignments: t.assignments.map(a => a.id === assignmentId ? { ...a, resourceName: name } : a)};
-        })};
-      })};
-    }));
+    const updatedProjects = JSON.parse(JSON.stringify(projects));
+    const project = updatedProjects.find((p: Project) => p.id === projectId);
+    if (project) {
+        const module = project.modules.find((m: ProjectModule) => m.id === moduleId);
+        if (module) {
+            const task = module.tasks.find((t: ProjectTask) => t.id === taskId);
+            if (task) {
+                const assignment = task.assignments.find((a: TaskAssignment) => a.id === assignmentId);
+                if (assignment) assignment.resourceName = name;
+            }
+        }
+    }
+    setProjects(updatedProjects);
+
     const { error } = await updateSupabaseRecord('task_assignments', assignmentId, { resource_name: name });
     if (error) {
       console.error("Update Resource Name Error:", error);
@@ -407,16 +426,20 @@ const App: React.FC = () => {
 
   const updateAssignmentRole = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, role: Role) => {
     const previousState = projects;
-    setProjects(prev => prev.map(p => {
-      if (p.id !== projectId) return p;
-      return { ...p, modules: p.modules.map(m => {
-        if (m.id !== moduleId) return m;
-        return { ...m, tasks: m.tasks.map(t => {
-          if (t.id !== taskId) return t;
-          return { ...t, assignments: t.assignments.map(a => a.id === assignmentId ? { ...a, role } : a)};
-        })};
-      })};
-    }));
+    const updatedProjects = JSON.parse(JSON.stringify(projects));
+    const project = updatedProjects.find((p: Project) => p.id === projectId);
+    if (project) {
+        const module = project.modules.find((m: ProjectModule) => m.id === moduleId);
+        if (module) {
+            const task = module.tasks.find((t: ProjectTask) => t.id === taskId);
+            if (task) {
+                const assignment = task.assignments.find((a: TaskAssignment) => a.id === assignmentId);
+                if (assignment) assignment.role = role;
+            }
+        }
+    }
+    setProjects(updatedProjects);
+
     const { error } = await updateSupabaseRecord('task_assignments', assignmentId, { role });
     if (error) {
       console.error(error);
@@ -500,7 +523,17 @@ const App: React.FC = () => {
 
   const updateFunctionPoints = async (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => {
      const previousState = projects;
-     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? {...m, legacyFunctionPoints: legacyFp, functionPoints: mvpFp} : m) } : p));
+     const updatedProjects = JSON.parse(JSON.stringify(projects));
+     const project = updatedProjects.find((p: Project) => p.id === projectId);
+     if (project) {
+        const module = project.modules.find((m: ProjectModule) => m.id === moduleId);
+        if (module) {
+            module.legacyFunctionPoints = legacyFp;
+            module.functionPoints = mvpFp;
+        }
+     }
+     setProjects(updatedProjects);
+
      const { error } = await updateSupabaseRecord('modules', moduleId, { legacy_function_points: legacyFp, function_points: mvpFp });
      if (error) {
         console.error(error);
@@ -613,8 +646,16 @@ const App: React.FC = () => {
 
   const updateTaskDependencies = async (projectId: string, moduleId: string, taskId: string, dependencies: string[]) => {
       const previousState = projects;
-      
-      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? {...t, dependencies } : t) } : m) } : p));
+      const updatedProjects = JSON.parse(JSON.stringify(projects));
+      const project = updatedProjects.find((p: Project) => p.id === projectId);
+      if (project) {
+        const module = project.modules.find((m: ProjectModule) => m.id === moduleId);
+        if (module) {
+            const task = module.tasks.find((t: ProjectTask) => t.id === taskId);
+            if (task) task.dependencies = dependencies;
+        }
+      }
+      setProjects(updatedProjects);
       
       const { error } = await updateSupabaseRecord('tasks', taskId, { dependencies });
       
