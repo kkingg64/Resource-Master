@@ -83,6 +83,25 @@ const AllocationCell = React.memo(({ value, onChange, disabled, isHoliday, isCur
   );
 });
 
+type EditingTarget = {
+  type: 'project';
+  projectId: string;
+} | {
+  type: 'module';
+  projectId: string;
+  moduleId: string;
+} | {
+  type: 'task';
+  projectId: string;
+  moduleId: string;
+  taskId: string;
+} | {
+  type: 'resource';
+  projectId: string;
+  moduleId: string;
+  taskId: string;
+  assignmentId: string;
+};
 
 interface PlannerGridProps {
   projects: Project[];
@@ -158,7 +177,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const detailsResizing = useRef(false);
 
   // Editing State
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTarget, setEditingTarget] = useState<EditingTarget | null>(null);
   
   // Dependency Modal State
   const [depModalOpen, setDepModalOpen] = useState(false);
@@ -286,41 +305,33 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     setCollapsedTasks(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const startEditing = (id: string, e?: React.MouseEvent) => {
-    e?.stopPropagation(); 
-    setEditingId(id);
-  };
-  
-  const saveEdit = (idToSave: string, value: string) => {
-    if (!idToSave) {
-        setEditingId(null);
-        return;
-    }
-
-    const parts = idToSave.split('::');
-    const type = parts[0];
-    const ids = parts.slice(1);
-
-    if (type === 'project') {
-      const [projectId] = ids;
-      if(projectId) onUpdateProjectName(projectId, value);
-    } else if (type === 'module') {
-      const [projectId, moduleId] = ids;
-      if(projectId && moduleId) onUpdateModuleName(projectId, moduleId, value);
-    } else if (type === 'task') {
-      const [projectId, moduleId, taskId] = ids;
-      if(projectId && moduleId && taskId) onUpdateTaskName(projectId, moduleId, taskId, value);
-    } else if (type === 'resource') {
-      const [projectId, moduleId, taskId, assignmentId] = ids;
-      if(projectId && moduleId && taskId && assignmentId) onUpdateAssignmentResourceName(projectId, moduleId, taskId, assignmentId, value);
-    }
-
-    setEditingId(null);
-  };
-
   const cancelEdit = () => {
-    setEditingId(null);
+    setEditingTarget(null);
   };
+
+  const saveEdit = (value: string) => {
+    if (!editingTarget) {
+      cancelEdit();
+      return;
+    }
+
+    switch (editingTarget.type) {
+      case 'project':
+        onUpdateProjectName(editingTarget.projectId, value);
+        break;
+      case 'module':
+        onUpdateModuleName(editingTarget.projectId, editingTarget.moduleId, value);
+        break;
+      case 'task':
+        onUpdateTaskName(editingTarget.projectId, editingTarget.moduleId, editingTarget.taskId, value);
+        break;
+      case 'resource':
+        onUpdateAssignmentResourceName(editingTarget.projectId, editingTarget.moduleId, editingTarget.taskId, editingTarget.assignmentId, value);
+        break;
+    }
+    cancelEdit();
+  };
+
 
   const openDependencyModal = (projectId: string, moduleId: string, taskId: string, currentDeps: string[]) => {
     setCurrentDepTask({ projectId, moduleId, taskId, currentDeps: currentDeps || [] });
@@ -488,7 +499,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     <div className="h-10 flex items-center bg-slate-100 border-b border-slate-200">
                         <div style={{width: `${sidebarWidth}px`}} className="flex items-center px-2 gap-2">
                             <button onClick={() => toggleProject(p.id)} className="p-1 hover:bg-slate-200 rounded">{collapsedProjects[p.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
-                            {editingId === `project::${p.id}` ? <InlineInput value={p.name} onSave={(v) => saveEdit(`project::${p.id}`, v)} onCancel={cancelEdit} /> : <span className="font-bold text-sm text-slate-800 truncate" onDoubleClick={() => startEditing(`project::${p.id}`)}>{p.name}</span>}
+                            {editingTarget?.type === 'project' && editingTarget.projectId === p.id ? <InlineInput value={p.name} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="font-bold text-sm text-slate-800 truncate" onDoubleClick={() => setEditingTarget({ type: 'project', projectId: p.id })}>{p.name}</span>}
                         </div>
                     </div>
                     {!collapsedProjects[p.id] && p.modules.map((m, moduleIndex) => (
@@ -497,7 +508,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 <div style={{width: `${sidebarWidth}px`}} className="flex items-center px-2 gap-2 pl-6">
                                     <button onClick={() => toggleModule(m.id)} className="p-1 hover:bg-slate-200 rounded">{collapsedModules[m.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
                                     <GripVertical size={12} className="text-slate-300 cursor-grab" />
-                                    {editingId === `module::${p.id}::${m.id}` ? <InlineInput value={m.name} onSave={(v) => saveEdit(`module::${p.id}::${m.id}`, v)} onCancel={cancelEdit} /> : <span className="font-semibold text-xs text-slate-700 truncate" onDoubleClick={() => startEditing(`module::${p.id}::${m.id}`)}>{m.name}</span>}
+                                    {editingTarget?.type === 'module' && editingTarget.moduleId === m.id ? <InlineInput value={m.name} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="font-semibold text-xs text-slate-700 truncate" onDoubleClick={() => setEditingTarget({ type: 'module', projectId: p.id, moduleId: m.id })}>{m.name}</span>}
                                 </div>
                             </div>
                             {!collapsedModules[m.id] && m.tasks.map(t => (
@@ -505,7 +516,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     <div className="h-8 flex items-center bg-slate-50/50 border-b border-slate-100 hover:bg-slate-100/70">
                                        <div style={{width: `${sidebarWidth}px`}} className="flex items-center px-2 gap-2 pl-12">
                                           <button onClick={() => toggleTask(t.id)} className="p-1 hover:bg-slate-200 rounded">{collapsedTasks[t.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
-                                          {editingId === `task::${p.id}::${m.id}::${t.id}` ? <InlineInput value={t.name} onSave={(v) => saveEdit(`task::${p.id}::${m.id}::${t.id}`, v)} onCancel={cancelEdit} /> : <span className="text-xs text-slate-600 truncate" onDoubleClick={() => startEditing(`task::${p.id}::${m.id}::${t.id}`)}>{t.name}</span>}
+                                          {editingTarget?.type === 'task' && editingTarget.taskId === t.id ? <InlineInput value={t.name} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="text-xs text-slate-600 truncate" onDoubleClick={() => setEditingTarget({ type: 'task', projectId: p.id, moduleId: m.id, taskId: t.id })}>{t.name}</span>}
                                           <button onClick={() => openDependencyModal(p.id, m.id, t.id, t.dependencies || [])} className="ml-auto text-slate-400 hover:text-indigo-600 p-0.5 rounded"><Link size={12} /></button>
                                           <button onClick={() => onAddAssignment(p.id, m.id, t.id, Role.DEV)} className="ml-1 text-slate-400 hover:text-indigo-600 p-0.5 rounded"><UserPlus size={12} /></button>
                                        </div>
@@ -520,7 +531,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                                     </select>
                                                 </div>
                                                 <div className="h-full flex items-center pl-1">
-                                                   {editingId === `resource::${p.id}::${m.id}::${t.id}::${a.id}` ? <InlineInput value={a.resourceName || ''} onSave={(v) => saveEdit(`resource::${p.id}::${m.id}::${t.id}::${a.id}`, v)} onCancel={cancelEdit} /> : <span className="truncate" onDoubleClick={(e) => startEditing(`resource::${p.id}::${m.id}::${t.id}::${a.id}`, e)}>{a.resourceName || 'Unassigned'}</span>}
+                                                   {editingTarget?.type === 'resource' && editingTarget.assignmentId === a.id ? <InlineInput value={a.resourceName || ''} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="truncate" onDoubleClick={() => setEditingTarget({ type: 'resource', projectId: p.id, moduleId: m.id, taskId: t.id, assignmentId: a.id })}>{a.resourceName || 'Unassigned'}</span>}
                                                 </div>
                                              </div>
                                         </div>
