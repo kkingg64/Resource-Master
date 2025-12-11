@@ -130,6 +130,70 @@ const App: React.FC = () => {
     }
   }, [session, fetchData]);
 
+  // Auto-adjust timeline based on project data
+  useEffect(() => {
+    if (loading) return; // Don't run while loading
+
+    if (projects.length === 0) {
+        // If there are no projects, reset to a default view around today
+        const todayWeekId = getWeekIdFromDate(new Date());
+        const [yearStr, weekStr] = todayWeekId.split('-');
+        const todayPoint: WeekPoint = { year: parseInt(yearStr), week: parseInt(weekStr) };
+        setTimelineStart(addWeeksToPoint(todayPoint, -4));
+        setTimelineEnd(addWeeksToPoint(todayPoint, 48));
+        return;
+    }
+
+    let earliestWeekId: string | undefined;
+    let latestWeekId: string | undefined;
+
+    projects.forEach(p => {
+      p.modules.forEach(m => {
+        m.tasks.forEach(t => {
+          if (t.startWeekId) {
+            if (!earliestWeekId || t.startWeekId < earliestWeekId) {
+              earliestWeekId = t.startWeekId;
+            }
+            
+            const duration = t.duration || 1; // weeks
+            const [startYear, startWeek] = t.startWeekId.split('-').map(Number);
+            const startDate = getDateFromWeek(startYear, startWeek);
+            const endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + (duration * 7));
+            const endWeekId = getWeekIdFromDate(endDate);
+
+            if (!latestWeekId || endWeekId > latestWeekId) {
+              latestWeekId = endWeekId;
+            }
+          }
+        });
+      });
+    });
+
+    const todayWeekId = getWeekIdFromDate(new Date());
+
+    let finalStartWeekId: string;
+    if (earliestWeekId) {
+      finalStartWeekId = todayWeekId < earliestWeekId ? todayWeekId : earliestWeekId;
+    } else {
+      finalStartWeekId = todayWeekId;
+    }
+    
+    const [startYear, startWeek] = finalStartWeekId.split('-').map(Number);
+    const newStartPoint: WeekPoint = { year: startYear, week: startWeek };
+    setTimelineStart(addWeeksToPoint(newStartPoint, -4));
+
+    if (latestWeekId) {
+        const [endYear, endWeek] = latestWeekId.split('-').map(Number);
+        const newEndPoint: WeekPoint = { year: endYear, week: endWeek };
+        setTimelineEnd(addWeeksToPoint(newEndPoint, 4));
+    } else {
+        // if no tasks with dates, set end relative to start
+        setTimelineEnd(addWeeksToPoint(newStartPoint, 52));
+    }
+
+  }, [projects, loading]);
+
   const commitAllocationSaves = useCallback(async () => {
     if (!session || saveQueueRef.current.size === 0) return;
 
