@@ -36,6 +36,7 @@ const structureProjectsData = (data: any[]): Project[] => {
           role: a.role,
           resourceName: a.resource_name,
           allocations: a.resource_allocations.map((alloc: any) => ({
+            id: alloc.id,
             weekId: alloc.week_id,
             count: alloc.count,
             days: alloc.days || {},
@@ -203,7 +204,7 @@ const App: React.FC = () => {
     saveQueueRef.current.clear();
     
     const upsertData = updates.map(item => ({
-        id: item.existingAllocId,
+        id: item.id,
         assignment_id: item.assignmentId,
         user_id: session.user.id,
         week_id: item.weekId,
@@ -228,7 +229,7 @@ const App: React.FC = () => {
   const updateAllocation = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number, dayDate?: string) => {
     // Optimistic update
     const { updatedProjects, allocationToUpdate } = (() => {
-      let allocationToUpdate: any = null;
+      let allocationToUpdate: ResourceAllocation | null = null;
       const updatedProjects = projects.map(p => {
         if (p.id !== projectId) return p;
         return { ...p, modules: p.modules.map(m => {
@@ -259,12 +260,13 @@ const App: React.FC = () => {
                 newAllocations[allocIndex] = alloc;
                 allocationToUpdate = alloc;
               } else if (value > 0) {
-                const newAlloc: ResourceAllocation = { weekId, count: value, days: {} };
+                const newAlloc: ResourceAllocation = { id: generateId('alloc'), weekId, count: value, days: {} };
                  if(dayDate) {
                    const weekdays = getWeekdaysForWeekId(weekId);
                    const days = weekdays.reduce((acc, day) => ({...acc, [day]: 0}), {} as Record<string, number>);
                    days[dayDate] = value;
                    newAlloc.days = days;
+                   newAlloc.count = Object.values(days).reduce((sum: number, v: number) => sum + v, 0);
                  }
                 newAllocations.push(newAlloc);
                 allocationToUpdate = newAlloc;
@@ -280,16 +282,9 @@ const App: React.FC = () => {
 
     // DB update queue
     if (allocationToUpdate) {
-        const { data: existingAlloc } = await supabase
-            .from('resource_allocations')
-            .select('id')
-            .eq('assignment_id', assignmentId)
-            .eq('week_id', weekId)
-            .maybeSingle();
-
         const queueKey = `${assignmentId}-${weekId}`;
         saveQueueRef.current.set(queueKey, {
-            existingAllocId: existingAlloc?.id,
+            id: allocationToUpdate.id,
             assignmentId,
             weekId,
             allocation: allocationToUpdate,
