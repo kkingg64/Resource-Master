@@ -1,9 +1,9 @@
 // A simple alphanumeric ID generator.
-// Not guaranteed to be globally unique like a UUID, but is shorter and more human-readable for this application's scope.
+// NOTE: This implementation has been updated. The database expects a standard UUID for primary keys.
+// Using crypto.randomUUID() ensures compatibility and global uniqueness, resolving database errors.
 export function generateId(prefix: string): string {
-  const timestamp = Date.now().toString(36);
-  const randomPart = Math.random().toString(36).substring(2, 9);
-  return `${prefix}_${timestamp}${randomPart}`;
+  // The prefix argument is no longer used but is kept for compatibility with existing function calls.
+  return crypto.randomUUID();
 }
 
 // Per user request, a specific UUID is constructed from segments and handled in a special JSON format.
