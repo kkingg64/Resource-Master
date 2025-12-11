@@ -57,16 +57,8 @@ const AllocationCell = React.memo(({ value, onChange, disabled, isHoliday, isCur
   }, [value]);
 
   const handleBlur = () => {
-      const numericValue = parseFloat(localValue);
-      const originalValue = value;
-      
-      if (localValue === '' && originalValue !== 0) {
-        onChange('0');
-      } else if (!isNaN(numericValue) && numericValue !== originalValue) {
+      if (localValue !== (value === 0 ? '' : value.toString())) {
         onChange(localValue);
-      } else if (localValue !== originalValue.toString()) {
-        // Revert if not a valid number and it was changed
-        setLocalValue(originalValue === 0 ? '' : originalValue.toString());
       }
   };
   
@@ -332,302 +324,237 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
 
   const openDependencyModal = (projectId: string, moduleId: string, taskId: string, currentDeps: string[]) => {
-    setCurrentDepTask({ projectId, moduleId, taskId, currentDeps });
-    setSelectedDeps(currentDeps);
+    setCurrentDepTask({ projectId, moduleId, taskId, currentDeps: currentDeps || [] });
+    setSelectedDeps(currentDeps || []);
     setDepModalOpen(true);
   };
-  
-  const handleDepChange = (depId: string) => {
-    setSelectedDeps(prev => 
-      prev.includes(depId) ? prev.filter(d => d !== depId) : [...prev, depId]
-    );
+
+  const closeDependencyModal = () => {
+    setDepModalOpen(false);
+    setCurrentDepTask(null);
+    setSelectedDeps([]);
   };
 
   const saveDependencies = () => {
     if (currentDepTask) {
-      onUpdateTaskDependencies(
-        currentDepTask.projectId,
-        currentDepTask.moduleId,
-        currentDepTask.taskId,
-        selectedDeps
-      );
+      onUpdateTaskDependencies(currentDepTask.projectId, currentDepTask.moduleId, currentDepTask.taskId, selectedDeps);
     }
-    setDepModalOpen(false);
-    setCurrentDepTask(null);
+    closeDependencyModal();
   };
+  
+  const availableTasksForDependencies = useMemo(() => {
+    if (!currentDepTask) return [];
+    const allTasks: { id: string; name: string; module: string }[] = [];
+    projects.forEach(p => {
+        p.modules.forEach(m => {
+            m.tasks.forEach(t => {
+                if (t.id !== currentDepTask.taskId) {
+                    allTasks.push({ id: t.id, name: t.name, module: m.name });
+                }
+            });
+        });
+    });
+    return allTasks;
+  }, [projects, currentDepTask]);
 
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    e.dataTransfer.setData("text/plain", index.toString());
+  const handleModuleDragStart = (e: React.DragEvent, index: number, projectId: string) => {
+    e.dataTransfer.setData("text/plain", `${projectId},${index}`);
     setDraggedModuleIndex(index);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleModuleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
   };
 
-  const handleDrop = (e: React.DragEvent, projectId: string, index: number) => {
+  const handleModuleDrop = (e: React.DragEvent, index: number, projectId: string) => {
     e.preventDefault();
-    const startIndex = parseInt(e.dataTransfer.getData("text/plain"), 10);
-    if (!isNaN(startIndex) && startIndex !== index) {
+    const [draggedProjectId, startIndexStr] = e.dataTransfer.getData("text/plain").split(',');
+    const startIndex = parseInt(startIndexStr, 10);
+    if (draggedProjectId === projectId && !isNaN(startIndex) && startIndex !== index) {
       onReorderModules(projectId, startIndex, index);
     }
     setDraggedModuleIndex(null);
   };
   
-  const availableTasksForDependencies = useMemo(() => {
-    if (!currentDepTask) return [];
-    const allTasks: {id: string, name: string}[] = [];
-    projects.forEach(p => p.modules.forEach(m => m.tasks.forEach(t => {
-      // A task cannot depend on itself
-      if (t.id !== currentDepTask.taskId) {
-        allTasks.push({ id: t.id, name: t.name });
-      }
-    })));
-    return allTasks;
-  }, [projects, currentDepTask]);
-
+  const currentWeekId = getWeekIdFromDate(new Date());
   const holidayDates = useMemo(() => new Set(holidays.map(h => h.date)), [holidays]);
-  const todayDate = useMemo(() => formatDateForInput(new Date()), []);
 
-  const handleAllocationChange = (
-    pId: string, mId: string, tId: string, aId: string, 
-    col: TimelineColumn,
-    value: string
-  ) => {
-     const parsedValue = parseFloat(value) || 0;
-     const weekId = viewMode === 'day' ? col.parentWeekId! : col.id;
-     const dayDate = viewMode === 'day' ? formatDateForInput(col.date!) : undefined;
-     onUpdateAllocation(pId, mId, tId, aId, weekId, parsedValue, dayDate);
-  };
-  
   return (
-    <div ref={containerRef} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full flex flex-col relative">
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden" ref={containerRef}>
       {/* Toolbar */}
-      <div className="p-2 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between flex-shrink-0">
-         <div className="flex items-center gap-2">
-           <button onClick={onAddProject} className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200"><Folder size={14} className="text-indigo-500"/> Add Project</button>
-           <div className="w-px h-5 bg-slate-200" />
-           <button onClick={onShowHistory} className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200"><History size={14} /> History</button>
-           <button onClick={() => {}} className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200"><Upload size={14} /> Import</button>
-           <button onClick={() => {}} className="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200"><Download size={14} /> Export</button>
-         </div>
-         <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-500">Zoom:</span>
-            <input type="range" min="20" max="100" value={colWidthBase} onChange={e => setColWidthBase(Number(e.target.value))} className="w-24 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"/>
-            <div className="flex items-center bg-white border border-slate-200 rounded-md p-0.5">
-              <button onClick={() => setViewMode('day')} className={`px-2 py-1 text-xs font-medium rounded ${viewMode === 'day' ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}>Day</button>
-              <button onClick={() => setViewMode('week')} className={`px-2 py-1 text-xs font-medium rounded ${viewMode === 'week' ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}>Week</button>
-              <button onClick={() => setViewMode('month')} className={`px-2 py-1 text-xs font-medium rounded ${viewMode === 'month' ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}>Month</button>
-            </div>
-         </div>
-      </div>
-      
-      {/* Main Grid */}
-      <div className="flex-1 overflow-auto custom-scrollbar">
-        {/* Header */}
-        <div className="sticky top-0 z-20 bg-white">
-          <div className="flex text-center text-xs font-semibold text-slate-500 border-b border-slate-200 bg-slate-50/70 select-none">
-            <div style={{ width: `${sidebarWidth}px` }} className="sticky left-0 bg-slate-50/70 border-r border-slate-200 p-2 z-10 flex items-center justify-between">
-                <span>PROJECT STRUCTURE</span>
-                <div onMouseDown={startSidebarResize} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize" />
-            </div>
-            {/* FIX: Merged duplicate style attributes */}
-            <div className="sticky z-10 border-r border-slate-200 p-2 flex items-center justify-between" style={{ width: `${detailsWidth}px`, left: `${sidebarWidth}px`, backgroundColor: '#fafafa' }}>
-                <span>DETAILS</span>
-                <div onMouseDown={startDetailsResize} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize" />
-            </div>
-            {Object.entries(timeline.reduce((acc, col) => ({...acc, [col.groupLabel]: [...(acc[col.groupLabel] || []), col]}), {} as Record<string, TimelineColumn[]>)).map(([group, cols]) => (
-              <div key={group} style={{ width: `${cols.length * colWidth}px` }} className="border-r border-slate-100 flex-shrink-0 p-1">
-                {group}
-              </div>
+      <div className="flex-shrink-0 h-16 bg-white border-b border-slate-200 px-4 flex items-center justify-between z-30">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+            {(['day', 'week', 'month'] as ViewMode[]).map(mode => (
+              <button key={mode} onClick={() => setViewMode(mode)} className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${viewMode === mode ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}>
+                {mode.charAt(0).toUpperCase() + mode.slice(1)}
+              </button>
             ))}
           </div>
-          <div className="flex text-center text-xs font-medium text-slate-400 border-b border-slate-200 shadow-sm">
-            <div style={{ width: `${sidebarWidth}px` }} className="sticky left-0 bg-white border-r border-slate-200 p-2 z-10"></div>
-            {/* FIX: Merged duplicate style attributes */}
-            <div style={{ width: `${detailsWidth}px`, left: `${sidebarWidth}px`, backgroundColor: '#ffffff' }} className="sticky z-10 border-r border-slate-200 p-2"></div>
-            {timeline.map(col => (
-              <div key={col.id} style={{ width: `${colWidth}px` }} className={`border-r border-slate-100 flex-shrink-0 p-1 ${col.type === 'day' && (new Date(col.date!).getDay() === 0 || new Date(col.date!).getDay() === 6) ? 'bg-slate-50' : ''}`}>
-                {col.label}
-              </div>
-            ))}
+           <div className="flex items-center gap-1">
+             <button onClick={() => onExtendTimeline('start')} className="p-2 text-slate-500 hover:bg-slate-100 rounded-md"><ChevronLeft size={16} /></button>
+             <span className="text-xs font-semibold text-slate-600 w-48 text-center">
+                {timeline[0]?.groupLabel} - {timeline[timeline.length - 1]?.groupLabel}
+             </span>
+             <button onClick={() => onExtendTimeline('end')} className="p-2 text-slate-500 hover:bg-slate-100 rounded-md"><ChevronRight size={16} /></button>
           </div>
         </div>
+        <div className="flex items-center gap-3">
+           <button onClick={onShowHistory} className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg"><History size={16} /> History</button>
+           <button onClick={() => {
+              const data = projects.map(p => p.modules.flatMap(m => m.tasks.flatMap(t => t.assignments.flatMap(a => a.allocations.map(al => ({ Project: p.name, Module: m.name, Task: t.name, Role: a.role, Resource: a.resourceName, Week: al.weekId, Days: al.count }))))));
+              const ws = XLSX.utils.json_to_sheet(data.flat());
+              const wb = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb, ws, "Allocations");
+              XLSX.writeFile(wb, "resource-plan.xlsx");
+           }} className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg"><Download size={16} /> Export</button>
+           <button onClick={onAddProject} className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm"><Plus size={16} /> Add Project</button>
+        </div>
+      </div>
 
-        {/* Body */}
-        <div className="text-xs">
-          {projects.map((p, pIndex) => (
-            <React.Fragment key={p.id}>
-              {/* Project Row */}
-              <div className="flex border-b-2 border-slate-200 bg-slate-100/50 font-bold sticky top-[65px] z-10">
-                 <div style={{ width: `${sidebarWidth}px` }} className="sticky left-0 bg-slate-100/50 border-r border-slate-200 p-2 z-10 flex items-center gap-2">
-                    <button onClick={() => toggleProject(p.id)} className="p-0.5 rounded hover:bg-slate-200">{collapsedProjects[p.id] ? <ChevronRight size={14} /> : <ChevronDown size={14}/>}</button>
-                    {editingId === `project-${p.id}` ? (
-                      <InlineInput value={p.name} onSave={(val) => saveEdit(val)} onCancel={cancelEdit} />
-                    ) : (
-                      <span className="truncate" onDoubleClick={() => startEditing(`project-${p.id}`)}>{p.name}</span>
-                    )}
-                 </div>
-                 {/* FIX: Merged duplicate style attributes */}
-                 <div style={{ width: `${detailsWidth}px`, left: `${sidebarWidth}px`, backgroundColor: '#f1f5f9' }} className="sticky flex items-center gap-2 p-2">
-                    <button onClick={() => onAddModule(p.id)} title="Add Module" className="text-slate-400 hover:text-indigo-600"><Plus size={14}/></button>
-                    <button onClick={() => onDeleteProject(p.id)} title="Delete Project" className="text-slate-400 hover:text-red-600"><Trash2 size={14}/></button>
-                 </div>
-                 <div className="flex-1 h-full"></div>
-              </div>
-              {/* Modules */}
-              {!collapsedProjects[p.id] && p.modules.map((m, mIndex) => (
-                 <React.Fragment key={m.id}>
-                    <div 
-                      className="flex border-b border-slate-100" 
-                      draggable onDragStart={(e) => handleDragStart(e, mIndex)} 
-                      onDragOver={handleDragOver} 
-                      onDrop={(e) => handleDrop(e, p.id, mIndex)}
-                      style={{ opacity: draggedModuleIndex === mIndex ? 0.5 : 1}}
-                    >
-                      <div style={{ width: `${sidebarWidth}px` }} className="sticky left-0 bg-white border-r border-slate-200 p-2 z-10 flex items-center gap-2">
-                        <GripVertical size={14} className="text-slate-300 cursor-grab" />
-                        <button onClick={() => toggleModule(m.id)} className="p-0.5 rounded hover:bg-slate-100">{collapsedModules[m.id] ? <ChevronRight size={14} /> : <ChevronDown size={14}/>}</button>
-                        {editingId === `module-${p.id}-${m.id}` ? (
-                            <InlineInput value={m.name} onSave={(val) => saveEdit(val)} onCancel={cancelEdit} />
-                        ) : (
-                           <span className="font-semibold text-slate-700 truncate" onDoubleClick={() => startEditing(`module-${p.id}-${m.id}`)}>{m.name}</span>
-                        )}
-                      </div>
-                      {/* FIX: Merged duplicate style attributes */}
-                      <div style={{ width: `${detailsWidth}px`, left: `${sidebarWidth}px` }} className="sticky flex items-center gap-2 p-2 bg-white">
-                        <button onClick={() => onAddTask(p.id, m.id, `task-${Date.now()}`, 'New Task', Role.DEV)} title="Add Task" className="text-slate-400 hover:text-indigo-600"><Plus size={14}/></button>
-                        <button onClick={() => onDeleteModule(p.id, m.id)} title="Delete Module" className="text-slate-400 hover:text-red-600"><Trash2 size={14}/></button>
-                      </div>
-                      <div className="flex-1 flex h-full">
-                        {timeline.map(col => <div key={col.id} style={{width: `${colWidth}px`}} className="border-r border-slate-100 flex-shrink-0" />)}
-                      </div>
+      <div className="flex-1 flex overflow-auto custom-scrollbar relative">
+        <div className="flex sticky top-0 left-0 z-20">
+            {/* Sidebar */}
+            <div style={{ width: `${sidebarWidth}px` }} className="flex-shrink-0 bg-white border-r border-slate-200 flex flex-col">
+                <div className="h-12 flex-shrink-0 border-b border-slate-100 px-4 flex items-center justify-between bg-slate-50/50">
+                    <div className="flex items-center gap-2">
+                        <Layers className="w-4 h-4 text-slate-500" />
+                        <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Project Structure</h3>
                     </div>
-                    {/* Tasks */}
-                    {!collapsedModules[m.id] && m.tasks.map((t, tIndex) => (
-                      <React.Fragment key={t.id}>
-                        <div className="flex border-b border-slate-100 bg-slate-50/30" id={`task-row-${t.id}`}>
-                          <div style={{ width: `${sidebarWidth}px` }} className="sticky left-0 bg-slate-50/30 border-r border-slate-200 p-2 z-10 flex items-center gap-2">
-                            <span className="pl-8"><button onClick={() => toggleTask(t.id)} className="p-0.5 rounded hover:bg-slate-200">{collapsedTasks[t.id] ? <ChevronRight size={14} /> : <ChevronDown size={14}/>}</button></span>
-                            {editingId === `task-${p.id}-${m.id}-${t.id}` ? (
-                                <InlineInput value={t.name} onSave={(val) => saveEdit(val)} onCancel={cancelEdit} />
-                            ) : (
-                              <span className="text-slate-600 truncate" onDoubleClick={() => startEditing(`task-${p.id}-${m.id}-${t.id}`)}>{t.name}</span>
-                            )}
-                          </div>
-                          {/* FIX: Merged duplicate style attributes */}
-                          <div style={{ width: `${detailsWidth}px`, left: `${sidebarWidth}px` }} className="sticky flex items-center gap-2 p-2 bg-slate-50/30">
-                            <button onClick={() => onAddAssignment(p.id, m.id, t.id, Role.DEV)} title="Add Assignment" className="text-slate-400 hover:text-indigo-600"><UserPlus size={14}/></button>
-                            <button onClick={() => openDependencyModal(p.id, m.id, t.id, t.dependencies || [])} title="Manage Dependencies" className="text-slate-400 hover:text-indigo-600"><Link size={14}/></button>
-                            <button onClick={() => onDeleteTask(p.id, m.id, t.id)} title="Delete Task" className="text-slate-400 hover:text-red-600"><Trash2 size={14}/></button>
-                          </div>
-                          <div className="flex-1 flex h-full">
-                            {timeline.map(col => <div key={col.id} style={{width: `${colWidth}px`}} className="border-r border-slate-100 flex-shrink-0" />)}
-                          </div>
-                        </div>
-                        {/* Assignments */}
-                        {!collapsedTasks[t.id] && t.assignments.map((a, aIndex) => (
-                          <div key={a.id} className="flex border-b border-slate-100 hover:bg-sky-50/20">
-                            <div style={{ width: `${sidebarWidth}px` }} className="sticky left-0 bg-white hover:bg-sky-50/20 border-r border-slate-200 p-2 z-10 flex items-center gap-2">
-                              <span className="pl-14"></span>
-                               {editingId === `resource-${p.id}-${m.id}-${t.id}-${a.id}` ? (
-                                  <InlineInput value={a.resourceName || ''} onSave={(val) => saveEdit(val)} onCancel={cancelEdit} />
-                               ) : (
-                                 <span className="text-slate-500 truncate" onDoubleClick={() => startEditing(`resource-${p.id}-${m.id}-${t.id}-${a.id}`)}>{a.resourceName}</span>
-                               )}
-                            </div>
-                            {/* FIX: Merged duplicate style attributes */}
-                            <div style={{ width: `${detailsWidth}px`, left: `${sidebarWidth}px` }} className="sticky flex items-center gap-2 p-2 bg-white hover:bg-sky-50/20">
-                               <select value={a.role} onChange={e => onUpdateAssignmentRole(p.id, m.id, t.id, a.id, e.target.value as Role)} className="text-xs p-0.5 border border-transparent hover:border-slate-200 rounded bg-transparent">
-                                 {Object.values(Role).map(r => <option key={r} value={r}>{r}</option>)}
-                               </select>
-                               <button onClick={() => onDeleteAssignment(p.id, m.id, t.id, a.id)} title="Delete Assignment" className="text-slate-300 hover:text-red-600"><Trash2 size={12}/></button>
-                            </div>
-                            <div className="flex-1 flex h-full">
-                               {timeline.map(col => {
-                                 const allocation = a.allocations.find(al => al.weekId === (col.parentWeekId || col.id));
-                                 const dayDate = viewMode === 'day' ? formatDateForInput(col.date!) : undefined;
-                                 
-                                 const value = viewMode === 'day' 
-                                   ? (allocation?.days?.[dayDate!] ?? 0)
-                                   : (allocation?.count ?? 0);
-
-                                 const isCurrent = viewMode === 'day' && dayDate === todayDate;
-                                 const isHoliday = viewMode === 'day' && holidayDates.has(dayDate!);
-
-                                 return (
-                                    <AllocationCell 
-                                      key={col.id}
-                                      value={value}
-                                      onChange={(val) => handleAllocationChange(p.id, m.id, t.id, a.id, col, val)}
-                                      disabled={viewMode === 'month'}
-                                      isHoliday={isHoliday}
-                                      isCurrent={isCurrent}
-                                      width={colWidth}
-                                    />
-                                  );
-                               })}
-                            </div>
-                          </div>
-                        ))}
-                      </React.Fragment>
-                    ))}
-                 </React.Fragment>
-              ))}
-            </React.Fragment>
-          ))}
+                </div>
+            </div>
+            {/* Resizer */}
+            <div onMouseDown={startSidebarResize} className="w-1.5 h-full cursor-col-resize bg-slate-100 hover:bg-indigo-200 transition-colors flex-shrink-0"></div>
+            {/* Details */}
+             <div style={{ width: `${detailsWidth}px` }} className="flex-shrink-0 bg-white border-r border-slate-200 flex flex-col">
+                <div className="h-12 flex-shrink-0 border-b border-slate-100 px-2 grid grid-cols-2 bg-slate-50/50">
+                    <div className="flex items-center"><h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Role</h3></div>
+                    <div className="flex items-center"><h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Resource</h3></div>
+                </div>
+            </div>
+            {/* Resizer */}
+            <div onMouseDown={startDetailsResize} className="w-1.5 h-full cursor-col-resize bg-slate-100 hover:bg-indigo-200 transition-colors flex-shrink-0"></div>
         </div>
         
-        {/* Timeline Extend Triggers */}
-        <div className="h-8 flex items-center justify-between px-4">
-            <button onClick={() => onExtendTimeline('start')} className="text-xs text-indigo-600 hover:underline">Load Previous</button>
-            <button onClick={() => onExtendTimeline('end')} className="text-xs text-indigo-600 hover:underline">Load More</button>
+        <div className="absolute top-0 left-0 w-full h-full">
+            <div style={{ paddingLeft: `${sidebarWidth + detailsWidth + 6}px`}} className="h-full">
+                {/* Timeline Header */}
+                <div className="sticky top-0 bg-slate-50 z-10 border-b border-slate-200 shadow-sm">
+                    <div className="flex relative h-6 border-b border-slate-100">
+                        {timeline.filter(c => c.type !== 'day').map(c => <div key={c.id} style={{width: `${(c.weekIds?.length || 1) * (viewMode === 'day' ? colWidth * 5 : colWidth)}px`}} className="flex-shrink-0 text-center text-xs font-bold text-slate-600 border-r border-slate-200">{c.groupLabel}</div>)}
+                    </div>
+                    <div className="flex relative h-6">
+                        {timeline.map(c => <div key={c.id} style={{width: `${colWidth}px`}} className="flex-shrink-0 text-center text-xs font-medium text-slate-500 border-r border-slate-200">{c.label}</div>)}
+                    </div>
+                </div>
+
+                {/* Main Content */}
+                <div className="relative">
+                    {projects.map(p => (
+                        <div key={p.id}>
+                            <div className="h-10 flex items-center bg-slate-100/30 border-b border-slate-100"></div>
+                            {!collapsedProjects[p.id] && p.modules.map((m, moduleIndex) => (
+                                <div key={m.id}>
+                                    <div className="h-8 flex items-center bg-white border-b border-slate-100"></div>
+                                    {!collapsedModules[m.id] && m.tasks.map(t => (
+                                        <div key={t.id}>
+                                            <div id={`task-row-${t.id}`} className="h-8 flex items-center bg-slate-50/50 border-b border-slate-100"></div>
+                                            {!collapsedTasks[t.id] && t.assignments.map(a => (
+                                                <div key={a.id} className="h-8 flex items-center border-b border-slate-100 bg-white hover:bg-slate-50/50">
+                                                    {timeline.map(col => {
+                                                        const alloc = a.allocations.find(al => viewMode === 'day' ? col.parentWeekId === al.weekId : col.id === al.weekId);
+                                                        const value = viewMode === 'day' && col.date && alloc?.days ? (alloc.days[formatDateForInput(col.date)] || 0) : (alloc?.count || 0);
+                                                        return <AllocationCell key={col.id} width={colWidth} value={value} disabled={viewMode === 'week' || viewMode === 'month'} isCurrent={col.parentWeekId === currentWeekId || col.id === currentWeekId} isHoliday={col.date ? holidayDates.has(formatDateForInput(col.date)) : false} onChange={(val) => onUpdateAllocation(p.id, m.id, t.id, a.id, viewMode === 'day' ? col.parentWeekId! : col.id, parseFloat(val) || 0, viewMode === 'day' ? formatDateForInput(col.date!) : undefined)} />
+                                                    })}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ))}
+                                </div>
+                            ))}
+                        </div>
+                    ))}
+                     <svg className="absolute top-0 left-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
+                        <defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4f46e5" /></marker></defs>
+                        {dependencyLines.map((line, i) => <path key={i} d={`M ${line.x1} ${line.y1} L ${line.x1 + 10} ${line.y1} L ${line.x1 + 10} ${line.y2} L ${line.x2} ${line.y2}`} stroke="#4f46e5" strokeWidth="1.5" fill="none" markerEnd="url(#arrow)" />)}
+                    </svg>
+                </div>
+            </div>
         </div>
-
-        {/* Dependency Lines SVG */}
-        <svg className="absolute top-0 left-0 w-full h-full pointer-events-none" style={{ zIndex: 5 }}>
-          {dependencyLines.map((line, i) => (
-             <path 
-               key={i} 
-               d={`M ${line.x1} ${line.y1} C ${line.x1 + 30} ${line.y1}, ${line.x2 - 30} ${line.y2}, ${line.x2} ${line.y2}`}
-               stroke="#4f46e5" 
-               strokeWidth="1.5"
-               fill="none" 
-               markerEnd="url(#arrow)"
-             />
-          ))}
-          <defs>
-            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-              <path d="M 0 0 L 10 5 L 0 10 z" fill="#4f46e5" />
-            </marker>
-          </defs>
-        </svg>
-
+        
+        <div className="absolute top-0 left-0 h-full overflow-y-scroll custom-scrollbar" style={{ width: `${sidebarWidth + detailsWidth + 6}px`, zIndex: 5 }}>
+            <div className="h-12 sticky top-0 bg-transparent pointer-events-none"></div>
+             {projects.map(p => (
+                <div key={p.id}>
+                    <div className="h-10 flex items-center bg-slate-100 border-b border-slate-200">
+                        <div style={{width: `${sidebarWidth}px`}} className="flex items-center px-2 gap-2">
+                            <button onClick={() => toggleProject(p.id)} className="p-1 hover:bg-slate-200 rounded">{collapsedProjects[p.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
+                            {editingId === `project-${p.id}` ? <InlineInput value={p.name} onSave={(v) => saveEdit(v)} onCancel={cancelEdit} /> : <span className="font-bold text-sm text-slate-800 truncate" onDoubleClick={() => startEditing(`project-${p.id}`)}>{p.name}</span>}
+                        </div>
+                    </div>
+                    {!collapsedProjects[p.id] && p.modules.map((m, moduleIndex) => (
+                        <div key={m.id} draggable onDragStart={(e) => handleModuleDragStart(e, moduleIndex, p.id)} onDragOver={handleModuleDragOver} onDrop={(e) => handleModuleDrop(e, moduleIndex, p.id)} className={`${draggedModuleIndex === moduleIndex ? 'opacity-50' : ''}`}>
+                             <div className="h-8 flex items-center bg-white border-b border-slate-100 hover:bg-slate-50">
+                                <div style={{width: `${sidebarWidth}px`}} className="flex items-center px-2 gap-2 pl-6">
+                                    <button onClick={() => toggleModule(m.id)} className="p-1 hover:bg-slate-200 rounded">{collapsedModules[m.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
+                                    <GripVertical size={12} className="text-slate-300 cursor-grab" />
+                                    {editingId === `module-${p.id}-${m.id}` ? <InlineInput value={m.name} onSave={(v) => saveEdit(v)} onCancel={cancelEdit} /> : <span className="font-semibold text-xs text-slate-700 truncate" onDoubleClick={() => startEditing(`module-${p.id}-${m.id}`)}>{m.name}</span>}
+                                </div>
+                            </div>
+                            {!collapsedModules[m.id] && m.tasks.map(t => (
+                                <div key={t.id}>
+                                    <div className="h-8 flex items-center bg-slate-50/50 border-b border-slate-100 hover:bg-slate-100/70">
+                                       <div style={{width: `${sidebarWidth}px`}} className="flex items-center px-2 gap-2 pl-12">
+                                          <button onClick={() => toggleTask(t.id)} className="p-1 hover:bg-slate-200 rounded">{collapsedTasks[t.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
+                                          {editingId === `task-${p.id}-${m.id}-${t.id}` ? <InlineInput value={t.name} onSave={(v) => saveEdit(v)} onCancel={cancelEdit} /> : <span className="text-xs text-slate-600 truncate" onDoubleClick={() => startEditing(`task-${p.id}-${m.id}-${t.id}`)}>{t.name}</span>}
+                                          <button onClick={() => openDependencyModal(p.id, m.id, t.id, t.dependencies || [])} className="ml-auto text-slate-400 hover:text-indigo-600 p-0.5 rounded"><Link size={12} /></button>
+                                          <button onClick={() => onAddAssignment(p.id, m.id, t.id, Role.DEV)} className="ml-1 text-slate-400 hover:text-indigo-600 p-0.5 rounded"><UserPlus size={12} /></button>
+                                       </div>
+                                    </div>
+                                    {!collapsedTasks[t.id] && t.assignments.map(a => (
+                                        <div key={a.id} className="h-8 flex items-center border-b border-slate-100 bg-white hover:bg-slate-50/50">
+                                             <div style={{width: `${sidebarWidth}px`}} className="pl-16 pr-2"></div>
+                                             <div style={{width: `${detailsWidth}px`}} className="grid grid-cols-2 text-xs px-2 h-full">
+                                                <div className="border-r border-slate-100 h-full flex items-center pr-1">
+                                                    <select value={a.role} onChange={(e) => onUpdateAssignmentRole(p.id, m.id, t.id, a.id, e.target.value as Role)} className="w-full bg-transparent focus:outline-none focus:bg-white text-xs">
+                                                        {Object.values(Role).map(r => <option key={r} value={r}>{r}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div className="h-full flex items-center pl-1">
+                                                   {editingId === `resource-${p.id}-${m.id}-${t.id}-${a.id}` ? <InlineInput value={a.resourceName || ''} onSave={(v) => saveEdit(v)} onCancel={cancelEdit} /> : <span className="truncate" onDoubleClick={(e) => startEditing(`resource-${p.id}-${m.id}-${t.id}-${a.id}`, e)}>{a.resourceName || 'Unassigned'}</span>}
+                                                </div>
+                                             </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ))}
+                        </div>
+                    ))}
+                </div>
+            ))}
+        </div>
       </div>
-      
-      {depModalOpen && (
-        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => setDepModalOpen(false)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
-            <header className="p-4 border-b border-slate-200">
-              <h3 className="font-bold text-slate-800">Manage Dependencies for: {currentDepTask?.taskId}</h3>
-            </header>
-            <main className="p-6 max-h-96 overflow-y-auto">
-              <div className="grid grid-cols-2 gap-2">
-                {availableTasksForDependencies.map(task => (
-                  <label key={task.id} className="flex items-center gap-2 p-2 border rounded-md hover:bg-slate-50 cursor-pointer">
-                    <input type="checkbox" checked={selectedDeps.includes(task.id)} onChange={() => handleDepChange(task.id)} className="accent-indigo-600"/>
-                    <span className="text-sm text-slate-700">{task.name}</span>
-                  </label>
-                ))}
-              </div>
-            </main>
-            <footer className="p-4 bg-slate-50 border-t flex justify-end gap-3">
-              <button onClick={() => setDepModalOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border rounded-lg hover:bg-slate-50">Cancel</button>
-              <button onClick={saveDependencies} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">Save Dependencies</button>
-            </footer>
-          </div>
-        </div>
-      )}
+       {depModalOpen && currentDepTask && (
+            <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={closeDependencyModal}>
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+                    <header className="p-4 border-b border-slate-200"><h2 className="font-bold text-slate-800">Set Dependencies</h2><p className="text-sm text-slate-500">Select tasks that must be completed before this one can start.</p></header>
+                    <main className="p-6 max-h-[60vh] overflow-y-auto">
+                        <ul className="space-y-2">
+                           {availableTasksForDependencies.map(task => (
+                               <li key={task.id}><label className="flex items-center gap-3 p-3 rounded-lg border hover:bg-slate-50 cursor-pointer">
+                                   <input type="checkbox" checked={selectedDeps.includes(task.id)} onChange={() => { setSelectedDeps(prev => prev.includes(task.id) ? prev.filter(id => id !== task.id) : [...prev, task.id])}} className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"/>
+                                   <div><span className="font-medium text-slate-700">{task.name}</span><span className="text-xs text-slate-400 ml-2">({task.module})</span></div>
+                               </label></li>
+                           ))}
+                        </ul>
+                    </main>
+                    <footer className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                        <button onClick={closeDependencyModal} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">Cancel</button>
+                        <button onClick={saveDependencies} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm">Save Dependencies</button>
+                    </footer>
+                </div>
+            </div>
+        )}
     </div>
   );
 };

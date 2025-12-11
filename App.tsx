@@ -56,45 +56,28 @@ const App: React.FC = () => {
   
   const [timelineStart, setTimelineStart] = useState<WeekPoint>(DEFAULT_START);
   const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
-  const initialTimelineSetRef = useRef(false);
+  
+  const saveQueueRef = useRef(new Map());
+  const debounceTimeoutRef = useRef<number | null>(null);
 
-  // --- Auto-save optimization ---
-  const allocationUpdateQueue = useRef<any[]>([]);
-  const saveTimeout = useRef<number | null>(null);
-
-  const saveQueuedAllocations = useCallback(async () => {
-    if (allocationUpdateQueue.current.length === 0 || !session) return;
-
-    const updates = [...allocationUpdateQueue.current];
-    allocationUpdateQueue.current = [];
-
-    const upsertDataMap = new Map<string, any>();
-    updates.forEach(update => {
-        const key = `${update.assignment_id}-${update.week_id}`;
-        upsertDataMap.set(key, update);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
     });
 
-    const upsertData = Array.from(upsertDataMap.values());
-    
-    const { error } = await supabase.from('resource_allocations').upsert(upsertData);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
 
-    if (error) {
-        console.error("Failed to save allocations:", error);
-        alert("Error: Could not save some changes. Please refresh to see the latest saved state.");
-    }
-  }, [session]);
-
-  const debouncedSave = useCallback(() => {
-    if (saveTimeout.current) {
-        clearTimeout(saveTimeout.current);
-    }
-    saveTimeout.current = window.setTimeout(saveQueuedAllocations, 1500);
-  }, [saveQueuedAllocations]);
+    return () => subscription.unsubscribe();
+  }, []);
 
   const fetchData = useCallback(async () => {
     if (!session) return;
     setLoading(true);
     
+    // Fetch projects and related data
     const { data: projectsData, error: projectsError } = await supabase
       .from('projects')
       .select(`
@@ -112,41 +95,26 @@ const App: React.FC = () => {
       `)
       .order('created_at', { ascending: true });
 
-    const { data: holidaysData, error: holidaysError } = await supabase.from('holidays').select('*');
+    // Fetch holidays
+    const { data: holidaysData, error: holidaysError } = await supabase
+      .from('holidays')
+      .select('*');
 
     if (projectsError) console.error('Error fetching projects:', projectsError);
     if (holidaysError) console.error('Error fetching holidays:', holidaysError);
 
     if (projectsData) {
       const formattedProjects = structureProjectsData(projectsData);
-      
       if (formattedProjects.length === 0) {
-         const { data, error } = await supabase.from('projects').insert({ name: 'My First Project', user_id: session.user.id }).select().single();
-         if (data && !error) setProjects([{ id: data.id, name: data.name, modules: [] }]);
-         else console.error("Error creating default project:", error);
+         // Create default project if none exist
+         const { data, error } = await supabase.from('projects').insert({ name: 'My First Project', user_id: session!.user.id }).select().single();
+         if (data && !error) {
+             setProjects([{ id: data.id, name: data.name, modules: [] }]);
+         } else {
+             console.error("Error creating default project:", error);
+         }
       } else {
           setProjects(formattedProjects);
-      }
-      
-      // Auto-adjust timeline on first load
-      if (!initialTimelineSetRef.current) {
-        let earliestWeekId: string | null = null;
-        formattedProjects.forEach(p => p.modules.forEach(m => m.tasks.forEach(t => {
-          if (t.startWeekId && (!earliestWeekId || t.startWeekId < earliestWeekId)) {
-            earliestWeekId = t.startWeekId;
-          }
-        })));
-
-        const todayWeekId = getWeekIdFromDate(new Date());
-        let finalStartWeekId = todayWeekId;
-
-        if (earliestWeekId && earliestWeekId < todayWeekId) {
-          finalStartWeekId = earliestWeekId;
-        }
-
-        const [year, week] = finalStartWeekId.split('-').map(Number);
-        setTimelineStart(addWeeksToPoint({ year, week }, -2));
-        initialTimelineSetRef.current = true;
       }
     }
     if (holidaysData) {
@@ -157,22 +125,32 @@ const App: React.FC = () => {
   }, [session]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
     if (session) {
       fetchData();
-    } else {
-      setLoading(false);
+    }
+  }, [session, fetchData]);
+
+  const commitAllocationSaves = useCallback(async () => {
+    if (!session || saveQueueRef.current.size === 0) return;
+
+    const updates = Array.from(saveQueueRef.current.values());
+    saveQueueRef.current.clear();
+    
+    const upsertData = updates.map(item => ({
+        id: item.existingAllocId,
+        assignment_id: item.assignmentId,
+        user_id: session.user.id,
+        week_id: item.weekId,
+        count: item.allocation.count,
+        days: item.allocation.days
+    }));
+
+    const { error } = await supabase.from('resource_allocations').upsert(upsertData);
+
+    if (error) {
+        console.error("Failed to save allocations:", error);
+        alert("Error: Some changes could not be saved. Re-syncing data.");
+        fetchData();
     }
   }, [session, fetchData]);
 
@@ -181,90 +159,95 @@ const App: React.FC = () => {
     else setTimelineEnd(prev => addWeeksToPoint(prev, 4));
   };
   
-  const updateAllocation = useCallback((projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number, dayDate?: string) => {
-    let allocationToUpdate: any = null;
-    
-    const updatedProjects = projects.map(p => {
-      if (p.id !== projectId) return p;
-      return { ...p, modules: p.modules.map(m => {
-        if (m.id !== moduleId) return m;
-        return { ...m, tasks: m.tasks.map(t => {
-          if (t.id !== taskId) return t;
-          return { ...t, assignments: t.assignments.map(a => {
-            if (a.id !== assignmentId) return a;
-            
-            const newAllocations = [...a.allocations];
-            const allocIndex = newAllocations.findIndex(al => al.weekId === weekId);
-            
-            if (allocIndex > -1) {
-              const alloc = { ...newAllocations[allocIndex] };
-              if (dayDate) {
-                const newDays = { ...(alloc.days || {}) };
-                 if ((!alloc.days || Object.keys(alloc.days).length === 0) && alloc.count > 0) {
-                  const weekdays = getWeekdaysForWeekId(weekId);
-                  weekdays.forEach(d => newDays[d] = alloc.count / 5);
+  const updateAllocation = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number, dayDate?: string) => {
+    // Optimistic update
+    const { updatedProjects, allocationToUpdate } = (() => {
+      let allocationToUpdate: any = null;
+      const updatedProjects = projects.map(p => {
+        if (p.id !== projectId) return p;
+        return { ...p, modules: p.modules.map(m => {
+          if (m.id !== moduleId) return m;
+          return { ...m, tasks: m.tasks.map(t => {
+            if (t.id !== taskId) return t;
+            return { ...t, assignments: t.assignments.map(a => {
+              if (a.id !== assignmentId) return a;
+              
+              const newAllocations = [...a.allocations];
+              const allocIndex = newAllocations.findIndex(al => al.weekId === weekId);
+              
+              if (allocIndex > -1) {
+                const alloc = { ...newAllocations[allocIndex] };
+                if (dayDate) {
+                  const newDays = { ...(alloc.days || {}) };
+                   if ((!alloc.days || Object.keys(alloc.days).length === 0) && alloc.count > 0) {
+                    const weekdays = getWeekdaysForWeekId(weekId);
+                    weekdays.forEach(d => newDays[d] = alloc.count / 5);
+                  }
+                  newDays[dayDate] = value;
+                  alloc.days = newDays;
+                  alloc.count = Object.values(newDays).reduce((sum: number, v: number) => sum + v, 0);
+                } else {
+                  alloc.count = value;
+                  alloc.days = {};
                 }
-                newDays[dayDate] = value;
-                alloc.days = newDays;
-                alloc.count = Object.values(newDays).reduce((sum: number, v: number) => sum + v, 0);
-              } else {
-                alloc.count = value;
-                alloc.days = {};
+                newAllocations[allocIndex] = alloc;
+                allocationToUpdate = alloc;
+              } else if (value > 0) {
+                const newAlloc: ResourceAllocation = { weekId, count: value, days: {} };
+                 if(dayDate) {
+                   const weekdays = getWeekdaysForWeekId(weekId);
+                   const days = weekdays.reduce((acc, day) => ({...acc, [day]: 0}), {} as Record<string, number>);
+                   days[dayDate] = value;
+                   newAlloc.days = days;
+                 }
+                newAllocations.push(newAlloc);
+                allocationToUpdate = newAlloc;
               }
-              newAllocations[allocIndex] = alloc;
-              allocationToUpdate = alloc;
-            } else if (value > 0) {
-              const newAlloc = { weekId, count: value, days: {} } as ResourceAllocation;
-               if(dayDate) {
-                 const weekdays = getWeekdaysForWeekId(weekId);
-                 const days = weekdays.reduce((acc, day) => ({...acc, [day]: 0}), {} as Record<string, number>);
-                 days[dayDate] = value;
-                 newAlloc.days = days;
-               }
-              newAllocations.push(newAlloc);
-              allocationToUpdate = newAlloc;
-            }
-            return { ...a, allocations: newAllocations };
+              return { ...a, allocations: newAllocations };
+            })};
           })};
         })};
-      })};
-    });
+      });
+      return { updatedProjects, allocationToUpdate };
+    })();
     setProjects(updatedProjects);
 
-    if (allocationToUpdate && session) {
-        supabase
+    // DB update queue
+    if (allocationToUpdate) {
+        const { data: existingAlloc } = await supabase
             .from('resource_allocations')
             .select('id')
             .eq('assignment_id', assignmentId)
             .eq('week_id', weekId)
-            .maybeSingle()
-            .then(({ data: existingAlloc }) => {
-                const dataForQueue = {
-                    id: existingAlloc?.id,
-                    assignment_id: assignmentId,
-                    user_id: session.user.id,
-                    week_id: weekId,
-                    count: allocationToUpdate.count,
-                    days: allocationToUpdate.days
-                };
-                allocationUpdateQueue.current.push(dataForQueue);
-                debouncedSave();
-            });
-    }
-  }, [projects, session, debouncedSave]);
+            .maybeSingle();
 
-  const addProject = useCallback(async () => {
-    if (!session) return;
-    const { data, error } = await supabase.from('projects').insert({ name: `New Project ${projects.length + 1}`, user_id: session.user.id }).select().single();
+        const queueKey = `${assignmentId}-${weekId}`;
+        saveQueueRef.current.set(queueKey, {
+            existingAllocId: existingAlloc?.id,
+            assignmentId,
+            weekId,
+            allocation: allocationToUpdate,
+        });
+
+        if (debounceTimeoutRef.current) {
+            clearTimeout(debounceTimeoutRef.current);
+        }
+        debounceTimeoutRef.current = window.setTimeout(commitAllocationSaves, 2000);
+    }
+  };
+
+  const addProject = async () => {
+    const { data, error } = await supabase.from('projects').insert({ name: `New Project ${projects.length + 1}`, user_id: session!.user.id }).select().single();
     if (error) {
         console.error("Error adding project:", error);
         alert("Could not create project.");
-    } else {
+    }
+    else {
         setProjects(prev => [...prev, { id: data.id, name: data.name, modules: [] }]);
     }
-  }, [projects.length, session]);
+  };
   
-  const deleteProject = useCallback(async (projectId: string) => {
+  const deleteProject = async (projectId: string) => {
     const previousState = projects;
     setProjects(prev => prev.filter(p => p.id !== projectId));
     const { error } = await supabase.from('projects').delete().eq('id', projectId);
@@ -273,9 +256,9 @@ const App: React.FC = () => {
         setProjects(previousState);
         alert("Failed to delete project.");
     }
-  }, [projects]);
+  };
   
-  const updateProjectName = useCallback(async (projectId: string, name: string) => {
+  const updateProjectName = async (projectId: string, name: string) => {
     const previousState = projects;
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, name } : p));
     const { error } = await supabase.from('projects').update({ name }).eq('id', projectId);
@@ -284,9 +267,9 @@ const App: React.FC = () => {
         setProjects(previousState);
         alert("Failed to update project name.");
     }
-  }, [projects]);
+  };
   
-  const updateModuleName = useCallback(async (projectId: string, moduleId: string, name: string) => {
+  const updateModuleName = async (projectId: string, moduleId: string, name: string) => {
      const previousState = projects;
      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? {...m, name} : m) } : p));
      const { error } = await supabase.from('modules').update({ name }).eq('id', moduleId);
@@ -295,9 +278,9 @@ const App: React.FC = () => {
         setProjects(previousState);
         alert("Failed to update module name.");
      }
-  }, [projects]);
+  };
   
-  const updateTaskName = useCallback(async (projectId: string, moduleId: string, taskId: string, name: string) => {
+  const updateTaskName = async (projectId: string, moduleId: string, taskId: string, name: string) => {
     const previousState = projects;
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? {...t, name} : t) } : m) } : p));
     const { error } = await supabase.from('tasks').update({ name }).eq('id', taskId);
@@ -306,33 +289,50 @@ const App: React.FC = () => {
         setProjects(previousState);
         alert("Failed to update task name.");
     }
-  }, [projects]);
-  
-  const updateAssignmentResourceName = useCallback(async (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => {
+  };
+
+  const updateAssignmentResourceName = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => {
     const previousState = projects;
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? {...t, assignments: t.assignments.map(a => a.id === assignmentId ? {...a, resourceName: name} : a)} : t)} : m) } : p));
+    setProjects(prev => prev.map(p => {
+      if (p.id !== projectId) return p;
+      return { ...p, modules: p.modules.map(m => {
+        if (m.id !== moduleId) return m;
+        return { ...m, tasks: m.tasks.map(t => {
+          if (t.id !== taskId) return t;
+          return { ...t, assignments: t.assignments.map(a => a.id === assignmentId ? { ...a, resourceName: name } : a)};
+        })};
+      })};
+    }));
     const { error } = await supabase.from('task_assignments').update({ resource_name: name }).eq('id', assignmentId);
     if (error) {
-        console.error(error);
-        setProjects(previousState);
-        alert("Failed to update resource name.");
+      console.error(error);
+      setProjects(previousState);
+      alert("Failed to update resource name.");
     }
-  }, [projects]);
+  };
 
-  const updateAssignmentRole = useCallback(async (projectId: string, moduleId: string, taskId: string, assignmentId: string, role: Role) => {
+  const updateAssignmentRole = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, role: Role) => {
     const previousState = projects;
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? {...t, assignments: t.assignments.map(a => a.id === assignmentId ? {...a, role} : a)} : t)} : m) } : p));
+    setProjects(prev => prev.map(p => {
+      if (p.id !== projectId) return p;
+      return { ...p, modules: p.modules.map(m => {
+        if (m.id !== moduleId) return m;
+        return { ...m, tasks: m.tasks.map(t => {
+          if (t.id !== taskId) return t;
+          return { ...t, assignments: t.assignments.map(a => a.id === assignmentId ? { ...a, role } : a)};
+        })};
+      })};
+    }));
     const { error } = await supabase.from('task_assignments').update({ role }).eq('id', assignmentId);
     if (error) {
-        console.error(error);
-        setProjects(previousState);
-        alert("Failed to update role.");
+      console.error(error);
+      setProjects(previousState);
+      alert("Failed to update assignment role.");
     }
-  }, [projects]);
-
-  const addModule = useCallback(async (projectId: string) => {
-    if (!session) return;
-    const { data, error } = await supabase.from('modules').insert({ name: 'New Module', project_id: projectId, user_id: session.user.id }).select().single();
+  };
+  
+  const addModule = async (projectId: string) => {
+    const { data, error } = await supabase.from('modules').insert({ name: 'New Module', project_id: projectId, user_id: session!.user.id }).select().single();
     if (error) {
         console.error(error);
         alert("Failed to add module.");
@@ -340,9 +340,9 @@ const App: React.FC = () => {
     else {
         setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: [...p.modules, { id: data.id, name: data.name, legacyFunctionPoints: 0, functionPoints: 0, tasks: [] }] } : p));
     }
-  }, [session]);
+  };
   
-  const deleteModule = useCallback(async (projectId: string, moduleId: string) => {
+  const deleteModule = async (projectId: string, moduleId: string) => {
     const previousState = projects;
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.filter(m => m.id !== moduleId) } : p));
     const { error } = await supabase.from('modules').delete().eq('id', moduleId);
@@ -351,20 +351,19 @@ const App: React.FC = () => {
         setProjects(previousState);
         alert("Failed to delete module.");
     }
-  }, [projects]);
+  };
   
-  const addTask = useCallback(async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
-    if (!session) return;
-    const { data: taskData, error: taskError } = await supabase.from('tasks').insert({ id: taskId, name: taskName, module_id: moduleId, user_id: session.user.id }).select().single();
+  const addTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
+    const { data: taskData, error: taskError } = await supabase.from('tasks').insert({ id: taskId, name: taskName, module_id: moduleId, user_id: session!.user.id }).select().single();
     if (taskError) { console.error(taskError); alert("Failed to add task."); return; }
     
-    const { data: assignData, error: assignError } = await supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session.user.id }).select().single();
+    const { data: assignData, error: assignError } = await supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
     if (assignError) { console.error(assignError); return; }
 
     fetchData(); 
-  }, [session, fetchData]);
+  };
   
-  const deleteTask = useCallback(async (projectId: string, moduleId: string, taskId: string) => {
+  const deleteTask = async (projectId: string, moduleId: string, taskId: string) => {
     const previousState = projects;
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? {...m, tasks: m.tasks.filter(t => t.id !== taskId)} : m) } : p));
     const { error } = await supabase.from('tasks').delete().eq('id', taskId);
@@ -373,16 +372,15 @@ const App: React.FC = () => {
         setProjects(previousState);
         alert("Failed to delete task.");
     }
-  }, [projects]);
+  };
   
-  const addAssignment = useCallback(async (projectId: string, moduleId: string, taskId: string, role: Role) => {
-    if (!session) return;
-    const { data, error } = await supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session.user.id }).select().single();
+  const addAssignment = async (projectId: string, moduleId: string, taskId: string, role: Role) => {
+    const { data, error } = await supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
     if (error) console.error(error);
     else fetchData();
-  }, [session, fetchData]);
+  };
   
-  const deleteAssignment = useCallback(async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
+  const deleteAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
      const previousState = projects;
      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? {...t, assignments: t.assignments.filter(a => a.id !== assignmentId) } : t)} : m) } : p));
      const { error } = await supabase.from('task_assignments').delete().eq('id', assignmentId);
@@ -391,9 +389,9 @@ const App: React.FC = () => {
          setProjects(previousState);
          alert("Failed to delete assignment.");
      }
-  }, [projects]);
+  };
 
-  const updateFunctionPoints = useCallback(async (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => {
+  const updateFunctionPoints = async (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => {
      const previousState = projects;
      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? {...m, legacyFunctionPoints: legacyFp, functionPoints: mvpFp} : m) } : p));
      const { error } = await supabase.from('modules').update({ legacy_function_points: legacyFp, function_points: mvpFp }).eq('id', moduleId);
@@ -402,9 +400,9 @@ const App: React.FC = () => {
         setProjects(previousState);
         alert("Failed to update function points.");
      }
-  }, [projects]);
+  };
   
-  const reorderModules = useCallback(async (projectId: string, startIndex: number, endIndex: number) => {
+  const reorderModules = async (projectId: string, startIndex: number, endIndex: number) => {
     const project = projects.find(p => p.id === projectId);
     if (!project) return;
     const previousState = projects;
@@ -414,6 +412,7 @@ const App: React.FC = () => {
     
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: reordered } : p));
     
+    // Update sort_order in DB
     const updates = reordered.map((module, index) => 
       supabase.from('modules').update({ sort_order: index }).eq('id', module.id)
     );
@@ -424,8 +423,9 @@ const App: React.FC = () => {
         setProjects(previousState);
         alert("Failed to reorder modules.");
     }
-  }, [projects]);
-  
+  };
+
+  // Helper to recalculate dependency chains (Gantt logic)
   const recalculateAndSaveDependencyChain = async (
     currentProjects: Project[],
     projectId: string,
@@ -434,9 +434,11 @@ const App: React.FC = () => {
     newStartWeekId: string, 
     newDuration: number
   ) => {
+    // 1. Update the starting task locally
     let updatedProjects = JSON.parse(JSON.stringify(currentProjects));
     const tasksToUpdate: { id: string, startWeekId: string }[] = [];
     
+    // Recursive function to update dependents
     const updateDependentTasks = (pId: string, mId: string, tId: string, sWeekId: string, dur: number) => {
        const taskEndWeekDate = new Date(getDateFromWeek(
           parseInt(sWeekId.split('-')[0]),
@@ -445,14 +447,23 @@ const App: React.FC = () => {
        taskEndWeekDate.setDate(taskEndWeekDate.getDate() + (dur * 7));
        const finishWeekId = getWeekIdFromDate(taskEndWeekDate);
 
+       // Find all tasks that depend on tId
        updatedProjects.forEach((p: Project) => {
           p.modules.forEach((m: ProjectModule) => {
              m.tasks.forEach((t: ProjectTask) => {
                 if (t.dependencies && t.dependencies.includes(tId)) {
+                   // This task 't' depends on the modified task
+                   // Start date must be > finishWeekId
+                   // Simplified: Start date = Finish Week of predecessor
+                   
+                   // Check if we need to move it forward
+                   // We only move forward, typically, to respect constraint
                    const currentStart = t.startWeekId || sWeekId;
                    if (finishWeekId > currentStart) {
+                      // Update logic
                       t.startWeekId = finishWeekId;
                       tasksToUpdate.push({ id: t.id, startWeekId: finishWeekId });
+                      // Recurse
                       updateDependentTasks(p.id, m.id, t.id, finishWeekId, t.duration || 1);
                    }
                 }
@@ -461,6 +472,7 @@ const App: React.FC = () => {
        });
     };
 
+    // Apply initial update
     updatedProjects = updatedProjects.map((p: Project) => {
        if (p.id !== projectId) return p;
        return { ...p, modules: p.modules.map((m: ProjectModule) => {
@@ -474,37 +486,51 @@ const App: React.FC = () => {
        })};
     });
 
+    // Start recursion
     updateDependentTasks(projectId, moduleId, startTaskId, newStartWeekId, newDuration);
+    
     setProjects(updatedProjects);
 
+    // Save initial task
     await supabase.from('tasks').update({ start_week_id: newStartWeekId, duration: newDuration }).eq('id', startTaskId);
 
+    // Save cascading updates
     for (const update of tasksToUpdate) {
        await supabase.from('tasks').update({ start_week_id: update.startWeekId }).eq('id', update.id);
     }
   };
   
-  const updateTaskSchedule = useCallback(async (projectId: string, moduleId: string, taskId: string, startWeekId: string, duration: number) => {
+  const updateTaskSchedule = async (projectId: string, moduleId: string, taskId: string, startWeekId: string, duration: number) => {
      await recalculateAndSaveDependencyChain(projects, projectId, moduleId, taskId, startWeekId, duration);
-  }, [projects]);
+  };
 
-  const updateTaskDependencies = useCallback(async (projectId: string, moduleId: string, taskId: string, dependencies: string[]) => {
+  const updateTaskDependencies = async (projectId: string, moduleId: string, taskId: string, dependencies: string[]) => {
       const previousState = projects;
+      
       setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? {...t, dependencies } : t) } : m) } : p));
+      
       const { error } = await supabase.from('tasks').update({ dependencies }).eq('id', taskId);
       
       if (error) {
          console.error(error);
          setProjects(previousState);
          alert("Failed to update dependencies.");
+      } else {
+         // Trigger auto-schedule to align with new dependencies
+         const task = projects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
+         if (task && task.startWeekId) {
+            // Re-run scheduling logic as if this task just changed, to ensure it respects new predecessors
+            // Actually, we need to check if IT needs to move based on predecessors.
+            // Simplified: We assume user places it, or we could auto-align. 
+            // For now, let's leave it manual placement unless predecessor moves.
+         }
       }
-  }, [projects]);
+  };
   
   const handleSaveVersion = async (name: string) => {
-    if (!session) return;
     const { error } = await supabase.from('versions').insert({
       name,
-      user_id: session.user.id,
+      user_id: session!.user.id,
       data: { projects, holidays }
     });
     if (error) {
@@ -516,23 +542,18 @@ const App: React.FC = () => {
   };
 
   const handleRestoreVersion = async (id: number) => {
-    if (!session) return;
     const { data: version, error } = await supabase.from('versions').select('data').eq('id', id).single();
     if (error || !version) {
       alert("Error: Version not found.");
       return;
     }
-    await supabase.from('projects').delete().eq('user_id', session.user.id);
-    await supabase.from('holidays').delete().eq('user_id', session.user.id);
+    await supabase.from('projects').delete().eq('user_id', session!.user.id);
+    await supabase.from('holidays').delete().eq('user_id', session!.user.id);
     setProjects(version.data.projects);
     setHolidays(version.data.holidays);
     alert(`Version restored. Any new changes will be saved to your current state.`);
     setShowHistory(false);
   };
-
-  if (loading) {
-    return <div className="flex h-screen w-full items-center justify-center bg-slate-100">Loading...</div>
-  }
 
   if (!session) {
     return (
@@ -591,11 +612,15 @@ const App: React.FC = () => {
         <main className="flex-1 flex flex-col overflow-hidden">
           <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8"><h1 className="text-xl font-bold text-slate-800">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</h1></header>
           <div className="flex-1 overflow-auto p-6">
-            {activeTab === 'dashboard' && <Dashboard projects={projects} />}
-            {activeTab === 'planner' && <PlannerGrid projects={projects} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={updateAssignmentRole} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onShiftTask={async () => {}} onShiftAssignment={async () => {}} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={() => {}} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} onUpdateTaskDependencies={updateTaskDependencies} />}
-            {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
-            {activeTab === 'holiday' && <AdminSettings holidays={holidays} onUpdateHolidays={setHolidays} />}
-            {activeTab === 'settings' && <Settings />}
+            {loading ? <div className="text-center">Loading your data...</div> : (
+              <>
+                {activeTab === 'dashboard' && <Dashboard projects={projects} />}
+                {activeTab === 'planner' && <PlannerGrid projects={projects} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={updateAssignmentRole} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onShiftTask={async () => {}} onShiftAssignment={async () => {}} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={() => {}} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} onUpdateTaskDependencies={updateTaskDependencies} />}
+                {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
+                {activeTab === 'holiday' && <AdminSettings holidays={holidays} onUpdateHolidays={setHolidays} />}
+                {activeTab === 'settings' && <Settings />}
+              </>
+            )}
           </div>
         </main>
       </div>
