@@ -8,7 +8,7 @@ interface DebugLogProps {
 }
 
 export const DebugLog: React.FC<DebugLogProps> = ({ logs, onClear }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
 
   const levelColorMap = {
     INFO: 'text-slate-300',
