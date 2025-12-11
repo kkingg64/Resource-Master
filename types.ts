@@ -84,3 +84,11 @@ export interface Holiday {
   name: string;
   country: string; // Country code e.g. 'MY', 'SG', 'Global'
 }
+
+export interface LogEntry {
+  id: string;
+  timestamp: string;
+  level: 'SUCCESS' | 'ERROR' | 'INFO';
+  message: string;
+  data?: any;
+}

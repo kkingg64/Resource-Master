@@ -1,14 +1,16 @@
 
 
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ALL_WEEK_IDS, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getDateFromWeek, getWeekIdFromDate } from './constants';
-import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment } from './types';
+import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
 import { Estimator } from './components/Estimator';
 import { AdminSettings } from './components/AdminSettings';
 import { Settings } from './components/Settings';
 import { VersionHistory } from './components/VersionHistory';
+import { DebugLog } from './components/DebugLog';
 import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, Globe, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
@@ -56,12 +58,24 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'planner' | 'estimator' | 'holiday' | 'settings'>('planner');
   const [showHistory, setShowHistory] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
   
   const [timelineStart, setTimelineStart] = useState<WeekPoint>(DEFAULT_START);
   const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
   
   const saveQueueRef = useRef(new Map());
   const debounceTimeoutRef = useRef<number | null>(null);
+
+  const logEvent = useCallback((level: LogEntry['level'], message: string, data?: any) => {
+    const newLog: LogEntry = {
+      id: `log_${Date.now()}_${Math.random()}`,
+      timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      level,
+      message,
+      data,
+    };
+    setLogs(prevLogs => [newLog, ...prevLogs].slice(0, 100)); // Keep max 100 logs
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -79,6 +93,7 @@ const App: React.FC = () => {
   const fetchData = useCallback(async () => {
     if (!session) return;
     setLoading(true);
+    logEvent('INFO', 'Fetching all initial data...');
     
     // Fetch projects and related data
     const { data: projectsData, error: projectsError } = await supabase
@@ -103,30 +118,41 @@ const App: React.FC = () => {
       .from('holidays')
       .select('*');
 
-    if (projectsError) console.error('Error fetching projects:', projectsError);
-    if (holidaysError) console.error('Error fetching holidays:', holidaysError);
+    if (projectsError) {
+      logEvent('ERROR', 'Error fetching projects', projectsError);
+      console.error('Error fetching projects:', projectsError);
+    }
+    if (holidaysError) {
+      logEvent('ERROR', 'Error fetching holidays', holidaysError);
+      console.error('Error fetching holidays:', holidaysError);
+    }
 
     if (projectsData) {
       const formattedProjects = structureProjectsData(projectsData);
       if (formattedProjects.length === 0) {
          // Create default project if none exist
          const defaultProjectId = SPECIAL_UUID;
+         logEvent('INFO', 'No projects found, creating default project...', { id: defaultProjectId });
          const { data, error } = await supabase.from('projects').insert({ id: defaultProjectId, name: 'My First Project', user_id: session!.user.id }).select().single();
          if (data && !error) {
+             logEvent('SUCCESS', 'Default project created.', data);
              setProjects([{ id: data.id, name: data.name, modules: [] }]);
          } else {
+             logEvent('ERROR', 'Failed to create default project', error);
              console.error("Error creating default project:", error);
          }
       } else {
+          logEvent('SUCCESS', `Fetched ${formattedProjects.length} projects.`);
           setProjects(formattedProjects);
       }
     }
     if (holidaysData) {
+      logEvent('SUCCESS', `Fetched ${holidaysData.length} holidays.`);
       setHolidays(holidaysData.map(h => ({ ...h, id: h.id.toString() })));
     }
     
     setLoading(false);
-  }, [session]);
+  }, [session, logEvent]);
 
   useEffect(() => {
     if (session) {
@@ -200,29 +226,43 @@ const App: React.FC = () => {
 
   // --- DEFENSIVE SUPABASE HELPERS ---
   const updateSupabaseRecord = async (table: string, id: string, data: object) => {
-    console.log(`[DEBUG] Attempting to update table "${table}" for ID: "${id}"`);
+    const message = `Update table "${table}" for ID: "${id}"`;
+    logEvent('INFO', message, { table, id, data });
 
     if (typeof id !== 'string' || id.length !== 36) {
       const errorMsg = `[CRITICAL] Invalid ID format for update. Expected 36-char UUID string, but got: "${id}" (length: ${id.length}). Update cancelled.`;
-      console.error(errorMsg, { table, id, data });
+      logEvent('ERROR', errorMsg, { table, id, data });
       alert(errorMsg);
-      return { error: { message: errorMsg } };
+      return { error: { message: errorMsg }, data: null };
     }
-
-    return await supabase.from(table).update(data).eq('id', id);
+    
+    const result = await supabase.from(table).update(data).eq('id', id).select().single();
+    if (result.error) {
+        logEvent('ERROR', `Failed to ${message}`, result.error);
+    } else {
+        logEvent('SUCCESS', `Successfully completed: ${message}`, result.data);
+    }
+    return result;
   };
 
   const deleteSupabaseRecord = async (table: string, id: string) => {
-    console.log(`[DEBUG] Attempting to delete from table "${table}" for ID: "${id}"`);
+    const message = `Delete from table "${table}" for ID: "${id}"`;
+    logEvent('INFO', message, { table, id });
     
     if (typeof id !== 'string' || id.length !== 36) {
       const errorMsg = `[CRITICAL] Invalid ID format for delete. Expected 36-char UUID string, but got: "${id}" (length: ${id.length}). Delete cancelled.`;
-      console.error(errorMsg, { table, id });
+      logEvent('ERROR', errorMsg, { table, id });
       alert(errorMsg);
       return { error: { message: errorMsg } };
     }
     
-    return await supabase.from(table).delete().eq('id', id);
+    const result = await supabase.from(table).delete().eq('id', id);
+    if (result.error) {
+        logEvent('ERROR', `Failed to ${message}`, result.error);
+    } else {
+        logEvent('SUCCESS', `Successfully completed: ${message}`, result.data);
+    }
+    return result;
   };
 
   const commitAllocationSaves = useCallback(async () => {
@@ -240,14 +280,18 @@ const App: React.FC = () => {
         days: item.allocation.days
     }));
 
-    const { error } = await supabase.from('resource_allocations').upsert(upsertData);
+    logEvent('INFO', `Upserting ${upsertData.length} allocation records...`, upsertData);
+    const { error, data } = await supabase.from('resource_allocations').upsert(upsertData).select();
 
     if (error) {
+        logEvent('ERROR', 'Failed to save allocations', error);
         console.error("Failed to save allocations:", error);
         alert("Error: Some changes could not be saved. Re-syncing data.");
         fetchData();
+    } else {
+        logEvent('SUCCESS', `Successfully upserted ${data?.length || 0} allocations.`, data);
     }
-  }, [session, fetchData]);
+  }, [session, fetchData, logEvent]);
 
   const handleExtendTimeline = (direction: 'start' | 'end') => {
     if (direction === 'start') setTimelineStart(prev => addWeeksToPoint(prev, -4));
@@ -325,12 +369,16 @@ const App: React.FC = () => {
 
   const addProject = async () => {
     const newId = generateId('proj');
-    const { data, error } = await supabase.from('projects').insert({ id: newId, name: `New Project ${projects.length + 1}`, user_id: session!.user.id }).select().single();
+    const newName = `New Project ${projects.length + 1}`;
+    logEvent('INFO', 'Adding new project...', { id: newId, name: newName });
+    const { data, error } = await supabase.from('projects').insert({ id: newId, name: newName, user_id: session!.user.id }).select().single();
     if (error) {
+        logEvent('ERROR', 'Failed to add project', error);
         console.error("Error adding project:", error);
         alert("Could not create project.");
     }
     else {
+        logEvent('SUCCESS', 'Project added successfully.', data);
         setProjects(prev => [...prev, { id: data.id, name: data.name, modules: [] }]);
     }
   };
@@ -450,12 +498,16 @@ const App: React.FC = () => {
   
   const addModule = async (projectId: string) => {
     const newId = generateId('mod');
-    const { data, error } = await supabase.from('modules').insert({ id: newId, name: 'New Module', project_id: projectId, user_id: session!.user.id }).select().single();
+    const newName = 'New Module';
+    logEvent('INFO', `Adding new module to project ${projectId}`, { id: newId, name: newName });
+    const { data, error } = await supabase.from('modules').insert({ id: newId, name: newName, project_id: projectId, user_id: session!.user.id }).select().single();
     if (error) {
+        logEvent('ERROR', 'Failed to add module', error);
         console.error(error);
         alert("Failed to add module.");
     }
     else {
+        logEvent('SUCCESS', 'Module added successfully.', data);
         setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: [...p.modules, { id: data.id, name: data.name, legacyFunctionPoints: 0, functionPoints: 0, tasks: [] }] } : p));
     }
   };
@@ -477,17 +529,25 @@ const App: React.FC = () => {
     const taskName = 'New Task';
     const role = Role.DEV;
 
+    logEvent('INFO', `Adding new task to module ${moduleId}`, { id: taskId, name: taskName });
     const { data: taskData, error: taskError } = await supabase.from('tasks').insert({ id: taskId, name: taskName, module_id: moduleId, user_id: session!.user.id }).select().single();
-    if (taskError) { console.error(taskError); alert("Failed to add task."); return; }
+    if (taskError) { 
+      logEvent('ERROR', 'Failed to add task', taskError);
+      console.error(taskError); alert("Failed to add task."); 
+      return; 
+    }
     
+    logEvent('SUCCESS', 'Task added. Creating default assignment...', taskData);
     const { data: assignData, error: assignError } = await supabase.from('task_assignments').insert({ id: assignId, task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
     if (assignError) { 
+      logEvent('ERROR', 'Failed to create task assignment. Rolling back.', assignError);
       console.error(assignError); 
       // Rollback task creation
       await supabase.from('tasks').delete().eq('id', taskId);
       alert("Failed to create task assignment. Rolling back.");
       return; 
     }
+    logEvent('SUCCESS', 'Default assignment created.', assignData);
 
     fetchData(); 
   };
@@ -505,9 +565,16 @@ const App: React.FC = () => {
   
   const addAssignment = async (projectId: string, moduleId: string, taskId: string, role: Role) => {
     const newId = generateId('asgn');
+    logEvent('INFO', `Adding new assignment to task ${taskId}`, { id: newId, role });
     const { data, error } = await supabase.from('task_assignments').insert({ id: newId, task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
-    if (error) console.error(error);
-    else fetchData();
+    if (error) {
+      logEvent('ERROR', 'Failed to add assignment', error);
+      console.error(error);
+    }
+    else {
+      logEvent('SUCCESS', 'Assignment added.', data);
+      fetchData();
+    }
   };
   
   const deleteAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
@@ -554,14 +621,19 @@ const App: React.FC = () => {
     
     // Update sort_order in DB
     const updates = reordered.map((module, index) => 
-      supabase.from('modules').update({ sort_order: index }).eq('id', module.id)
+      ({ id: module.id, sort_order: index })
     );
-    try {
-        await Promise.all(updates);
-    } catch(e) {
-        console.error(e);
+
+    logEvent('INFO', `Reordering ${updates.length} modules for project ${projectId}`, updates);
+    const { error } = await supabase.from('modules').upsert(updates);
+    
+    if(error) {
+        logEvent('ERROR', 'Failed to reorder modules', error);
+        console.error(error);
         setProjects(previousState);
         alert("Failed to reorder modules.");
+    } else {
+        logEvent('SUCCESS', 'Modules reordered successfully.');
     }
   };
 
@@ -632,11 +704,11 @@ const App: React.FC = () => {
     setProjects(updatedProjects);
 
     // Save initial task
-    await supabase.from('tasks').update({ start_week_id: newStartWeekId, duration: newDuration }).eq('id', startTaskId);
+    await updateSupabaseRecord('tasks', startTaskId, { start_week_id: newStartWeekId, duration: newDuration });
 
     // Save cascading updates
     for (const update of tasksToUpdate) {
-       await supabase.from('tasks').update({ start_week_id: update.startWeekId }).eq('id', update.id);
+       await updateSupabaseRecord('tasks', update.id, { start_week_id: update.startWeekId });
     }
   };
   
@@ -676,22 +748,27 @@ const App: React.FC = () => {
   };
   
   const handleSaveVersion = async (name: string) => {
+    logEvent('INFO', `Saving new version: "${name}"`);
     const { error } = await supabase.from('versions').insert({
       name,
       user_id: session!.user.id,
       data: { projects, holidays }
     });
     if (error) {
+      logEvent('ERROR', 'Failed to save version', error);
       console.error("Failed to save version:", error);
       alert("Error: Could not save version.");
     } else {
+      logEvent('SUCCESS', 'Version saved successfully');
       alert(`Version '${name}' saved successfully!`);
     }
   };
 
   const handleRestoreVersion = async (id: number) => {
+    logEvent('INFO', `Restoring version ID: ${id}`);
     const { data: version, error } = await supabase.from('versions').select('data').eq('id', id).single();
     if (error || !version) {
+      logEvent('ERROR', 'Version not found for restore', error);
       alert("Error: Version not found.");
       return;
     }
@@ -699,6 +776,7 @@ const App: React.FC = () => {
     await supabase.from('holidays').delete().eq('user_id', session!.user.id);
     setProjects(version.data.projects);
     setHolidays(version.data.holidays);
+    logEvent('SUCCESS', `Version ${id} restored.`);
     alert(`Version restored. Any new changes will be saved to your current state.`);
     setShowHistory(false);
   };
@@ -772,6 +850,7 @@ const App: React.FC = () => {
           </div>
         </main>
       </div>
+      <DebugLog logs={logs} onClear={() => setLogs([])} />
     </>
   );
 };
