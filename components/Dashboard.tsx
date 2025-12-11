@@ -37,8 +37,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
               
               assignment.allocations.forEach(alloc => {
                 if (alloc.weekId === week.id) {
-                  if (summary[role] !== undefined) {
-                    summary[role] += alloc.count;
+                  if (summary[role as keyof typeof summary] !== undefined) {
+                    (summary[role as keyof typeof summary] as number) += alloc.count;
                   } else {
                      // @ts-ignore
                      summary['Other'] = (summary['Other'] || 0) + alloc.count;

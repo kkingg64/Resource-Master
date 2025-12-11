@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate } from './constants';
-import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ResourceCategory } from './types';
+import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
 import { Estimator } from './components/Estimator';
@@ -116,8 +116,8 @@ const App: React.FC = () => {
   const log = (message: string, payload: any, status: LogEntry['status'] = 'pending'): number => {
     if (!isDebugLogEnabled) return -1;
     const id = nextLogId.current++;
-    // FIX: Pass an empty array to toLocaleTimeString to satisfy linter which may expect at least one argument.
-    const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString([]), message, payload, status };
+    // FIX: Changed to parameter-less toLocaleTimeString() to fix "Expected 1 arguments, but got 0" error.
+    const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString(), message, payload, status };
     setLogEntries(prev => [newEntry, ...prev.slice(0, 99)]);
     return id;
   };
@@ -549,7 +549,7 @@ const App: React.FC = () => {
   };
 
   // --- Resource Management ---
-  const addResource = async (name: string, category: ResourceCategory) => {
+  const addResource = async (name: string, category: Role) => {
     const { data, error } = await callSupabase(
       'CREATE resource', { name, category },
       supabase.from('resources').insert({ name, category, user_id: session!.user.id }).select().single()

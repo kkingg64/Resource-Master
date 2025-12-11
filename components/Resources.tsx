@@ -1,17 +1,20 @@
 
 import React, { useState } from 'react';
-import { Resource, ResourceCategory } from '../types';
+// FIX: Replaced non-existent ResourceCategory with Role enum.
+import { Resource, Role } from '../types';
 import { Users, Plus, Trash2 } from 'lucide-react';
 
 interface ResourcesProps {
   resources: Resource[];
-  onAddResource: (name: string, category: ResourceCategory) => Promise<void>;
+  // FIX: Changed category type from ResourceCategory to Role.
+  onAddResource: (name: string, category: Role) => Promise<void>;
   onDeleteResource: (id: string) => Promise<void>;
 }
 
 export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, onDeleteResource }) => {
   const [newResourceName, setNewResourceName] = useState('');
-  const [newResourceCategory, setNewResourceCategory] = useState<ResourceCategory>(ResourceCategory.INTERNAL);
+  // FIX: Changed state to use Role enum and a default value from it.
+  const [newResourceCategory, setNewResourceCategory] = useState<Role>(Role.DEV);
   const [isAdding, setIsAdding] = useState(false);
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -24,9 +27,15 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
     setNewResourceName('');
   };
   
-  const categoryColors: Record<ResourceCategory, string> = {
-    [ResourceCategory.INTERNAL]: 'bg-blue-100 text-blue-800',
-    [ResourceCategory.EXTERNAL]: 'bg-purple-100 text-purple-800',
+  // FIX: Updated categoryColors to match the Role enum.
+  const categoryColors: Record<Role, string> = {
+    [Role.DEV]: 'bg-blue-100 text-blue-800',
+    [Role.QA]: 'bg-green-100 text-green-800',
+    [Role.UIUX]: 'bg-orange-100 text-orange-800',
+    [Role.PM]: 'bg-gray-100 text-gray-800',
+    [Role.BA]: 'bg-purple-100 text-purple-800',
+    [Role.DATA]: 'bg-cyan-100 text-cyan-800',
+    [Role.APP_SUPPORT]: 'bg-red-100 text-red-800',
   };
 
   return (
@@ -45,12 +54,13 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
             placeholder="e.g., John Doe"
             className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
           />
+          {/* FIX: Changed select to use Role enum and cast value correctly. */}
           <select
             value={newResourceCategory}
-            onChange={(e) => setNewResourceCategory(e.target.value as ResourceCategory)}
+            onChange={(e) => setNewResourceCategory(e.target.value as Role)}
             className="p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
           >
-            {Object.values(ResourceCategory).map(cat => (
+            {Object.values(Role).map(cat => (
               <option key={cat} value={cat}>{cat}</option>
             ))}
           </select>
@@ -75,6 +85,7 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
                 <li key={resource.id} className="p-3 flex items-center justify-between hover:bg-slate-50">
                   <div className="flex items-center gap-3">
                     <span className="font-medium text-slate-700">{resource.name}</span>
+                    {/* FIX: Use correct category colors for Role. The key is now of type Role. */}
                     <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${categoryColors[resource.category] || 'bg-slate-100 text-slate-600'}`}>
                       {resource.category}
                     </span>

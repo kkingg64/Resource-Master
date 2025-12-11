@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, ResourceCategory } from '../types';
+// FIX: Removed non-existent ResourceCategory from imports.
+import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource } from '../types';
 import { getTimeline, ALL_WEEK_IDS, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput } from '../constants';
 import { Layers, Calendar, ChevronRight, ChevronDown, Info, GripVertical, Plus, UserPlus, ChevronLeft, Clock, PlayCircle, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -116,10 +117,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const groupedResources = useMemo(() => {
     return resources.reduce((acc, resource) => {
       const category = resource.category || 'Uncategorized';
-      if (!acc[category]) {
-        acc[category] = [];
+      if (!acc[category as keyof typeof acc]) {
+        acc[category as keyof typeof acc] = [];
       }
-      acc[category].push(resource);
+      (acc[category as keyof typeof acc] as Resource[]).push(resource);
       return acc;
     }, {} as Record<string, Resource[]>);
   }, [resources]);
