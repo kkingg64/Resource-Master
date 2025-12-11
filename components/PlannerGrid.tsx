@@ -153,7 +153,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const saveEdit = () => {
     if (!editingId) return;
 
-    const parts = editingId.split('-');
+    const parts = editingId.split('::');
     const type = parts[0];
 
     if (type === 'project') {
@@ -163,7 +163,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       const [_, projectId, moduleId] = parts;
       onUpdateModuleName(projectId, moduleId, editValue);
     } else if (type === 'fp') {
-      // Format: fp-projectId-moduleId
       const [_, projectId, moduleId] = parts;
       const legacy = parseInt(editValue) || 0;
       const mvp = parseInt(editValue2) || 0;
@@ -463,7 +462,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       toggleModule(moduleId);
     }
     onAddTask(projectId, moduleId, newTaskId, "New Task", Role.DEV);
-    startEditing(`task-${projectId}-${moduleId}-${newTaskId}`, "New Task");
+    startEditing(`task::${projectId}::${moduleId}::${newTaskId}`, "New Task");
   };
 
   // Date Picker Handler
@@ -651,7 +650,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           {/* Projects Loop */}
           {projects.map((project) => {
             const isProjectCollapsed = collapsedProjects[project.id];
-            const isEditingProject = editingId === `project-${project.id}`;
+            const isEditingProject = editingId === `project::${project.id}`;
 
             return (
               <React.Fragment key={project.id}>
@@ -680,7 +679,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                        ) : (
                           <span 
                             className="font-bold text-sm truncate select-none flex-1" 
-                            onDoubleClick={(e) => startEditing(`project-${project.id}`, project.name, undefined, e)}
+                            onDoubleClick={(e) => startEditing(`project::${project.id}`, project.name, undefined, e)}
                             title="Double click to rename"
                           >
                             {project.name}
@@ -719,10 +718,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                 {!isProjectCollapsed && project.modules.map((module, index) => {
                   const isModuleCollapsed = collapsedModules[module.id];
-                  const moduleEditId = `module-${project.id}-${module.id}`;
+                  const moduleEditId = `module::${project.id}::${module.id}`;
                   const isEditingModule = editingId === moduleEditId;
                   
-                  const fpEditId = `fp-${project.id}-${module.id}`;
+                  const fpEditId = `fp::${project.id}::${module.id}`;
                   const isEditingFp = editingId === fpEditId;
 
                   return (
@@ -828,7 +827,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                       {/* Tasks */}
                       {!isModuleCollapsed && module.tasks.map((task) => {
-                        const taskEditId = `task-${project.id}-${module.id}-${task.id}`;
+                        const taskEditId = `task::${project.id}::${module.id}::${task.id}`;
                         const isTaskCollapsed = collapsedTasks[task.id];
                         const isEditingTask = editingId === taskEditId;
                         
@@ -952,7 +951,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                             {/* Assignment Rows */}
                             {!isTaskCollapsed && task.assignments.map(assignment => {
-                              const resourceEditId = `resource-${project.id}-${module.id}-${task.id}-${assignment.id}`;
+                              const resourceEditId = `resource::${project.id}::${module.id}::${task.id}::${assignment.id}`;
                               const isEditingResource = editingId === resourceEditId;
                               return (
                               <div key={assignment.id} className="flex border-b border-slate-100 group/assign">
