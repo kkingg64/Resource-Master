@@ -7,7 +7,7 @@ import { formatIdForDisplay } from '../lib/id';
 
 // --- Optimized Sub-Components ---
 
-const InlineInput = ({ value, onSave, onCancel, type = 'text', autoFocus = true }: { value: string, onSave: (val: string) => void, onCancel: () => void, type?: string, autoFocus?: boolean }) => {
+const ExplicitInput = ({ value, onSave, onCancel, error, autoFocus = true }: { value: string; onSave: (val: string) => void; onCancel: () => void; error?: string | null; autoFocus?: boolean }) => {
   const [localValue, setLocalValue] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -22,7 +22,10 @@ const InlineInput = ({ value, onSave, onCancel, type = 'text', autoFocus = true 
     const trimmedValue = localValue.trim();
     if (trimmedValue && trimmedValue !== value) {
       onSave(trimmedValue);
-    } else {
+    } else if (!trimmedValue) {
+      // Do nothing, allow error to be shown if save is attempted
+    }
+    else {
       onCancel();
     }
   };
@@ -36,16 +39,21 @@ const InlineInput = ({ value, onSave, onCancel, type = 'text', autoFocus = true 
   };
 
   return (
-    <input
-      ref={inputRef}
-      type={type}
-      value={localValue}
-      onChange={(e) => setLocalValue(e.target.value)}
-      onBlur={handleSave}
-      onKeyDown={handleKeyDown}
-      onClick={(e) => e.stopPropagation()}
-      className="bg-white text-slate-900 text-xs font-bold border border-indigo-500 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm"
-    />
+    <div className="w-full" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center gap-1">
+        <input
+          ref={inputRef}
+          type="text"
+          value={localValue}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className={`bg-white text-slate-900 text-xs font-bold border rounded px-1 w-full focus:outline-none focus:ring-1 shadow-sm ${error ? 'border-red-500 focus:ring-red-500' : 'border-indigo-500 focus:ring-indigo-500'}`}
+        />
+        <button onClick={handleSave} className="p-1 rounded text-slate-500 hover:bg-green-100 hover:text-green-700"><Check size={14} /></button>
+        <button onClick={onCancel} className="p-1 rounded text-slate-500 hover:bg-red-100 hover:text-red-700"><X size={14} /></button>
+      </div>
+      {error && <p className="text-red-600 text-[10px] mt-0.5">{error}</p>}
+    </div>
   );
 };
 
@@ -111,7 +119,7 @@ interface PlannerGridProps {
   onExtendTimeline: (direction: 'start' | 'end') => void;
   onUpdateAllocation: (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number, dayDate?: string) => void;
   onUpdateAssignmentRole: (projectId: string, moduleId: string, taskId: string, assignmentId: string, role: Role) => void;
-  onUpdateAssignmentResourceName: (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => void;
+  onUpdateAssignmentResourceName: (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => Promise<string | null>;
   onAddTask: (projectId: string, moduleId: string) => void;
   onAddAssignment: (projectId: string, moduleId: string, taskId: string, role: Role) => void;
   onReorderModules: (projectId: string, startIndex: number, endIndex: number) => void;
@@ -120,9 +128,9 @@ interface PlannerGridProps {
   onUpdateTaskSchedule: (projectId: string, moduleId: string, taskId: string, startWeekId: string, duration: number) => void;
   onAddProject: () => void;
   onAddModule: (projectId: string) => void;
-  onUpdateProjectName: (projectId: string, name: string) => void;
-  onUpdateModuleName: (projectId: string, moduleId: string, name: string) => void;
-  onUpdateTaskName: (projectId: string, moduleId: string, taskId: string, name: string) => void;
+  onUpdateProjectName: (projectId: string, name: string) => Promise<string | null>;
+  onUpdateModuleName: (projectId: string, moduleId: string, name: string) => Promise<string | null>;
+  onUpdateTaskName: (projectId: string, moduleId: string, taskId: string, name: string) => Promise<string | null>;
   onDeleteProject: (projectId: string) => void;
   onDeleteModule: (projectId: string, moduleId: string) => void;
   onDeleteTask: (projectId: string, moduleId: string, taskId: string) => void;
@@ -178,6 +186,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   // Editing State
   const [editingTarget, setEditingTarget] = useState<EditingTarget | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
   
   // Dependency Modal State
   const [depModalOpen, setDepModalOpen] = useState(false);
@@ -307,29 +316,38 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const cancelEdit = () => {
     setEditingTarget(null);
+    setEditError(null);
   };
 
-  const saveEdit = (value: string) => {
+  const saveEdit = async (value: string) => {
     if (!editingTarget) {
       cancelEdit();
       return;
     }
 
+    setEditError(null);
+    let error: string | null = null;
+
     switch (editingTarget.type) {
       case 'project':
-        onUpdateProjectName(editingTarget.projectId, value);
+        error = await onUpdateProjectName(editingTarget.projectId, value);
         break;
       case 'module':
-        onUpdateModuleName(editingTarget.projectId, editingTarget.moduleId, value);
+        error = await onUpdateModuleName(editingTarget.projectId, editingTarget.moduleId, value);
         break;
       case 'task':
-        onUpdateTaskName(editingTarget.projectId, editingTarget.moduleId, editingTarget.taskId, value);
+        error = await onUpdateTaskName(editingTarget.projectId, editingTarget.moduleId, editingTarget.taskId, value);
         break;
       case 'resource':
-        onUpdateAssignmentResourceName(editingTarget.projectId, editingTarget.moduleId, editingTarget.taskId, editingTarget.assignmentId, value);
+        error = await onUpdateAssignmentResourceName(editingTarget.projectId, editingTarget.moduleId, editingTarget.taskId, editingTarget.assignmentId, value);
         break;
     }
-    cancelEdit();
+    
+    if (error) {
+      setEditError(error);
+    } else {
+      cancelEdit();
+    }
   };
 
 
@@ -499,7 +517,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     <div className="h-10 flex items-center bg-slate-100 border-b border-slate-200 group">
                         <div style={{width: `${sidebarWidth}px`}} className="flex items-center px-2 gap-2">
                             <button onClick={() => toggleProject(p.id)} className="p-1 hover:bg-slate-200 rounded">{collapsedProjects[p.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
-                            {editingTarget?.type === 'project' && editingTarget.projectId === p.id ? <InlineInput value={p.name} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="font-bold text-sm text-slate-800 truncate" title={`ID:\n${formatIdForDisplay(p.id)}`} onDoubleClick={() => setEditingTarget({ type: 'project', projectId: p.id })}>{p.name}</span>}
+                            {editingTarget?.type === 'project' && editingTarget.projectId === p.id ? <ExplicitInput value={p.name} onSave={saveEdit} onCancel={cancelEdit} error={editError} /> : <span className="font-bold text-sm text-slate-800 truncate" title={`ID:\n${formatIdForDisplay(p.id)}`} onDoubleClick={() => setEditingTarget({ type: 'project', projectId: p.id })}>{p.name}</span>}
                             <div className="ml-auto flex items-center">
                                 <button onClick={() => onAddModule(p.id)} title="Add Module" className="text-slate-400 hover:text-indigo-600 p-1 rounded-full hover:bg-indigo-50">
                                     <Plus size={14} />
@@ -516,7 +534,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 <div style={{width: `${sidebarWidth}px`}} className="flex items-center px-2 gap-2 pl-6">
                                     <button onClick={() => toggleModule(m.id)} className="p-1 hover:bg-slate-200 rounded">{collapsedModules[m.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
                                     <GripVertical size={12} className="text-slate-300 cursor-grab" />
-                                    {editingTarget?.type === 'module' && editingTarget.moduleId === m.id ? <InlineInput value={m.name} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="font-semibold text-xs text-slate-700 truncate" title={`ID:\n${formatIdForDisplay(m.id)}`} onDoubleClick={() => setEditingTarget({ type: 'module', projectId: p.id, moduleId: m.id })}>{m.name}</span>}
+                                    {editingTarget?.type === 'module' && editingTarget.moduleId === m.id ? <ExplicitInput value={m.name} onSave={saveEdit} onCancel={cancelEdit} error={editError} /> : <span className="font-semibold text-xs text-slate-700 truncate" title={`ID:\n${formatIdForDisplay(m.id)}`} onDoubleClick={() => setEditingTarget({ type: 'module', projectId: p.id, moduleId: m.id })}>{m.name}</span>}
                                     <div className="ml-auto flex items-center">
                                         <button onClick={() => onAddTask(p.id, m.id)} title="Add Task" className="text-slate-400 hover:text-indigo-600 p-1 rounded-full hover:bg-indigo-50">
                                             <Plus size={14} />
@@ -532,7 +550,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     <div className="h-8 flex items-center bg-slate-50/50 border-b border-slate-100 hover:bg-slate-100/70 group">
                                        <div style={{width: `${sidebarWidth}px`}} className="flex items-center px-2 gap-2 pl-12">
                                           <button onClick={() => toggleTask(t.id)} className="p-1 hover:bg-slate-200 rounded">{collapsedTasks[t.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
-                                          {editingTarget?.type === 'task' && editingTarget.taskId === t.id ? <InlineInput value={t.name} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="text-xs text-slate-600 truncate" title={`ID:\n${formatIdForDisplay(t.id)}`} onDoubleClick={() => setEditingTarget({ type: 'task', projectId: p.id, moduleId: m.id, taskId: t.id })}>{t.name}</span>}
+                                          {editingTarget?.type === 'task' && editingTarget.taskId === t.id ? <ExplicitInput value={t.name} onSave={saveEdit} onCancel={cancelEdit} error={editError} /> : <span className="text-xs text-slate-600 truncate" title={`ID:\n${formatIdForDisplay(t.id)}`} onDoubleClick={() => setEditingTarget({ type: 'task', projectId: p.id, moduleId: m.id, taskId: t.id })}>{t.name}</span>}
                                           <div className="ml-auto flex items-center">
                                               <button onClick={() => openDependencyModal(p.id, m.id, t.id, t.dependencies || [])} title="Set Dependencies" className="text-slate-400 hover:text-indigo-600 p-0.5 rounded"><Link size={12} /></button>
                                               <button onClick={() => onAddAssignment(p.id, m.id, t.id, Role.DEV)} title="Add Assignment" className="ml-1 text-slate-400 hover:text-indigo-600 p-0.5 rounded"><UserPlus size={12} /></button>
@@ -552,7 +570,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                                     </select>
                                                 </div>
                                                 <div className="h-full flex items-center justify-between pl-1">
-                                                   {editingTarget?.type === 'resource' && editingTarget.assignmentId === a.id ? <InlineInput value={a.resourceName || ''} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="truncate" onDoubleClick={() => setEditingTarget({ type: 'resource', projectId: p.id, moduleId: m.id, taskId: t.id, assignmentId: a.id })}>{a.resourceName || 'Unassigned'}</span>}
+                                                   {editingTarget?.type === 'resource' && editingTarget.assignmentId === a.id ? <ExplicitInput value={a.resourceName || ''} onSave={saveEdit} onCancel={cancelEdit} error={editError} /> : <span className="truncate" onDoubleClick={() => setEditingTarget({ type: 'resource', projectId: p.id, moduleId: m.id, taskId: t.id, assignmentId: a.id })}>{a.resourceName || 'Unassigned'}</span>}
                                                     <button onClick={() => { if(window.confirm(`Delete this assignment?`)) onDeleteAssignment(p.id, m.id, t.id, a.id) }} title="Delete Assignment" className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-50 transition-opacity">
                                                         <Trash2 size={12} />
                                                     </button>

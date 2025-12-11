@@ -321,40 +321,43 @@ const App: React.FC = () => {
     }
   };
   
-  const updateProjectName = async (projectId: string, name: string) => {
+  const updateProjectName = async (projectId: string, name: string): Promise<string | null> => {
     const previousState = projects;
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, name } : p));
     const { error } = await supabase.from('projects').update({ name }).eq('id', projectId);
     if (error) {
-        console.error(error);
+        console.error("Update Project Name Error:", error);
         setProjects(previousState);
-        alert("Failed to update project name.");
+        return error.message;
     }
+    return null;
   };
   
-  const updateModuleName = async (projectId: string, moduleId: string, name: string) => {
+  const updateModuleName = async (projectId: string, moduleId: string, name: string): Promise<string | null> => {
      const previousState = projects;
      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? {...m, name} : m) } : p));
      const { error } = await supabase.from('modules').update({ name }).eq('id', moduleId);
      if (error) {
-        console.error(error);
+        console.error("Update Module Name Error:", error);
         setProjects(previousState);
-        alert("Failed to update module name.");
+        return error.message;
      }
+     return null;
   };
   
-  const updateTaskName = async (projectId: string, moduleId: string, taskId: string, name: string) => {
+  const updateTaskName = async (projectId: string, moduleId: string, taskId: string, name: string): Promise<string | null> => {
     const previousState = projects;
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? {...t, name} : t) } : m) } : p));
     const { error } = await supabase.from('tasks').update({ name }).eq('id', taskId);
     if (error) {
-        console.error(error);
+        console.error("Update Task Name Error:", error);
         setProjects(previousState);
-        alert("Failed to update task name.");
+        return error.message;
     }
+    return null;
   };
 
-  const updateAssignmentResourceName = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => {
+  const updateAssignmentResourceName = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string): Promise<string | null> => {
     const previousState = projects;
     setProjects(prev => prev.map(p => {
       if (p.id !== projectId) return p;
@@ -368,10 +371,11 @@ const App: React.FC = () => {
     }));
     const { error } = await supabase.from('task_assignments').update({ resource_name: name }).eq('id', assignmentId);
     if (error) {
-      console.error(error);
+      console.error("Update Resource Name Error:", error);
       setProjects(previousState);
-      alert("Failed to update resource name.");
+      return error.message;
     }
+    return null;
   };
 
   const updateAssignmentRole = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, role: Role) => {
