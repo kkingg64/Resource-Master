@@ -8,13 +8,14 @@ import { AdminSettings } from './components/AdminSettings';
 import { Settings } from './components/Settings';
 import { VersionHistory } from './components/VersionHistory';
 import { saveVersion, getVersionById } from './lib/idb';
-import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ShieldCheck, Globe } from 'lucide-react';
+import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ShieldCheck, Globe, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const App: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
   const [holidays, setHolidays] = useState<Holiday[]>(INITIAL_HOLIDAYS);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'planner' | 'estimator' | 'holiday' | 'settings'>('planner');
   const [showHistory, setShowHistory] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   // Timeline State
   const [timelineStart, setTimelineStart] = useState<WeekPoint>(DEFAULT_START);
@@ -321,64 +322,86 @@ const App: React.FC = () => {
       )}
       <div className="flex h-screen w-full bg-slate-100">
         {/* Sidebar */}
-        <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col shadow-xl">
-          <div className="p-6 border-b border-slate-800">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">
-                OM
+        <aside className={`${isSidebarCollapsed ? 'w-20' : 'w-64'} bg-slate-900 text-slate-300 flex flex-col shadow-xl transition-all duration-300 ease-in-out`}>
+          <div className={`p-4 border-b border-slate-800 flex flex-col gap-4 ${isSidebarCollapsed ? 'items-center' : ''}`}>
+            <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center flex-col gap-4' : 'justify-between'}`}>
+              <div className="flex items-center gap-3 overflow-hidden">
+                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold flex-shrink-0">
+                  OM
+                </div>
+                {!isSidebarCollapsed && (
+                  <span className="font-bold text-lg text-white whitespace-nowrap">Resourcer</span>
+                )}
               </div>
-              <span className="font-bold text-lg text-white">Resourcer</span>
+              
+              <button 
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
+                className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-800 hover:text-white transition-colors"
+                title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              >
+                {isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+              </button>
             </div>
-            <div className="mt-2 text-xs text-slate-500 uppercase tracking-widest font-semibold">Project Manager V1.1.1</div>
+
+            {!isSidebarCollapsed && (
+              <div className="text-xs text-slate-500 uppercase tracking-widest font-semibold whitespace-nowrap overflow-hidden transition-opacity">
+                Project Manager V1.1.1
+              </div>
+            )}
           </div>
 
-          <nav className="flex-1 p-4 space-y-2">
+          <nav className="flex-1 p-2 space-y-2 mt-2">
             <button 
               onClick={() => setActiveTab('dashboard')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`}
+              title={isSidebarCollapsed ? "Dashboard" : ""}
+              className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'justify-start px-4'} gap-3 py-3 rounded-lg transition-all ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`}
             >
-              <LayoutDashboard size={20} />
-              <span className="font-medium">Dashboard</span>
+              <LayoutDashboard size={20} className="shrink-0" />
+              {!isSidebarCollapsed && <span className="font-medium truncate">Dashboard</span>}
             </button>
             
             <button 
               onClick={() => setActiveTab('planner')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${activeTab === 'planner' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`}
+              title={isSidebarCollapsed ? "Resource Planner" : ""}
+              className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'justify-start px-4'} gap-3 py-3 rounded-lg transition-all ${activeTab === 'planner' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`}
             >
-              <Calendar size={20} />
-              <span className="font-medium">Resource Planner</span>
+              <Calendar size={20} className="shrink-0" />
+              {!isSidebarCollapsed && <span className="font-medium truncate">Resource Planner</span>}
             </button>
 
             <button 
               onClick={() => setActiveTab('estimator')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${activeTab === 'estimator' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`}
+              title={isSidebarCollapsed ? "FP Calculator" : ""}
+              className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'justify-start px-4'} gap-3 py-3 rounded-lg transition-all ${activeTab === 'estimator' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`}
             >
-              <Calculator size={20} />
-              <span className="font-medium">FP Calculator</span>
+              <Calculator size={20} className="shrink-0" />
+              {!isSidebarCollapsed && <span className="font-medium truncate">FP Calculator</span>}
             </button>
 
             <button 
               onClick={() => setActiveTab('holiday')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${activeTab === 'holiday' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`}
+              title={isSidebarCollapsed ? "Holidays" : ""}
+              className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'justify-start px-4'} gap-3 py-3 rounded-lg transition-all ${activeTab === 'holiday' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`}
             >
-              <Globe size={20} />
-              <span className="font-medium">Holidays</span>
+              <Globe size={20} className="shrink-0" />
+              {!isSidebarCollapsed && <span className="font-medium truncate">Holidays</span>}
             </button>
           </nav>
 
           <div className="p-4 border-t border-slate-800">
             <button
               onClick={() => setActiveTab('settings')}
-              className={`w-full flex items-center gap-3 px-4 py-2 text-sm rounded-lg transition-all ${activeTab === 'settings' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+              title={isSidebarCollapsed ? "Settings" : ""}
+              className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-0' : 'justify-start px-4'} gap-3 py-2 text-sm rounded-lg transition-all ${activeTab === 'settings' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
             >
-              <SettingsIcon size={16} />
-              <span>Settings</span>
+              <SettingsIcon size={16} className="shrink-0" />
+              {!isSidebarCollapsed && <span>Settings</span>}
             </button>
           </div>
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 flex flex-col overflow-hidden">
+        <main className="flex-1 flex flex-col overflow-hidden transition-all duration-300">
           {/* Top Header */}
           <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
             <h1 className="text-xl font-bold text-slate-800">
