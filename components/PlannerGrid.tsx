@@ -1,6 +1,7 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday } from '../types';
-import { getTimeline, ALL_WEEK_IDS, WeekPoint } from '../constants';
+import { getTimeline, ALL_WEEK_IDS, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput } from '../constants';
 import { Layers, Calendar, ChevronRight, ChevronDown, Info, GripVertical, Plus, UserPlus, ChevronLeft, Clock, PlayCircle, Folder, Settings2, Trash2, Download, Upload, History } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -10,7 +11,7 @@ interface PlannerGridProps {
   timelineStart: WeekPoint;
   timelineEnd: WeekPoint;
   onExtendTimeline: (direction: 'start' | 'end') => void;
-  onUpdateAllocation: (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number) => void;
+  onUpdateAllocation: (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number, dayDate?: string) => void;
   onUpdateAssignmentRole: (projectId: string, moduleId: string, taskId: string, assignmentId: string, role: Role) => void;
   onUpdateAssignmentResourceName: (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => void;
   onAddTask: (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => void;
@@ -22,6 +23,7 @@ interface PlannerGridProps {
   onAddProject: () => void;
   onAddModule: (projectId: string) => void;
   onUpdateProjectName: (projectId: string, name: string) => void;
+  onUpdateModuleName: (projectId: string, moduleId: string, name: string) => void;
   onUpdateTaskName: (projectId: string, moduleId: string, taskId: string, name: string) => void;
   onDeleteProject: (projectId: string) => void;
   onDeleteModule: (projectId: string, moduleId: string) => void;
@@ -29,6 +31,7 @@ interface PlannerGridProps {
   onDeleteAssignment: (projectId: string, moduleId: string, taskId: string, assignmentId: string) => void;
   onImportPlan: (projects: Project[], holidays: Holiday[]) => void;
   onShowHistory: () => void;
+  onUpdateFunctionPoints: (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => void;
 }
 
 export const PlannerGrid: React.FC<PlannerGridProps> = ({ 
@@ -49,6 +52,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   onAddProject,
   onAddModule,
   onUpdateProjectName,
+  onUpdateModuleName,
   onUpdateTaskName,
   onDeleteProject,
   onDeleteModule,
@@ -56,6 +60,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   onDeleteAssignment,
   onImportPlan,
   onShowHistory,
+  onUpdateFunctionPoints
 }) => {
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const [collapsedModules, setCollapsedModules] = useState<Record<string, boolean>>({});
@@ -72,6 +77,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   // Editing State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
+  const [editValue2, setEditValue2] = useState<string>(''); // Secondary value for double inputs (e.g. FP)
   const editInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -121,10 +127,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     setCollapsedTasks(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const startEditing = (id: string, initialValue: string, e?: React.MouseEvent) => {
+  const startEditing = (id: string, initialValue: string, initialValue2?: string, e?: React.MouseEvent) => {
     e?.stopPropagation(); // Prevent toggling collapse
     setEditingId(id);
     setEditValue(initialValue);
+    if (initialValue2 !== undefined) {
+      setEditValue2(initialValue2);
+    }
   };
   
   const saveEdit = () => {
@@ -136,6 +145,15 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     if (type === 'project') {
       const projectId = parts[1];
       onUpdateProjectName(projectId, editValue);
+    } else if (type === 'module') {
+      const [_, projectId, moduleId] = parts;
+      onUpdateModuleName(projectId, moduleId, editValue);
+    } else if (type === 'fp') {
+      // Format: fp-projectId-moduleId
+      const [_, projectId, moduleId] = parts;
+      const legacy = parseInt(editValue) || 0;
+      const mvp = parseInt(editValue2) || 0;
+      onUpdateFunctionPoints(projectId, moduleId, legacy, mvp);
     } else if (type === 'task') {
       const [_, projectId, moduleId, taskId] = parts;
       onUpdateTaskName(projectId, moduleId, taskId, editValue);
@@ -328,11 +346,24 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
     if (viewMode === 'day') {
       if (isHoliday(col.date)) return 0;
-      if (!col.parentWeekId) return 0;
+      if (!col.parentWeekId || !col.date) return 0;
+      
       const alloc = assignment.allocations.find(a => a.weekId === col.parentWeekId);
-      if (!alloc || alloc.count === 0) return 0;
-      // Assume 5 working days per week for daily calculation
-      return alloc.count / 5;
+      if (!alloc) return 0;
+
+      const dateStr = col.date.toISOString().split('T')[0];
+      
+      // If we have explicit daily data, use it
+      if (alloc.days && alloc.days[dateStr] !== undefined) {
+          return alloc.days[dateStr];
+      }
+      
+      // Fallback to average if weekly count exists but no daily breakdown
+      if (alloc.count > 0) {
+          return alloc.count / 5;
+      }
+      
+      return 0;
     }
 
     return 0;
@@ -369,25 +400,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
          onUpdateAllocation(projectId, moduleId, taskId, assignmentId, weekId, valuePerWeek);
        });
     } else if (viewMode === 'day') {
-      if (!col.parentWeekId) return;
-
-      // Find the assignment to get the old weekly value
-      const project = projects.find(p => p.id === projectId);
-      const module = project?.modules.find(m => m.id === moduleId);
-      const task = module?.tasks.find(t => t.id === taskId);
-      const assignment = task?.assignments.find(a => a.id === assignmentId);
-      if (!assignment) return;
-
-      const weekAlloc = assignment.allocations.find(a => a.weekId === col.parentWeekId);
-      const oldWeekValue = weekAlloc ? weekAlloc.count : 0;
-      
-      // The old value for this day was 1/5th of the weekly total
-      const oldDayValue = oldWeekValue / 5;
-
-      // The new weekly value is the old total minus the old day's contribution, plus the new day's contribution.
-      const newWeekValue = (oldWeekValue - oldDayValue) + numValue;
-
-      onUpdateAllocation(projectId, moduleId, taskId, assignmentId, col.parentWeekId, newWeekValue);
+      if (!col.parentWeekId || !col.date) return;
+      // Pass the specific date string to update daily allocation
+      const dateStr = col.date.toISOString().split('T')[0];
+      onUpdateAllocation(projectId, moduleId, taskId, assignmentId, col.parentWeekId, numValue, dateStr);
     }
   };
 
@@ -418,6 +434,32 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }
     onAddTask(projectId, moduleId, newTaskId, "New Task", Role.DEV);
     startEditing(`task-${projectId}-${moduleId}-${newTaskId}`, "New Task");
+  };
+
+  // Date Picker Handler
+  const handleStartDateChange = (projectId: string, moduleId: string, task: ProjectTask, newDateStr: string) => {
+     if (!newDateStr) return;
+     const date = new Date(newDateStr);
+     const newStartWeekId = getWeekIdFromDate(date);
+     
+     // Preserve duration
+     onUpdateTaskSchedule(projectId, moduleId, task.id, newStartWeekId, task.duration || 1);
+  };
+
+  const handleEndDateChange = (projectId: string, moduleId: string, task: ProjectTask, newDateStr: string) => {
+     if (!newDateStr || !task.startWeekId) return;
+     const endDate = new Date(newDateStr);
+     const endWeekId = getWeekIdFromDate(endDate);
+
+     const [y1, w1] = task.startWeekId.split('-').map(Number);
+     const [y2, w2] = endWeekId.split('-').map(Number);
+     
+     // Approx logic assuming 52 weeks/year for simple diff
+     // A more robust library like date-fns would be better, but we stick to zero-dep
+     const weekDiff = (y2 - y1) * 52 + (w2 - w1) + 1;
+     const newDuration = Math.max(1, weekDiff);
+
+     onUpdateTaskSchedule(projectId, moduleId, task.id, task.startWeekId, newDuration);
   };
 
   // Dynamic Column Width based on slider and view mode
@@ -598,7 +640,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                        ) : (
                           <span 
                             className="font-bold text-sm truncate select-none flex-1" 
-                            onDoubleClick={(e) => startEditing(`project-${project.id}`, project.name, e)}
+                            onDoubleClick={(e) => startEditing(`project-${project.id}`, project.name, undefined, e)}
                             title="Double click to rename"
                           >
                             {project.name}
@@ -636,6 +678,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                 {!isProjectCollapsed && project.modules.map((module, index) => {
                   const isModuleCollapsed = collapsedModules[module.id];
+                  const moduleEditId = `module-${project.id}-${module.id}`;
+                  const isEditingModule = editingId === moduleEditId;
+                  
+                  const fpEditId = `fp-${project.id}-${module.id}`;
+                  const isEditingFp = editingId === fpEditId;
+
                   return (
                     <div 
                       key={module.id}
@@ -653,14 +701,33 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         >
                           <div 
                             className="flex items-center gap-2 flex-1 overflow-hidden cursor-pointer"
-                            onClick={() => toggleModule(module.id)}
+                            onClick={() => !isEditingModule && toggleModule(module.id)}
                           >
                             <div className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500" title="Drag to reorder">
                               <GripVertical className="w-4 h-4" />
                             </div>
                             {isModuleCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-indigo-500" />}
                             <Layers className="w-4 h-4 text-indigo-600" />
-                            <span className="font-semibold text-sm text-slate-800 truncate select-none">{module.name}</span>
+                            
+                            {isEditingModule ? (
+                              <input 
+                                ref={editInputRef}
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onBlur={saveEdit}
+                                onKeyDown={handleKeyDown}
+                                className="bg-white text-slate-800 text-sm font-semibold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                onClick={(e) => e.stopPropagation()} 
+                              />
+                            ) : (
+                              <span 
+                                className="font-semibold text-sm text-slate-800 truncate select-none flex-1 hover:text-indigo-600" 
+                                onDoubleClick={(e) => startEditing(moduleEditId, module.name, undefined, e)}
+                                title="Double click to rename"
+                              >
+                                {module.name}
+                              </span>
+                            )}
                           </div>
                            <button
                               onClick={(e) => { e.stopPropagation(); onDeleteModule(project.id, module.id); }}
@@ -670,8 +737,37 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               <Trash2 size={14} />
                             </button>
                         </div>
-                        <div className="w-32 flex-shrink-0 p-3 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/30">
-                          {module.functionPoints} FP
+                        <div 
+                          className="w-32 flex-shrink-0 p-3 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/30 cursor-pointer hover:bg-indigo-100/50"
+                          onDoubleClick={(e) => startEditing(fpEditId, module.legacyFunctionPoints.toString(), module.functionPoints.toString(), e)}
+                          title="Double click to edit FP"
+                        >
+                          {isEditingFp ? (
+                             <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                                <input 
+                                  ref={editInputRef}
+                                  type="number"
+                                  className="w-10 p-0.5 text-[10px] border rounded"
+                                  value={editValue}
+                                  onChange={e => setEditValue(e.target.value)}
+                                  placeholder="Legacy"
+                                  title="Legacy FP"
+                                  onKeyDown={handleKeyDown}
+                                />
+                                <input 
+                                  type="number"
+                                  className="w-10 p-0.5 text-[10px] border rounded"
+                                  value={editValue2}
+                                  onChange={e => setEditValue2(e.target.value)}
+                                  placeholder="MVP"
+                                  title="MVP FP"
+                                  onKeyDown={handleKeyDown}
+                                  onBlur={saveEdit}
+                                />
+                             </div>
+                          ) : (
+                            <span>{module.functionPoints} FP</span>
+                          )}
                         </div>
                         
                         {/* Module Summaries */}
@@ -693,6 +789,15 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         const isTaskCollapsed = collapsedTasks[task.id];
                         const isEditingTask = editingId === taskEditId;
                         
+                        // Calculate Date values for inputs
+                        const startDate = task.startWeekId ? getDateFromWeek(
+                          parseInt(task.startWeekId.split('-')[0]), 
+                          parseInt(task.startWeekId.split('-')[1])
+                        ) : new Date();
+                        
+                        const endDate = new Date(startDate);
+                        endDate.setDate(startDate.getDate() + ((task.duration || 1) * 7) - 3); // Approx Friday of last week
+
                         return (
                           <React.Fragment key={`${module.id}-${task.id}`}>
                             {/* Task Header Row */}
@@ -721,7 +826,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                       <span 
                                         className="text-xs text-slate-700 font-bold truncate select-none hover:text-indigo-600 flex-1" 
                                         title="Double click to rename"
-                                        onDoubleClick={(e) => startEditing(taskEditId, task.name, e)}
+                                        onDoubleClick={(e) => startEditing(taskEditId, task.name, undefined, e)}
                                       >
                                         {task.name}
                                       </span>
@@ -765,31 +870,25 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                               {/* Schedule Controls */}
                               <div className="w-32 flex-shrink-0 border-r border-slate-200 bg-slate-50/30 flex items-center gap-1 px-1">
-                                  <div className="flex flex-col w-full">
-                                      <div className="flex items-center gap-1">
-                                          <PlayCircle size={10} className="text-slate-400" />
-                                          <select 
-                                              className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer"
-                                              value={task.startWeekId || ''}
-                                              onChange={(e) => onUpdateTaskSchedule(project.id, module.id, task.id, e.target.value, task.duration || 1)}
-                                          >
-                                              <option value="">Start...</option>
-                                              {ALL_WEEK_IDS.map(w => (
-                                                  <option key={w} value={w}>{w.split('-')[1]}</option>
-                                              ))}
-                                          </select>
-                                      </div>
-                                      <div className="flex items-center gap-1 border-t border-slate-200 pt-0.5 mt-0.5">
-                                          <Clock size={10} className="text-slate-400" />
+                                  <div className="flex flex-col w-full gap-0.5">
+                                      <div className="flex items-center gap-1" title="Start Date">
+                                          <span className="text-[9px] text-slate-400 w-6">Start</span>
                                           <input 
-                                              type="number" 
-                                              className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-8"
-                                              placeholder="Wks"
-                                              min={1}
-                                              value={task.duration || ''}
-                                              onChange={(e) => onUpdateTaskSchedule(project.id, module.id, task.id, task.startWeekId || ALL_WEEK_IDS[0], parseInt(e.target.value) || 0)}
+                                            type="date"
+                                            className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer"
+                                            value={formatDateForInput(startDate)}
+                                            onChange={(e) => handleStartDateChange(project.id, module.id, task, e.target.value)}
                                           />
-                                          <span className="text-[9px] text-slate-400">wks</span>
+                                      </div>
+                                      <div className="flex items-center gap-1 border-t border-slate-200 pt-0.5" title="End Date">
+                                          <span className="text-[9px] text-slate-400 w-6">End</span>
+                                          <input 
+                                            type="date"
+                                            className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer"
+                                            value={formatDateForInput(endDate)}
+                                            min={formatDateForInput(startDate)}
+                                            onChange={(e) => handleEndDateChange(project.id, module.id, task, e.target.value)}
+                                          />
                                       </div>
                                   </div>
                               </div>
@@ -830,7 +929,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     ) : (
                                       <span 
                                         className="text-xs text-slate-600 pl-12 truncate cursor-pointer hover:text-indigo-600 flex-1"
-                                        onDoubleClick={(e) => startEditing(resourceEditId, assignment.resourceName || '', e)}
+                                        onDoubleClick={(e) => startEditing(resourceEditId, assignment.resourceName || '', undefined, e)}
                                         title="Double click to edit resource name"
                                       >
                                         ↳ {assignment.resourceName || 'Unassigned'}
@@ -925,7 +1024,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           </div>
                            <div className="w-32 flex-shrink-0 border-r border-slate-200 bg-slate-50/20"></div>
                            {timeline.map(col => (
-// FIX: Changed `moduleId` to `module.id` to correctly reference the module's ID.
                              <div key={`add-${module.id}-${col.id}`} className="flex-shrink-0 border-r border-slate-100" style={{ width: `${colWidth}px` }}></div>
                            ))}
                         </div>

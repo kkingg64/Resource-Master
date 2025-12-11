@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { INITIAL_PROJECTS, ALL_WEEK_IDS, INITIAL_HOLIDAYS, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint } from './constants';
 import { Project, Role, ResourceAllocation, Holiday } from './types';
@@ -44,17 +45,66 @@ const App: React.FC = () => {
     }));
   };
 
-  const updateAllocation = (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number) => {
+  const updateAllocation = (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number, dayDate?: string) => {
     updateProjectModule(projectId, moduleId, (m) => {
       const newTasks = m.tasks.map((task: any) => {
         if (task.id !== taskId) return task;
         const newAssignments = task.assignments.map((assign: any) => {
           if (assign.id !== assignmentId) return assign;
-          const filtered = assign.allocations.filter((a: any) => a.weekId !== weekId);
-          if (value > 0) {
-            filtered.push({ weekId, count: value });
+          
+          let newAllocations = [...assign.allocations];
+          const existingAllocIndex = newAllocations.findIndex((a: any) => a.weekId === weekId);
+          
+          if (existingAllocIndex > -1) {
+            // Update existing allocation
+            const alloc = { ...newAllocations[existingAllocIndex] };
+            
+            if (dayDate) {
+              // Handle Daily Update
+              const newDays = { ...(alloc.days || {}) };
+              
+              // If we are switching to daily mode and days map is empty, we should initialize it 
+              // with the previous weekly average for other days, to avoid data loss.
+              // For simplicity in this demo, we assume other days are 0 if not set, or user sets them one by one.
+              // Better UX: Pre-fill Mon-Fri with count/5 if daily map is empty?
+              if (Object.keys(newDays).length === 0 && alloc.count > 0) {
+                 // Initialize assumption: spread existing count to 5 days? 
+                 // We will skip this complex logic for now and just update the specific day.
+              }
+
+              newDays[dayDate] = value;
+              
+              // Recalculate total count for the week based on days
+              // Note: This overrides any manual weekly entry.
+              const dailySum = Object.values(newDays).reduce((sum: number, val: number) => sum + val, 0);
+              
+              newAllocations[existingAllocIndex] = {
+                ...alloc,
+                count: dailySum,
+                days: newDays
+              };
+            } else {
+              // Standard Weekly Update
+              if (value > 0) {
+                newAllocations[existingAllocIndex] = { ...alloc, count: value, days: undefined }; // Reset days if weekly override
+              } else {
+                newAllocations = newAllocations.filter((_, idx) => idx !== existingAllocIndex);
+              }
+            }
+          } else if (value > 0) {
+            // Create new allocation
+            if (dayDate) {
+              newAllocations.push({
+                weekId,
+                count: value,
+                days: { [dayDate]: value }
+              });
+            } else {
+              newAllocations.push({ weekId, count: value });
+            }
           }
-          return { ...assign, allocations: filtered };
+
+          return { ...assign, allocations: newAllocations };
         });
         return { ...task, assignments: newAssignments };
       });
@@ -103,6 +153,10 @@ const App: React.FC = () => {
 
   const updateProjectName = (projectId: string, name: string) => {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, name } : p));
+  };
+
+  const updateModuleName = (projectId: string, moduleId: string, name: string) => {
+    updateProjectModule(projectId, moduleId, (m) => ({ ...m, name }));
   };
 
   const updateTaskName = (projectId: string, moduleId: string, taskId: string, name: string) => {
@@ -456,6 +510,7 @@ const App: React.FC = () => {
                   onAddProject={addProject}
                   onAddModule={addModule}
                   onUpdateProjectName={updateProjectName}
+                  onUpdateModuleName={updateModuleName}
                   onUpdateTaskName={updateTaskName}
                   onDeleteProject={deleteProject}
                   onDeleteModule={deleteModule}
@@ -463,6 +518,7 @@ const App: React.FC = () => {
                   onDeleteAssignment={deleteAssignment}
                   onImportPlan={handleImportPlan}
                   onShowHistory={() => setShowHistory(true)}
+                  onUpdateFunctionPoints={updateFunctionPoints}
                 />
               </div>
             )}

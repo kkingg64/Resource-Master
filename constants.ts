@@ -277,7 +277,7 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 const DAY_NAMES = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 // Helper to get date from ISO Week
-const getDateFromWeek = (year: number, week: number): Date => {
+export const getDateFromWeek = (year: number, week: number): Date => {
   const simple = new Date(year, 0, 1 + (week - 1) * 7);
   const dow = simple.getDay();
   const ISOweekStart = simple;
@@ -287,6 +287,25 @@ const getDateFromWeek = (year: number, week: number): Date => {
       ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
   return ISOweekStart;
 };
+
+// Helper to get ISO Week from Date
+export const getWeekIdFromDate = (d: Date): string => {
+  // Copy date so don't modify original
+  d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  // Set to nearest Thursday: current date + 4 - current day number
+  // Make Sunday's day number 7
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
+  // Get first day of year
+  var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  // Calculate full weeks to nearest Thursday
+  var weekNo = Math.ceil(( ( (d.getTime() - yearStart.getTime()) / 86400000) + 1)/7);
+  // Return array of year and week number
+  return `${d.getUTCFullYear()}-${weekNo.toString().padStart(2, '0')}`;
+}
+
+export const formatDateForInput = (date: Date): string => {
+  return date.toISOString().split('T')[0];
+}
 
 // Simplified timeline generation
 export interface WeekPoint { year: number; week: number; }

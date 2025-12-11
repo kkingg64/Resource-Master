@@ -18,7 +18,8 @@ export enum Phase {
 
 export interface ResourceAllocation {
   weekId: string; // Format YYYY-WW
-  count: number; // Headcount or Man-days
+  count: number; // Headcount or Man-days (Weekly Total)
+  days?: Record<string, number>; // Key: YYYY-MM-DD, Value: count
 }
 
 export interface TaskAssignment {
