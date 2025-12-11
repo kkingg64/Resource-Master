@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ALL_WEEK_IDS, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getDateFromWeek, getWeekIdFromDate } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment } from './types';
 import { Dashboard } from './components/Dashboard';
@@ -56,9 +56,6 @@ const App: React.FC = () => {
   
   const [timelineStart, setTimelineStart] = useState<WeekPoint>(DEFAULT_START);
   const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
-  
-  const saveQueueRef = useRef(new Map());
-  const debounceTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -73,7 +70,13 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchData = useCallback(async () => {
+  useEffect(() => {
+    if (session) {
+      fetchData();
+    }
+  }, [session]);
+
+  const fetchData = async () => {
     if (!session) return;
     setLoading(true);
     
@@ -122,37 +125,7 @@ const App: React.FC = () => {
     }
     
     setLoading(false);
-  }, [session]);
-
-  useEffect(() => {
-    if (session) {
-      fetchData();
-    }
-  }, [session, fetchData]);
-
-  const commitAllocationSaves = useCallback(async () => {
-    if (!session || saveQueueRef.current.size === 0) return;
-
-    const updates = Array.from(saveQueueRef.current.values());
-    saveQueueRef.current.clear();
-    
-    const upsertData = updates.map(item => ({
-        id: item.existingAllocId,
-        assignment_id: item.assignmentId,
-        user_id: session.user.id,
-        week_id: item.weekId,
-        count: item.allocation.count,
-        days: item.allocation.days
-    }));
-
-    const { error } = await supabase.from('resource_allocations').upsert(upsertData);
-
-    if (error) {
-        console.error("Failed to save allocations:", error);
-        alert("Error: Some changes could not be saved. Re-syncing data.");
-        fetchData();
-    }
-  }, [session, fetchData]);
+  };
 
   const handleExtendTimeline = (direction: 'start' | 'end') => {
     if (direction === 'start') setTimelineStart(prev => addWeeksToPoint(prev, -4));
@@ -160,6 +133,7 @@ const App: React.FC = () => {
   };
   
   const updateAllocation = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number, dayDate?: string) => {
+    const currentState = projects;
     // Optimistic update
     const { updatedProjects, allocationToUpdate } = (() => {
       let allocationToUpdate: any = null;
@@ -193,10 +167,10 @@ const App: React.FC = () => {
                 newAllocations[allocIndex] = alloc;
                 allocationToUpdate = alloc;
               } else if (value > 0) {
-                const newAlloc: ResourceAllocation = { weekId, count: value, days: {} };
+                const newAlloc = { weekId, count: value, days: {} };
                  if(dayDate) {
                    const weekdays = getWeekdaysForWeekId(weekId);
-                   const days = weekdays.reduce((acc, day) => ({...acc, [day]: 0}), {} as Record<string, number>);
+                   const days = weekdays.reduce((acc, day) => ({...acc, [day]: 0}), {});
                    days[dayDate] = value;
                    newAlloc.days = days;
                  }
@@ -212,7 +186,7 @@ const App: React.FC = () => {
     })();
     setProjects(updatedProjects);
 
-    // DB update queue
+    // DB update
     if (allocationToUpdate) {
         const { data: existingAlloc } = await supabase
             .from('resource_allocations')
@@ -221,18 +195,22 @@ const App: React.FC = () => {
             .eq('week_id', weekId)
             .maybeSingle();
 
-        const queueKey = `${assignmentId}-${weekId}`;
-        saveQueueRef.current.set(queueKey, {
-            existingAllocId: existingAlloc?.id,
-            assignmentId,
-            weekId,
-            allocation: allocationToUpdate,
-        });
+        const upsertData = {
+            id: existingAlloc?.id,
+            assignment_id: assignmentId,
+            user_id: session!.user.id,
+            week_id: weekId,
+            count: allocationToUpdate.count,
+            days: allocationToUpdate.days
+        };
 
-        if (debounceTimeoutRef.current) {
-            clearTimeout(debounceTimeoutRef.current);
+        const { error } = await supabase.from('resource_allocations').upsert(upsertData);
+
+        if (error) {
+            console.error("Failed to update allocation:", error);
+            setProjects(currentState); // Revert on error
+            alert("Error: Could not save allocation.");
         }
-        debounceTimeoutRef.current = window.setTimeout(commitAllocationSaves, 2000);
     }
   };
 
@@ -288,46 +266,6 @@ const App: React.FC = () => {
         console.error(error);
         setProjects(previousState);
         alert("Failed to update task name.");
-    }
-  };
-
-  const updateAssignmentResourceName = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => {
-    const previousState = projects;
-    setProjects(prev => prev.map(p => {
-      if (p.id !== projectId) return p;
-      return { ...p, modules: p.modules.map(m => {
-        if (m.id !== moduleId) return m;
-        return { ...m, tasks: m.tasks.map(t => {
-          if (t.id !== taskId) return t;
-          return { ...t, assignments: t.assignments.map(a => a.id === assignmentId ? { ...a, resourceName: name } : a)};
-        })};
-      })};
-    }));
-    const { error } = await supabase.from('task_assignments').update({ resource_name: name }).eq('id', assignmentId);
-    if (error) {
-      console.error(error);
-      setProjects(previousState);
-      alert("Failed to update resource name.");
-    }
-  };
-
-  const updateAssignmentRole = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, role: Role) => {
-    const previousState = projects;
-    setProjects(prev => prev.map(p => {
-      if (p.id !== projectId) return p;
-      return { ...p, modules: p.modules.map(m => {
-        if (m.id !== moduleId) return m;
-        return { ...m, tasks: m.tasks.map(t => {
-          if (t.id !== taskId) return t;
-          return { ...t, assignments: t.assignments.map(a => a.id === assignmentId ? { ...a, role } : a)};
-        })};
-      })};
-    }));
-    const { error } = await supabase.from('task_assignments').update({ role }).eq('id', assignmentId);
-    if (error) {
-      console.error(error);
-      setProjects(previousState);
-      alert("Failed to update assignment role.");
     }
   };
   
@@ -615,7 +553,7 @@ const App: React.FC = () => {
             {loading ? <div className="text-center">Loading your data...</div> : (
               <>
                 {activeTab === 'dashboard' && <Dashboard projects={projects} />}
-                {activeTab === 'planner' && <PlannerGrid projects={projects} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={updateAssignmentRole} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onShiftTask={async () => {}} onShiftAssignment={async () => {}} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={() => {}} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} onUpdateTaskDependencies={updateTaskDependencies} />}
+                {activeTab === 'planner' && <PlannerGrid projects={projects} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={async () => {}} onUpdateAssignmentResourceName={async () => {}} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onShiftTask={async () => {}} onShiftAssignment={async () => {}} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={() => {}} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} onUpdateTaskDependencies={updateTaskDependencies} />}
                 {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
                 {activeTab === 'holiday' && <AdminSettings holidays={holidays} onUpdateHolidays={setHolidays} />}
                 {activeTab === 'settings' && <Settings />}
