@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource } from '../types';
+import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, ResourceCategory } from '../types';
 import { getTimeline, ALL_WEEK_IDS, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput } from '../constants';
 import { Layers, Calendar, ChevronRight, ChevronDown, Info, GripVertical, Plus, UserPlus, ChevronLeft, Clock, PlayCircle, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -112,6 +112,17 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [editValue2, setEditValue2] = useState<string>(''); // Secondary value for double inputs (e.g. FP)
   const editInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  
+  const groupedResources = useMemo(() => {
+    return resources.reduce((acc, resource) => {
+      const category = resource.category || 'Uncategorized';
+      if (!acc[category]) {
+        acc[category] = [];
+      }
+      acc[category].push(resource);
+      return acc;
+    }, {} as Record<string, Resource[]>);
+  }, [resources]);
 
   useEffect(() => {
     if (editingId && editInputRef.current) {
@@ -1052,8 +1063,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                        onChange={(e) => onUpdateAssignmentResourceName(project.id, module.id, task.id, assignment.id, e.target.value)}
                                        className="w-full text-xs text-slate-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer hover:text-indigo-600"
                                      >
-                                        <option>Unassigned</option>
-                                        {resources.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
+                                        <option value="Unassigned">Unassigned</option>
+                                        {Object.entries(groupedResources).map(([category, resList]) => (
+                                          <optgroup label={category} key={category}>
+                                            {resList.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
+                                          </optgroup>
+                                        ))}
                                      </select>
                                      <button 
                                       onClick={(e) => { e.stopPropagation(); onDeleteAssignment(project.id, module.id, task.id, assignment.id); }}

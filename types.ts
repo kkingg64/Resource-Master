@@ -97,7 +97,13 @@ export interface LogEntry {
   status: 'pending' | 'success' | 'error';
 }
 
+export enum ResourceCategory {
+  INTERNAL = 'Internal',
+  EXTERNAL = 'External',
+}
+
 export interface Resource {
   id: string;
   name: string;
+  category: ResourceCategory;
 }

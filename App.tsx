@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ALL_WEEK_IDS, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate } from './constants';
-import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource } from './types';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate } from './constants';
+import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ResourceCategory } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
 import { Estimator } from './components/Estimator';
@@ -15,34 +15,74 @@ import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 
 // Helper to structure data from Supabase
-const structureProjectsData = (data: any[]): Project[] => {
-  return data.map(p => ({
-    id: p.id,
-    name: p.name,
-    modules: p.modules.map((m: any) => ({
+const structureProjectsData = (
+  projects: any[],
+  modules: any[],
+  tasks: any[],
+  assignments: any[],
+  allocations: any[]
+): Project[] => {
+  const allocationsByAssignment = new Map<string, any[]>();
+  allocations.forEach(a => {
+    if (!allocationsByAssignment.has(a.assignment_id)) {
+      allocationsByAssignment.set(a.assignment_id, []);
+    }
+    allocationsByAssignment.get(a.assignment_id)!.push({
+      weekId: a.week_id,
+      count: a.count,
+      days: a.days || {},
+    });
+  });
+
+  const assignmentsByTask = new Map<string, any[]>();
+  assignments.forEach(a => {
+    if (!assignmentsByTask.has(a.task_id)) {
+      assignmentsByTask.set(a.task_id, []);
+    }
+    assignmentsByTask.get(a.task_id)!.push({
+      id: a.id,
+      role: a.role,
+      resourceName: a.resource_name,
+      allocations: allocationsByAssignment.get(a.id) || [],
+    });
+  });
+
+  const tasksByModule = new Map<string, any[]>();
+  tasks.forEach(t => {
+    if (!tasksByModule.has(t.module_id)) {
+      tasksByModule.set(t.module_id, []);
+    }
+    tasksByModule.get(t.module_id)!.push({
+      id: t.id,
+      name: t.name,
+      startWeekId: t.start_week_id,
+      duration: t.duration,
+      sort_order: t.sort_order,
+      assignments: (assignmentsByTask.get(t.id) || []).sort((a,b) => a.role.localeCompare(b.role)),
+    });
+  });
+
+  const modulesByProject = new Map<string, any[]>();
+  modules.forEach(m => {
+    if (!modulesByProject.has(m.project_id)) {
+      modulesByProject.set(m.project_id, []);
+    }
+    const moduleTasks = (tasksByModule.get(m.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    modulesByProject.get(m.project_id)!.push({
       id: m.id,
       name: m.name,
       legacyFunctionPoints: m.legacy_function_points,
       functionPoints: m.function_points,
-      tasks: m.tasks.map((t: any) => ({
-        id: t.id,
-        name: t.name,
-        startWeekId: t.start_week_id,
-        duration: t.duration,
-        sort_order: t.sort_order,
-        assignments: t.task_assignments.map((a: any) => ({
-          id: a.id,
-          role: a.role,
-          resourceName: a.resource_name,
-          allocations: a.resource_allocations.map((alloc: any) => ({
-            weekId: alloc.week_id,
-            count: alloc.count,
-            days: alloc.days || {},
-          })),
-        })),
-      })).sort((a,b) => (a.sort_order || 0) - (b.sort_order || 0)), // Sort tasks
-    })).sort((a,b) => a.sort_order - b.sort_order), // Sort modules
-  }));
+      sort_order: m.sort_order,
+      tasks: moduleTasks,
+    });
+  });
+
+  return projects.map(p => ({
+    id: p.id,
+    name: p.name,
+    modules: (modulesByProject.get(p.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+  })).sort((a,b) => a.name.localeCompare(b.name));
 };
 
 const deepClone = <T,>(obj: T): T => JSON.parse(JSON.stringify(obj));
@@ -76,7 +116,7 @@ const App: React.FC = () => {
   const log = (message: string, payload: any, status: LogEntry['status'] = 'pending'): number => {
     if (!isDebugLogEnabled) return -1;
     const id = nextLogId.current++;
-    // FIX: Pass an empty array to toLocaleTimeString to use the default locale, satisfying environments that require the 'locales' argument.
+    // FIX: Pass an empty array to toLocaleTimeString to satisfy linter which may expect at least one argument.
     const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString([]), message, payload, status };
     setLogEntries(prev => [newEntry, ...prev.slice(0, 99)]);
     return id;
@@ -92,7 +132,6 @@ const App: React.FC = () => {
   const callSupabase = async (
     message: string,
     payload: any,
-    // FIX: Change type to PromiseLike to accommodate Supabase query builders which are "thenable" but not full Promises.
     supabasePromise: PromiseLike<{ data: any; error: any }>
   ) => {
     const logId = log(message, payload);
@@ -124,39 +163,78 @@ const App: React.FC = () => {
       fetchData();
     }
   }, [session]);
+  
+  const dateToCountryMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const countryCode in GOV_HOLIDAYS_DB) {
+      for (const holiday of GOV_HOLIDAYS_DB[countryCode]) {
+        map.set(holiday.date, holiday.country);
+      }
+    }
+    return map;
+  }, []);
 
   const fetchData = async (isRefresh: boolean = false) => {
     if (!session) return;
     if (isRefresh) setIsRefreshing(true);
     else setLoading(true);
-    
-    const projectsPromise = supabase.from('projects').select('id, name, modules (id, name, legacy_function_points, function_points, sort_order, tasks (id, name, start_week_id, duration, sort_order, task_assignments (id, role, resource_name, resource_allocations ( id, week_id, count, days ))))').eq('user_id', session!.user.id).order('created_at', { ascending: true });
-    const holidaysPromise = supabase.from('holidays').select('*').eq('user_id', session.user.id);
-    const resourcesPromise = supabase.from('resources').select('*').eq('user_id', session.user.id).order('name');
 
-    const [{ data: projectsData, error: projectsError }, { data: holidaysData, error: holidaysError }, { data: resourcesData, error: resourcesError }] = await Promise.all([projectsPromise, holidaysPromise, resourcesPromise]);
+    // Fetch projects
+    const { data: projectsData, error: projectsError } = await supabase.from('projects').select('*').eq('user_id', session.user.id);
+    if (projectsError) { console.error("Error fetching projects", projectsError); setLoading(false); return; }
 
-    log('FETCH projects', { user_id: session!.user.id }, projectsError ? 'error': 'success');
-    log('FETCH holidays', { user_id: session!.user.id }, holidaysError ? 'error': 'success');
-    log('FETCH resources', { user_id: session!.user.id }, resourcesError ? 'error': 'success');
+    let finalProjectsData = projectsData;
+    if (projectsData && projectsData.length === 0) {
+      const { data: newProject, error: newProjectError } = await callSupabase(
+        'CREATE default project', { name: 'My First Project' },
+        supabase.from('projects').insert({ name: 'My First Project', user_id: session!.user.id }).select().single()
+      );
+      if (newProject && !newProjectError) { finalProjectsData = [newProject]; }
+    }
     
-    if (projectsData) {
-      const formattedProjects = structureProjectsData(projectsData);
-      if (formattedProjects.length === 0) {
-         const { data, error } = await callSupabase(
-            'CREATE default project', { name: 'My First Project' },
-            supabase.from('projects').insert({ name: 'My First Project', user_id: session!.user.id }).select().single()
-         );
-         if (data && !error) {
-             setProjects([{ id: data.id, name: data.name, modules: [] }]);
-         }
-      } else {
-          setProjects(formattedProjects);
+    const projectIds = finalProjectsData.map(p => p.id);
+    let modulesData = [], tasksData = [], assignmentsData = [], allocationsData = [];
+
+    if (projectIds.length > 0) {
+      const { data: modules, error: modulesError } = await supabase.from('modules').select('*').in('project_id', projectIds);
+      if (modulesError) console.error(modulesError); else modulesData = modules;
+      
+      const moduleIds = modulesData.map(m => m.id);
+      if (moduleIds.length > 0) {
+        const { data: tasks, error: tasksError } = await supabase.from('tasks').select('*').in('module_id', moduleIds);
+        if (tasksError) console.error(tasksError); else tasksData = tasks;
+
+        const taskIds = tasksData.map(t => t.id);
+        if (taskIds.length > 0) {
+          const { data: assignments, error: assignmentsError } = await supabase.from('task_assignments').select('*').in('task_id', taskIds);
+          if (assignmentsError) console.error(assignmentsError); else assignmentsData = assignments;
+          
+          const assignmentIds = assignmentsData.map(a => a.id);
+          if (assignmentIds.length > 0) {
+            const { data: allocations, error: allocationsError } = await supabase.from('resource_allocations').select('*').in('assignment_id', assignmentIds);
+            if (allocationsError) console.error(allocationsError); else allocationsData = allocations;
+          }
+        }
       }
     }
-    if (holidaysData) setHolidays(holidaysData.map(h => ({ ...h, id: h.id.toString() })));
-    if (resourcesData) setResources(resourcesData);
-    
+    setProjects(structureProjectsData(finalProjectsData, modulesData, tasksData, assignmentsData, allocationsData));
+
+    // Fetch holidays and resources in parallel
+    const [holidaysResponse, resourcesResponse] = await Promise.all([
+      supabase.from('holidays').select('id, date, name').eq('user_id', session.user.id),
+      supabase.from('resources').select('*').eq('user_id', session.user.id).order('name')
+    ]);
+
+    if (holidaysResponse.data) {
+      const hydratedHolidays = holidaysResponse.data.map(h => ({
+        ...h,
+        id: h.id.toString(),
+        country: dateToCountryMap.get(h.date) || 'Global'
+      }));
+      setHolidays(hydratedHolidays);
+    }
+    if (resourcesResponse.data) setResources(resourcesResponse.data);
+
     if (isRefresh) setIsRefreshing(false);
     else setLoading(false);
   };
@@ -471,10 +549,10 @@ const App: React.FC = () => {
   };
 
   // --- Resource Management ---
-  const addResource = async (name: string) => {
+  const addResource = async (name: string, category: ResourceCategory) => {
     const { data, error } = await callSupabase(
-      'CREATE resource', { name },
-      supabase.from('resources').insert({ name, user_id: session!.user.id }).select().single()
+      'CREATE resource', { name, category },
+      supabase.from('resources').insert({ name, category, user_id: session!.user.id }).select().single()
     );
     if (error) { alert('Failed to add resource.'); } 
     else { setResources(prev => [...prev, data]); }
@@ -489,13 +567,14 @@ const App: React.FC = () => {
 
   // --- Holiday Management ---
   const addHolidays = async (holidaysToAdd: Omit<Holiday, 'id'>[]) => {
-    const holidaysWithUserId = holidaysToAdd.map(h => ({ ...h, user_id: session!.user.id }));
+    // Exclude country from insert to prevent errors if column doesn't exist in DB
+    const holidaysToInsert = holidaysToAdd.map(h => ({ date: h.date, name: h.name, user_id: session!.user.id }));
     const { error } = await callSupabase(
-        'SYNC holidays', { count: holidaysWithUserId.length, country: holidaysWithUserId[0]?.country },
-        supabase.from('holidays').upsert(holidaysWithUserId, { onConflict: 'user_id,date' })
+        'SYNC holidays', { count: holidaysToInsert.length, country: holidaysToAdd[0]?.country },
+        supabase.from('holidays').upsert(holidaysToInsert, { onConflict: 'user_id,date' })
     );
     if (error) { alert('Failed to sync holidays.'); } 
-    else { fetchData(true); } // Refresh data after sync
+    else { fetchData(true); }
   };
   
   const deleteHoliday = async (id: string) => {
@@ -507,8 +586,15 @@ const App: React.FC = () => {
   
   const deleteHolidaysByCountry = async (country: string) => {
     const previousState = deepClone(holidays);
-    setHolidays(prev => prev.filter(h => h.country !== country));
-    const { error } = await callSupabase('DELETE holidays by country', { country }, supabase.from('holidays').delete().match({ country: country, user_id: session!.user.id }));
+    const datesToDelete = GOV_HOLIDAYS_DB[country]?.map(h => h.date) || [];
+    if (datesToDelete.length === 0) return;
+
+    setHolidays(prev => prev.filter(h => !datesToDelete.includes(h.date)));
+    const { error } = await callSupabase(
+      'DELETE holidays by country', 
+      { country, dates: datesToDelete.length }, 
+      supabase.from('holidays').delete().in('date', datesToDelete).eq('user_id', session!.user.id)
+    );
     if (error) { setHolidays(previousState); alert(`Failed to delete holidays for ${country}.`); }
   };
 
@@ -569,11 +655,11 @@ const App: React.FC = () => {
         <main className="flex-1 flex flex-col overflow-hidden">
           <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8"><h1 className="text-xl font-bold text-slate-800">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</h1></header>
           <div className="flex-1 overflow-auto p-6">
-            {loading ? <div className="text-center">Loading your data...</div> : (
+            {loading ? <div className="text-center p-8 text-slate-500">Loading your data...</div> : (
               <>
                 {activeTab === 'dashboard' && <Dashboard projects={projects} />}
                 {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentRole={updateAssignmentRole} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onShiftTask={async () => {}} onShiftAssignment={async () => {}} onUpdateTaskSchedule={updateTaskSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={() => {}} onShowHistory={() => setShowHistory(true)} onUpdateFunctionPoints={updateFunctionPoints} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
-                {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg-col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
+                {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
                 {activeTab === 'resources' && <Resources resources={resources} onAddResource={addResource} onDeleteResource={deleteResource} />}
                 {activeTab === 'holiday' && <AdminSettings holidays={holidays} onAddHolidays={addHolidays} onDeleteHoliday={deleteHoliday} onDeleteHolidaysByCountry={deleteHolidaysByCountry} />}
                 {activeTab === 'settings' && <Settings isDebugLogEnabled={isDebugLogEnabled} setIsDebugLogEnabled={setIsDebugLogEnabled} />}
