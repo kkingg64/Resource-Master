@@ -3,7 +3,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 // FIX: Removed non-existent ResourceCategory from imports.
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource } from '../types';
 import { getTimeline, ALL_WEEK_IDS, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, Info, GripVertical, Plus, UserPlus, ChevronLeft, Clock, PlayCircle, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw } from 'lucide-react';
+import { Layers, Calendar, ChevronRight, ChevronDown, Info, GripVertical, Plus, UserPlus, ChevronLeft, Clock, PlayCircle, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface PlannerGridProps {
@@ -176,6 +176,19 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const toggleTask = (id: string) => {
     setCollapsedTasks(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleToggleAll = () => {
+    const allProjectIds = projects.map(p => p.id);
+    const allModuleIds = projects.flatMap(p => p.modules.map(m => m.id));
+
+    const shouldCollapse = allProjectIds.some(id => !collapsedProjects[id]);
+
+    const newProjectStates = Object.fromEntries(allProjectIds.map(id => [id, shouldCollapse]));
+    const newModuleStates = Object.fromEntries(allModuleIds.map(id => [id, shouldCollapse]));
+
+    setCollapsedProjects(newProjectStates);
+    setCollapsedModules(newModuleStates);
   };
 
   const startEditing = (id: string, initialValue: string, e?: React.MouseEvent) => {
@@ -392,16 +405,20 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const getRoleColorClass = (role: Role) => {
     switch (role) {
       case Role.DEV: return 'border-l-blue-500';
-      case Role.UIUX: return 'border-l-orange-500';
-      case Role.QA: return 'border-l-green-500';
+      case Role.BRAND_SOLUTIONS: return 'border-l-orange-500';
+      case Role.PLM_D365: return 'border-l-green-500';
       case Role.BA: return 'border-l-purple-500';
-      default: return 'border-l-slate-300';
+      case Role.APP_SUPPORT: return 'border-l-red-500';
+      case Role.DM: return 'border-l-yellow-500';
+      case Role.COE: return 'border-l-cyan-500';
+      case Role.EA: return 'border-l-pink-500';
+      default: return 'border-l-slate-400';
     }
   };
 
   const getHolidayInfo = (date?: Date) => {
     if (!date) return null;
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = formatDateForInput(date);
     return holidays.find(h => h.date === dateStr);
   };
 
@@ -429,7 +446,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       const alloc = assignment.allocations.find(a => a.weekId === col.parentWeekId);
       if (!alloc) return 0;
 
-      const dateStr = col.date.toISOString().split('T')[0];
+      const dateStr = formatDateForInput(col.date);
       
       // If we have explicit daily data, use it
       if (alloc.days && alloc.days[dateStr] !== undefined) {
@@ -480,7 +497,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     } else if (viewMode === 'day') {
       if (!col.parentWeekId || !col.date) return;
       // Pass the specific date string to update daily allocation
-      const dateStr = col.date.toISOString().split('T')[0];
+      const dateStr = formatDateForInput(col.date);
       onUpdateAllocation(projectId, moduleId, taskId, assignmentId, col.parentWeekId, numValue, dateStr);
     }
   };
@@ -578,6 +595,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             <span className="text-sm font-semibold text-slate-700">Timeline</span>
           </div>
           
+          <button onClick={handleToggleAll} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors" title="Collapse/Expand All">
+             <ChevronsDownUp size={14} /> Toggle All
+          </button>
+
           <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden">
              <button onClick={() => onExtendTimeline('start')} className="px-2 py-1 hover:bg-slate-100 text-xs text-slate-600 border-r border-slate-200" title="Add Month to Start">
                &lt; +Month
@@ -1013,10 +1034,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 </div>
                                 
                                 <div className="flex-shrink-0 border-r border-slate-200 bg-white flex flex-col justify-center gap-1 px-2 py-1 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
-                                    <div className="flex items-center justify-between">
-                                      <span className="w-20 text-[10px] p-0 text-slate-600 font-medium truncate" title={assignment.role}>
-                                        {assignment.role}
-                                      </span>
+                                    <div className="flex items-center justify-end h-[16px]">
                                       <div className="flex items-center gap-0.5 opacity-0 group-hover/assign:opacity-100 transition-opacity">
                                         <button 
                                             onClick={() => onShiftAssignment(project.id, module.id, task.id, assignment.id, 'left')}

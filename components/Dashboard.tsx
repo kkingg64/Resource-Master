@@ -20,12 +20,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
     return GLOBAL_TIMELINE_DATA.map(week => {
       // FIX: Property 'groupLabel' does not exist on type 'TimelineColumn'. Using 'monthLabel' instead.
       const [month] = week.monthLabel.split(' ');
-      const summary = {
+      const summary: any = {
         name: `${week.label} (${month})`,
         [Role.DEV]: 0,
-        [Role.QA]: 0,
-        [Role.UIUX]: 0,
         [Role.BA]: 0,
+        [Role.APP_SUPPORT]: 0,
+        [Role.BRAND_SOLUTIONS]: 0,
         total: 0
       };
 
@@ -93,10 +93,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
                 contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
               />
               <Legend />
-              <Bar dataKey={Role.DEV} stackId="a" fill="#4f46e5" name="Developers" radius={[0, 0, 4, 4]} />
-              <Bar dataKey={Role.QA} stackId="a" fill="#10b981" name="QA" />
-              <Bar dataKey={Role.UIUX} stackId="a" fill="#f59e0b" name="Design" />
-              <Bar dataKey={Role.BA} stackId="a" fill="#64748b" name="Analysts" radius={[4, 4, 0, 0]} />
+              <Bar dataKey={Role.DEV} stackId="a" fill="#4f46e5" name="Dev Team" radius={[0, 0, 4, 4]} />
+              <Bar dataKey={Role.BA} stackId="a" fill="#8b5cf6" name="BA" />
+              <Bar dataKey={Role.APP_SUPPORT} stackId="a" fill="#ef4444" name="App Support" />
+              <Bar dataKey={Role.BRAND_SOLUTIONS} stackId="a" fill="#f97316" name="Brand Solutions" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

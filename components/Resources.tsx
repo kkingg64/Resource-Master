@@ -28,14 +28,16 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
     setNewResourceName('');
   };
   
-  // FIX: Updated categoryColors to match the Role enum.
+  // FIX: Updated categoryColors to match the Role enum from types.ts. This resolves type errors.
   const categoryColors: Record<Role, string> = {
+    [Role.CNF]: 'bg-slate-100 text-slate-800 border-slate-200 focus:ring-slate-500',
+    [Role.BRAND_SOLUTIONS]: 'bg-orange-100 text-orange-800 border-orange-200 focus:ring-orange-500',
+    [Role.COE]: 'bg-cyan-100 text-cyan-800 border-cyan-200 focus:ring-cyan-500',
+    [Role.EA]: 'bg-pink-100 text-pink-800 border-pink-200 focus:ring-pink-500',
+    [Role.DM]: 'bg-yellow-100 text-yellow-800 border-yellow-200 focus:ring-yellow-500',
     [Role.DEV]: 'bg-blue-100 text-blue-800 border-blue-200 focus:ring-blue-500',
-    [Role.QA]: 'bg-green-100 text-green-800 border-green-200 focus:ring-green-500',
-    [Role.UIUX]: 'bg-orange-100 text-orange-800 border-orange-200 focus:ring-orange-500',
-    [Role.PM]: 'bg-gray-100 text-gray-800 border-gray-200 focus:ring-gray-500',
+    [Role.PLM_D365]: 'bg-green-100 text-green-800 border-green-200 focus:ring-green-500',
     [Role.BA]: 'bg-purple-100 text-purple-800 border-purple-200 focus:ring-purple-500',
-    [Role.DATA]: 'bg-cyan-100 text-cyan-800 border-cyan-200 focus:ring-cyan-500',
     [Role.APP_SUPPORT]: 'bg-red-100 text-red-800 border-red-200 focus:ring-red-500',
   };
 

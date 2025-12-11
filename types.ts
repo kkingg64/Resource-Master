@@ -1,13 +1,15 @@
 
 
 export enum Role {
+  CNF = 'CNF',
+  BRAND_SOLUTIONS = 'Brand Solutions',
+  COE = 'COE',
+  EA = 'EA',
+  DM = 'DM',
   DEV = 'Dev Team',
-  QA = 'QA Team',
-  UIUX = 'UI/UX Design',
-  PM = 'Project Manager',
-  BA = 'Business Analyst',
-  DATA = 'Data Mgmt Team',
-  APP_SUPPORT = 'App Support',
+  PLM_D365 = 'PLM & D365',
+  BA = 'BA',
+  APP_SUPPORT = 'Application Support',
 }
 
 export enum Phase {

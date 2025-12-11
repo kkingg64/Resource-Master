@@ -127,9 +127,7 @@ const App: React.FC = () => {
   const log = (message: string, payload: any, status: LogEntry['status'] = 'pending'): number => {
     if (!isDebugLogEnabled) return -1;
     const id = nextLogId.current++;
-    // FIX: Pass an empty array to toLocaleTimeString to satisfy TypeScript's argument expectation for locales.
-    // FIX: Pass an empty array to toLocaleTimeString to satisfy the function signature which expects arguments.
-    // FIX: Pass an empty array to toLocaleTimeString to satisfy TypeScript's argument expectation for locales.
+    // FIX: Pass an empty array to `toLocaleTimeString` to use the default locale and satisfy TypeScript's requirement for at least one argument.
     const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString([]), message, payload, status };
     setLogEntries(prev => [newEntry, ...prev.slice(0, 99)]);
     return id;
