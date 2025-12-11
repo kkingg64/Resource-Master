@@ -13,6 +13,7 @@ import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { Session } from '@supabase/supabase-js';
+import { generateId } from './lib/id';
 
 // Helper to structure data from Supabase
 const structureProjectsData = (data: any[]): Project[] => {
@@ -107,7 +108,8 @@ const App: React.FC = () => {
       const formattedProjects = structureProjectsData(projectsData);
       if (formattedProjects.length === 0) {
          // Create default project if none exist
-         const { data, error } = await supabase.from('projects').insert({ name: 'My First Project', user_id: session!.user.id }).select().single();
+         const defaultProjectId = generateId('proj');
+         const { data, error } = await supabase.from('projects').insert({ id: defaultProjectId, name: 'My First Project', user_id: session!.user.id }).select().single();
          if (data && !error) {
              setProjects([{ id: data.id, name: data.name, modules: [] }]);
          } else {
@@ -301,7 +303,8 @@ const App: React.FC = () => {
   };
 
   const addProject = async () => {
-    const { data, error } = await supabase.from('projects').insert({ name: `New Project ${projects.length + 1}`, user_id: session!.user.id }).select().single();
+    const newId = generateId('proj');
+    const { data, error } = await supabase.from('projects').insert({ id: newId, name: `New Project ${projects.length + 1}`, user_id: session!.user.id }).select().single();
     if (error) {
         console.error("Error adding project:", error);
         alert("Could not create project.");
@@ -396,7 +399,8 @@ const App: React.FC = () => {
   };
   
   const addModule = async (projectId: string) => {
-    const { data, error } = await supabase.from('modules').insert({ name: 'New Module', project_id: projectId, user_id: session!.user.id }).select().single();
+    const newId = generateId('mod');
+    const { data, error } = await supabase.from('modules').insert({ id: newId, name: 'New Module', project_id: projectId, user_id: session!.user.id }).select().single();
     if (error) {
         console.error(error);
         alert("Failed to add module.");
@@ -417,12 +421,23 @@ const App: React.FC = () => {
     }
   };
   
-  const addTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
+  const addTask = async (projectId: string, moduleId: string) => {
+    const taskId = generateId('task');
+    const assignId = generateId('asgn');
+    const taskName = 'New Task';
+    const role = Role.DEV;
+
     const { data: taskData, error: taskError } = await supabase.from('tasks').insert({ id: taskId, name: taskName, module_id: moduleId, user_id: session!.user.id }).select().single();
     if (taskError) { console.error(taskError); alert("Failed to add task."); return; }
     
-    const { data: assignData, error: assignError } = await supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
-    if (assignError) { console.error(assignError); return; }
+    const { data: assignData, error: assignError } = await supabase.from('task_assignments').insert({ id: assignId, task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
+    if (assignError) { 
+      console.error(assignError); 
+      // Rollback task creation
+      await supabase.from('tasks').delete().eq('id', taskId);
+      alert("Failed to create task assignment. Rolling back.");
+      return; 
+    }
 
     fetchData(); 
   };
@@ -439,7 +454,8 @@ const App: React.FC = () => {
   };
   
   const addAssignment = async (projectId: string, moduleId: string, taskId: string, role: Role) => {
-    const { data, error } = await supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
+    const newId = generateId('asgn');
+    const { data, error } = await supabase.from('task_assignments').insert({ id: newId, task_id: taskId, role, resource_name: 'Unassigned', user_id: session!.user.id }).select().single();
     if (error) console.error(error);
     else fetchData();
   };

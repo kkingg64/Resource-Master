@@ -112,7 +112,7 @@ interface PlannerGridProps {
   onUpdateAllocation: (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number, dayDate?: string) => void;
   onUpdateAssignmentRole: (projectId: string, moduleId: string, taskId: string, assignmentId: string, role: Role) => void;
   onUpdateAssignmentResourceName: (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => void;
-  onAddTask: (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => void;
+  onAddTask: (projectId: string, moduleId: string) => void;
   onAddAssignment: (projectId: string, moduleId: string, taskId: string, role: Role) => void;
   onReorderModules: (projectId: string, startIndex: number, endIndex: number) => void;
   onShiftTask: (projectId: string, moduleId: string, taskId: string, direction: 'left' | 'right') => void;
@@ -509,6 +509,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     <button onClick={() => toggleModule(m.id)} className="p-1 hover:bg-slate-200 rounded">{collapsedModules[m.id] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}</button>
                                     <GripVertical size={12} className="text-slate-300 cursor-grab" />
                                     {editingTarget?.type === 'module' && editingTarget.moduleId === m.id ? <InlineInput value={m.name} onSave={saveEdit} onCancel={cancelEdit} /> : <span className="font-semibold text-xs text-slate-700 truncate" onDoubleClick={() => setEditingTarget({ type: 'module', projectId: p.id, moduleId: m.id })}>{m.name}</span>}
+                                    <button onClick={() => onAddTask(p.id, m.id)} title="Add Task" className="ml-auto text-slate-400 hover:text-indigo-600 p-1 rounded-full hover:bg-indigo-50">
+                                        <Plus size={14} />
+                                    </button>
                                 </div>
                             </div>
                             {!collapsedModules[m.id] && m.tasks.map(t => (
