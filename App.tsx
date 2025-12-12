@@ -365,10 +365,12 @@ const App: React.FC = () => {
   };
   
   const deleteProject = async (projectId: string) => {
-    const previousState = deepClone(projects);
-    setProjects(prev => prev.filter(p => p.id !== projectId));
-    const { error } = await callSupabase('DELETE project', { id: projectId }, supabase.from('projects').delete().eq('id', projectId));
-    if (error) { setProjects(previousState); alert("Failed to delete project."); }
+    if (window.confirm('Are you sure you want to delete this project and all its contents?')) {
+        const previousState = deepClone(projects);
+        setProjects(prev => prev.filter(p => p.id !== projectId));
+        const { error } = await callSupabase('DELETE project', { id: projectId }, supabase.from('projects').delete().eq('id', projectId));
+        if (error) { setProjects(previousState); alert("Failed to delete project."); }
+    }
   };
   
   const updateProjectName = async (projectId: string, name: string) => {
@@ -412,12 +414,14 @@ const App: React.FC = () => {
   };
   
   const deleteModule = async (projectId: string, moduleId: string) => {
-    const previousState = deepClone(projects);
-    const project = projects.find(p => p.id === projectId);
-    if (project) setProjects(projects.map(p => p.id === projectId ? {...p, modules: p.modules.filter(m => m.id !== moduleId)} : p));
-    
-    const { error } = await callSupabase('DELETE module', { id: moduleId }, supabase.from('modules').delete().eq('id', moduleId));
-    if (error) { setProjects(previousState); alert("Failed to delete module."); }
+    if (window.confirm('Are you sure you want to delete this module and all its tasks?')) {
+        const previousState = deepClone(projects);
+        const project = projects.find(p => p.id === projectId);
+        if (project) setProjects(projects.map(p => p.id === projectId ? {...p, modules: p.modules.filter(m => m.id !== moduleId)} : p));
+        
+        const { error } = await callSupabase('DELETE module', { id: moduleId }, supabase.from('modules').delete().eq('id', moduleId));
+        if (error) { setProjects(previousState); alert("Failed to delete module."); }
+    }
   };
   
   const addTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
@@ -447,13 +451,15 @@ const App: React.FC = () => {
   };
   
   const deleteTask = async (projectId: string, moduleId: string, taskId: string) => {
-    const previousState = deepClone(projects);
-    const project = projects.find(p => p.id === projectId);
-    const module = project?.modules.find(m => m.id === moduleId);
-    if (module) setProjects(projects.map(p => p.id === projectId ? {...p, modules: p.modules.map(m => m.id === moduleId ? {...m, tasks: m.tasks.filter(t => t.id !== taskId)}: m)} : p));
-    
-    const { error } = await callSupabase('DELETE task', { id: taskId }, supabase.from('tasks').delete().eq('id', taskId));
-    if (error) { setProjects(previousState); alert("Failed to delete task."); }
+    if (window.confirm('Are you sure you want to delete this task?')) {
+        const previousState = deepClone(projects);
+        const project = projects.find(p => p.id === projectId);
+        const module = project?.modules.find(m => m.id === moduleId);
+        if (module) setProjects(projects.map(p => p.id === projectId ? {...p, modules: p.modules.map(m => m.id === moduleId ? {...m, tasks: m.tasks.filter(t => t.id !== taskId)}: m)} : p));
+        
+        const { error } = await callSupabase('DELETE task', { id: taskId }, supabase.from('tasks').delete().eq('id', taskId));
+        if (error) { setProjects(previousState); alert("Failed to delete task."); }
+    }
   };
   
   const addAssignment = async (projectId: string, moduleId: string, taskId: string, role: Role) => {
@@ -475,24 +481,26 @@ const App: React.FC = () => {
   };
   
   const deleteAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
-     const previousState = deepClone(projects);
-     setProjects(prev => {
-        const updatedProjects = deepClone(prev);
-        const project = updatedProjects.find(p => p.id === projectId);
-        if (project) {
-          const module = project.modules.find(m => m.id === moduleId);
-          if (module) {
-            const task = module.tasks.find(t => t.id === taskId);
-            if (task) {
-              task.assignments = task.assignments.filter(a => a.id !== assignmentId);
+    if (window.confirm('Are you sure you want to delete this resource assignment?')) {
+        const previousState = deepClone(projects);
+        setProjects(prev => {
+            const updatedProjects = deepClone(prev);
+            const project = updatedProjects.find(p => p.id === projectId);
+            if (project) {
+            const module = project.modules.find(m => m.id === moduleId);
+            if (module) {
+                const task = module.tasks.find(t => t.id === taskId);
+                if (task) {
+                task.assignments = task.assignments.filter(a => a.id !== assignmentId);
+                }
             }
-          }
-        }
-        return updatedProjects;
-     });
-     
-     const { error } = await callSupabase('DELETE assignment', { id: assignmentId }, supabase.from('task_assignments').delete().eq('id', assignmentId));
-     if (error) { setProjects(previousState); alert("Failed to delete assignment."); } else { fetchData(); }
+            }
+            return updatedProjects;
+        });
+        
+        const { error } = await callSupabase('DELETE assignment', { id: assignmentId }, supabase.from('task_assignments').delete().eq('id', assignmentId));
+        if (error) { setProjects(previousState); alert("Failed to delete assignment."); } else { fetchData(); }
+    }
   };
 
   const updateAssignmentResourceName = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => {
@@ -642,6 +650,9 @@ const App: React.FC = () => {
     
     const updates = project.modules.map((module, index) => ({ 
       id: module.id, 
+      name: module.name,
+      legacy_function_points: module.legacyFunctionPoints,
+      function_points: module.functionPoints,
       sort_order: index, 
       project_id: projectId,
       user_id: session!.user.id 
@@ -665,6 +676,7 @@ const App: React.FC = () => {
 
     const updates = module.tasks.map((task, index) => ({
       id: task.id,
+      name: task.name,
       sort_order: index,
       module_id: moduleId,
       user_id: session!.user.id
@@ -859,10 +871,12 @@ const App: React.FC = () => {
   };
 
   const deleteResource = async (id: string) => {
-    const previousState = deepClone(resources);
-    setResources(prev => prev.filter(r => r.id !== id));
-    const { error } = await callSupabase('DELETE resource', { id }, supabase.from('resources').delete().eq('id', id));
-    if (error) { setResources(previousState); alert('Failed to delete resource.'); }
+    if (window.confirm('Are you sure you want to delete this resource? This will unassign them from all tasks.')) {
+        const previousState = deepClone(resources);
+        setResources(prev => prev.filter(r => r.id !== id));
+        const { error } = await callSupabase('DELETE resource', { id }, supabase.from('resources').delete().eq('id', id));
+        if (error) { setResources(previousState); alert('Failed to delete resource.'); }
+    }
   };
 
   // --- Holiday Management ---
@@ -878,24 +892,28 @@ const App: React.FC = () => {
   };
   
   const deleteHoliday = async (id: string) => {
-    const previousState = deepClone(holidays);
-    setHolidays(prev => prev.filter(h => h.id !== id));
-    const { error } = await callSupabase('DELETE holiday', { id }, supabase.from('holidays').delete().eq('id', id));
-    if (error) { setHolidays(previousState); alert('Failed to delete holiday.'); }
+    if (window.confirm('Are you sure you want to delete this holiday?')) {
+        const previousState = deepClone(holidays);
+        setHolidays(prev => prev.filter(h => h.id !== id));
+        const { error } = await callSupabase('DELETE holiday', { id }, supabase.from('holidays').delete().eq('id', id));
+        if (error) { setHolidays(previousState); alert('Failed to delete holiday.'); }
+    }
   };
   
   const deleteHolidaysByCountry = async (country: string) => {
-    const previousState = deepClone(holidays);
-    const datesToDelete = GOV_HOLIDAYS_DB[country]?.map(h => h.date) || [];
-    if (datesToDelete.length === 0) return;
+    if (window.confirm(`Are you sure you want to remove all holidays for ${country}?`)) {
+        const previousState = deepClone(holidays);
+        const datesToDelete = GOV_HOLIDAYS_DB[country]?.map(h => h.date) || [];
+        if (datesToDelete.length === 0) return;
 
-    setHolidays(prev => prev.filter(h => !datesToDelete.includes(h.date)));
-    const { error } = await callSupabase(
-      'DELETE holidays by country', 
-      { country, dates: datesToDelete.length }, 
-      supabase.from('holidays').delete().in('date', datesToDelete).eq('user_id', session!.user.id)
-    );
-    if (error) { setHolidays(previousState); alert(`Failed to delete holidays for ${country}.`); }
+        setHolidays(prev => prev.filter(h => !datesToDelete.includes(h.date)));
+        const { error } = await callSupabase(
+        'DELETE holidays by country', 
+        { country, dates: datesToDelete.length }, 
+        supabase.from('holidays').delete().in('date', datesToDelete).eq('user_id', session!.user.id)
+        );
+        if (error) { setHolidays(previousState); alert(`Failed to delete holidays for ${country}.`); }
+    }
   };
 
 

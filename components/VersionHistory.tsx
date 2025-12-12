@@ -89,18 +89,21 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({ onClose, onResto
             : versions.length === 0 ? <div className="text-center p-4 text-slate-400 border border-dashed rounded-lg">No versions saved yet.</div>
             : (
               <ul className="space-y-2">
-                {versions.map(version => (
-                  <li key={version.id} className="bg-slate-50 p-3 rounded-lg flex items-center justify-between border border-slate-200 hover:border-indigo-200">
-                    <div>
-                      <p className="font-semibold text-slate-800">{version.name}</p>
-                      <p className="text-xs text-slate-500">Saved on: {new Date(version.timestamp).toLocaleString()}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => handleRestore(version.id!)} className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-100 hover:bg-indigo-200 px-3 py-1.5 rounded-md"><RotateCcw size={12} />Restore</button>
-                      <button onClick={() => handleDelete(version.id!)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full"><Trash2 size={14} /></button>
-                    </div>
-                  </li>
-                ))}
+                {versions.map(version => {
+                  // FIX: Provided locale to toLocaleString for consistent formatting.
+                  return (
+                    <li key={version.id} className="bg-slate-50 p-3 rounded-lg flex items-center justify-between border border-slate-200 hover:border-indigo-200">
+                      <div>
+                        <p className="font-semibold text-slate-800">{version.name}</p>
+                        <p className="text-xs text-slate-500">Saved on: {new Date(version.timestamp).toLocaleString('en-US')}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => handleRestore(version.id!)} className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-100 hover:bg-indigo-200 px-3 py-1.5 rounded-md"><RotateCcw size={12} />Restore</button>
+                        <button onClick={() => handleDelete(version.id!)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full"><Trash2 size={14} /></button>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

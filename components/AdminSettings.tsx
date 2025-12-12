@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Holiday } from '../types';
 import { GOV_HOLIDAYS_DB } from '../constants';
@@ -41,9 +40,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
   };
 
   const handleDeleteAllFromCountry = async () => {
-    if (window.confirm(`Are you sure you want to remove all holidays for ${selectedCountryName}?`)) {
-      await onDeleteHolidaysByCountry(selectedCountryCode);
-    }
+    await onDeleteHolidaysByCountry(selectedCountryCode);
   };
   
   const isHolidayActive = (sourceHoliday: Omit<Holiday, 'id'>) => {

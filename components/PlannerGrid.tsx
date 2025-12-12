@@ -1025,43 +1025,43 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   </div>
                                 </div>
                                 
-                                <div className="flex-shrink-0 border-r border-slate-200 bg-white flex flex-col justify-center gap-1 px-2 py-0.5 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
-                                    <div className="flex items-center justify-end h-[16px]">
-                                      <div className="flex items-center gap-0.5 opacity-0 group-hover/assign:opacity-100 transition-opacity">
+                                <div className="flex-shrink-0 border-r border-slate-200 bg-white flex justify-between items-center px-2 py-0.5 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
+                                    <div className="flex flex-col gap-0.5">
+                                        <div className="flex items-center gap-1" title="Start Date">
+                                            <span className="text-[9px] text-slate-400 w-6">Start</span>
+                                            <input 
+                                            type="date"
+                                            className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer"
+                                            value={formatDateForInput(startDate)}
+                                            onChange={(e) => handleAssignmentStartDateChange(project.id, module.id, task.id, assignment, e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="flex items-center gap-1" title="End Date">
+                                            <span className="text-[9px] text-slate-400 w-6">End</span>
+                                            <input 
+                                            type="date"
+                                            className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer"
+                                            value={formatDateForInput(endDate)}
+                                            min={formatDateForInput(startDate)}
+                                            onChange={(e) => handleAssignmentEndDateChange(project.id, module.id, task.id, assignment, e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-0.5 opacity-0 group-hover/assign:opacity-100 transition-opacity">
                                         <button 
                                             onClick={() => onShiftAssignment(project.id, module.id, task.id, assignment.id, 'left')}
-                                            className="text-slate-300 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
+                                            className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
+                                            title="Shift backward one week"
                                         >
-                                          <ChevronLeft size={10} />
+                                            <ChevronLeft size={12} />
                                         </button>
                                         <button 
                                             onClick={() => onShiftAssignment(project.id, module.id, task.id, assignment.id, 'right')}
-                                            className="text-slate-300 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
+                                            className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
+                                            title="Shift forward one week"
                                         >
-                                          <ChevronRight size={10} />
+                                            <ChevronRight size={12} />
                                         </button>
-                                      </div>
-                                    </div>
-                                    <div className="flex flex-col gap-0.5 border-t border-slate-100 mt-0.5 pt-0.5">
-                                      <div className="flex items-center gap-1" title="Start Date">
-                                        <span className="text-[9px] text-slate-400 w-6">Start</span>
-                                        <input 
-                                          type="date"
-                                          className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer"
-                                          value={formatDateForInput(startDate)}
-                                          onChange={(e) => handleAssignmentStartDateChange(project.id, module.id, task.id, assignment, e.target.value)}
-                                        />
-                                      </div>
-                                      <div className="flex items-center gap-1" title="End Date">
-                                        <span className="text-[9px] text-slate-400 w-6">End</span>
-                                        <input 
-                                          type="date"
-                                          className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer"
-                                          value={formatDateForInput(endDate)}
-                                          min={formatDateForInput(startDate)}
-                                          onChange={(e) => handleAssignmentEndDateChange(project.id, module.id, task.id, assignment, e.target.value)}
-                                        />
-                                      </div>
                                     </div>
                                 </div>
                                 
