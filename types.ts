@@ -1,5 +1,6 @@
 
 
+
 export enum Role {
   CNF = 'CNF',
   BRAND_SOLUTIONS = 'Brand Solutions',
@@ -94,6 +95,13 @@ export interface Holiday {
   country: string; // Country code e.g. 'MY', 'SG', 'Global'
 }
 
+export interface IndividualHoliday {
+  id: string;
+  date: string; // YYYY-MM-DD
+  name: string;
+  resource_id: string;
+}
+
 export interface LogEntry {
   id: number;
   timestamp: string;
@@ -106,4 +114,6 @@ export interface Resource {
   id: string;
   name: string;
   category: Role;
+  holiday_region?: string;
+  individual_holidays?: IndividualHoliday[];
 }

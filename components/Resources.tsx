@@ -1,27 +1,89 @@
-
-
 import React, { useState } from 'react';
-import { Resource, Role } from '../types';
-import { Users, Plus, Trash2 } from 'lucide-react';
+import { Resource, Role, IndividualHoliday } from '../types';
+import { Users, Plus, Trash2, Calendar, ChevronDown } from 'lucide-react';
+import { GOV_HOLIDAYS_DB } from '../constants';
 
 interface ResourcesProps {
   resources: Resource[];
-  onAddResource: (name: string, category: Role) => Promise<void>;
+  onAddResource: (name: string, category: Role, region: string) => Promise<void>;
   onDeleteResource: (id: string) => Promise<void>;
   onUpdateResourceCategory: (id: string, category: Role) => Promise<void>;
+  onUpdateResourceRegion: (id: string, region: string | null) => Promise<void>;
+  onAddIndividualHoliday: (resourceId: string, date: string, name: string) => Promise<void>;
+  onDeleteIndividualHoliday: (holidayId: string) => Promise<void>;
 }
 
-export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, onDeleteResource, onUpdateResourceCategory }) => {
+const IndividualHolidayManager: React.FC<{
+  resource: Resource;
+  onAdd: (date: string, name: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}> = ({ resource, onAdd, onDelete }) => {
+  const [date, setDate] = useState('');
+  const [name, setName] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
+
+  const handleAddHoliday = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!date || !name.trim()) return;
+    setIsAdding(true);
+    await onAdd(date, name.trim());
+    setDate('');
+    setName('');
+    setIsAdding(false);
+  };
+  
+  const regionalHolidays = GOV_HOLIDAYS_DB[resource.holiday_region || ''] || [];
+  // FIX: Use `as const` on the `type` property to allow TypeScript to correctly narrow the discriminated union type.
+  const allHolidays = [
+    ...regionalHolidays.map(h => ({ ...h, type: 'Regional' as const })),
+    ...(resource.individual_holidays || []).map(h => ({ ...h, type: 'Individual' as const })),
+  ].sort((a,b) => a.date.localeCompare(b.date));
+
+
+  return (
+    <div className="bg-slate-100 p-4 mt-2 rounded-b-lg border-t border-slate-200">
+       <h4 className="text-xs font-bold text-slate-600 mb-3">Manage Individual Holidays</h4>
+      <form onSubmit={handleAddHoliday} className="flex gap-2 mb-4">
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} required className="p-2 border border-slate-300 rounded-lg text-sm w-40"/>
+        <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Annual Leave" required className="flex-1 p-2 border border-slate-300 rounded-lg text-sm"/>
+        <button type="submit" disabled={isAdding} className="px-3 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50">Add</button>
+      </form>
+      
+      <div className="max-h-48 overflow-y-auto space-y-1 pr-2 custom-scrollbar">
+        {allHolidays.length === 0 && <p className="text-xs text-slate-500 text-center py-2">No regional or individual holidays.</p>}
+        {allHolidays.map((holiday, index) => (
+          <div key={`${holiday.date}-${index}`} className={`flex items-center justify-between p-2 rounded text-xs ${holiday.type === 'Individual' ? 'bg-white' : 'bg-transparent'}`}>
+            <div className="flex items-center gap-2">
+              <span className={`font-mono ${holiday.type === 'Individual' ? 'text-indigo-600' : 'text-slate-500'}`}>{holiday.date}</span>
+              <span className="font-medium text-slate-800">{holiday.name}</span>
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${holiday.type === 'Individual' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'}`}>
+                {holiday.type}
+              </span>
+            </div>
+            {holiday.type === 'Individual' && (
+              <button onClick={() => onDelete(holiday.id)} className="p-1 text-slate-400 hover:text-red-500 rounded-full"><Trash2 size={12} /></button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+
+export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, onDeleteResource, onUpdateResourceCategory, onUpdateResourceRegion, onAddIndividualHoliday, onDeleteIndividualHoliday }) => {
   const [newResourceName, setNewResourceName] = useState('');
   const [newResourceCategory, setNewResourceCategory] = useState<Role>(Role.DEV);
+  const [newResourceRegion, setNewResourceRegion] = useState<string>('HK');
   const [isAdding, setIsAdding] = useState(false);
+  const [expandedResourceId, setExpandedResourceId] = useState<string | null>(null);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newResourceName.trim() || isAdding) return;
     
     setIsAdding(true);
-    await onAddResource(newResourceName.trim(), newResourceCategory);
+    await onAddResource(newResourceName.trim(), newResourceCategory, newResourceRegion);
     setIsAdding(false);
     setNewResourceName('');
   };
@@ -38,69 +100,63 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
     [Role.APP_SUPPORT]: 'bg-red-100 text-red-800 border-red-200 focus:ring-red-500',
   };
 
+  const countries = Object.keys(GOV_HOLIDAYS_DB);
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <div className="flex items-center gap-2 mb-6">
           <Users className="w-6 h-6 text-indigo-600" />
-          <h2 className="text-xl font-bold text-slate-800">Manage Resources</h2>
+          <h2 className="text-xl font-bold text-slate-800">Manage Resources & Holidays</h2>
         </div>
         
         <form onSubmit={handleAdd} className="flex gap-2 mb-6 items-center">
-          <input
-            type="text"
-            value={newResourceName}
-            onChange={(e) => setNewResourceName(e.target.value)}
-            placeholder="e.g., John Doe"
-            className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-          />
-          <select
-            value={newResourceCategory}
-            onChange={(e) => setNewResourceCategory(e.target.value as Role)}
-            className="p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
-          >
-            {Object.values(Role).map(cat => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
+          <input type="text" value={newResourceName} onChange={(e) => setNewResourceName(e.target.value)} placeholder="e.g., John Doe" className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"/>
+          <select value={newResourceCategory} onChange={(e) => setNewResourceCategory(e.target.value as Role)} className="p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white min-w-[120px]">
+            {Object.values(Role).map(cat => (<option key={cat} value={cat}>{cat}</option>))}
           </select>
-          <button
-            type="submit"
-            disabled={isAdding || !newResourceName.trim()}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Plus size={16} />
-            {isAdding ? 'Adding...' : 'Add'}
+           <select value={newResourceRegion} onChange={(e) => setNewResourceRegion(e.target.value)} className="p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white min-w-[80px]">
+            {countries.map(code => (<option key={code} value={code}>{code}</option>))}
+          </select>
+          <button type="submit" disabled={isAdding || !newResourceName.trim()} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            <Plus size={16} />{isAdding ? 'Adding...' : 'Add'}
           </button>
         </form>
 
         <div className="space-y-2">
           {resources.length === 0 ? (
-            <div className="text-center p-4 text-slate-400 border border-dashed rounded-lg">
-              No resources added yet.
-            </div>
+            <div className="text-center p-4 text-slate-400 border border-dashed rounded-lg">No resources added yet.</div>
           ) : (
-            <ul className="divide-y divide-slate-100 border rounded-lg">
+            <ul className="border border-slate-200 rounded-lg">
               {resources.map(resource => (
-                <li key={resource.id} className="p-3 flex items-center justify-between hover:bg-slate-50">
-                  <div className="flex items-center gap-3">
-                    <span className="font-medium text-slate-700">{resource.name}</span>
-                    <select
-                        value={resource.category}
-                        onChange={(e) => onUpdateResourceCategory(resource.id, e.target.value as Role)}
-                        className={`text-xs font-semibold rounded-full appearance-none bg-transparent border px-2 py-0.5 focus:ring-2 cursor-pointer ${categoryColors[resource.category] || 'bg-slate-100 text-slate-600 border-slate-200 focus:ring-slate-500'}`}
-                    >
-                        {Object.values(Role).map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                    </select>
+                <li key={resource.id} className="border-b border-slate-100 last:border-b-0">
+                  <div className="p-3 flex items-center justify-between hover:bg-slate-50/50">
+                    <div className="flex items-center gap-3 flex-1">
+                      <span className="font-medium text-slate-700 w-40 truncate">{resource.name}</span>
+                      <select value={resource.category} onChange={(e) => onUpdateResourceCategory(resource.id, e.target.value as Role)} className={`text-xs font-semibold rounded-full appearance-none bg-transparent border px-2 py-0.5 focus:ring-2 cursor-pointer ${categoryColors[resource.category] || 'bg-slate-100 text-slate-600 border-slate-200 focus:ring-slate-500'}`}>
+                          {Object.values(Role).map(cat => (<option key={cat} value={cat}>{cat}</option>))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <select value={resource.holiday_region || ''} onChange={(e) => onUpdateResourceRegion(resource.id, e.target.value || null)} className="text-xs font-medium rounded-md appearance-none bg-white border border-slate-200 px-2 py-1 focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                          <option value="">No Region</option>
+                          {countries.map(code => (<option key={code} value={code}>{code} Holidays</option>))}
+                      </select>
+                      <button onClick={() => setExpandedResourceId(prev => prev === resource.id ? null : resource.id)} className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md ${expandedResourceId === resource.id ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100'}`}>
+                        <Calendar size={12} /> Holidays <ChevronDown size={14} className={`transition-transform ${expandedResourceId === resource.id ? 'rotate-180' : ''}`} />
+                      </button>
+                      <button onClick={() => onDeleteResource(resource.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors" title={`Delete ${resource.name}`}>
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => onDeleteResource(resource.id)}
-                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                    title={`Delete ${resource.name}`}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  {expandedResourceId === resource.id && (
+                     <IndividualHolidayManager 
+                       resource={resource}
+                       onAdd={(date, name) => onAddIndividualHoliday(resource.id, date, name)}
+                       onDelete={onDeleteIndividualHoliday}
+                     />
+                  )}
                 </li>
               ))}
             </ul>

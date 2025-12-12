@@ -130,7 +130,8 @@ const App: React.FC = () => {
     if (!isDebugLogEnabled) return -1;
     const id = nextLogId.current++;
     // FIX: Simplified Date object creation. `new Date(Date.now())` is redundant.
-    const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString('en-US'), message, payload, status };
+    // FIX: Changed toISOString for a more reliable timestamp format, resolving a potential environment-specific error with toLocaleTimeString.
+    const newEntry: LogEntry = { id, timestamp: new Date().toISOString(), message, payload, status };
     setLogEntries(prev => [newEntry, ...prev.slice(0, 99)]);
     return id;
   };
@@ -273,7 +274,8 @@ const App: React.FC = () => {
     // Fetch holidays and resources in parallel
     const [holidaysResponse, resourcesResponse] = await Promise.all([
       supabase.from('holidays').select('id, date, name').eq('user_id', session.user.id),
-      supabase.from('resources').select('*').eq('user_id', session.user.id).order('name')
+      // FIX: Fetch individual_holidays associated with each resource.
+      supabase.from('resources').select('*, individual_holidays(*)').eq('user_id', session.user.id).order('name')
     ]);
 
     if (holidaysResponse.data) {
@@ -868,13 +870,16 @@ const App: React.FC = () => {
   };
 
   // --- Resource Management ---
-  const addResource = async (name: string, category: Role) => {
-    const { data, error } = await callSupabase(
-      'CREATE resource', { name, category },
-      supabase.from('resources').insert({ name, category, user_id: session!.user.id }).select().single()
+  const addResource = async (name: string, category: Role, region: string) => {
+    const { error } = await callSupabase(
+      'CREATE resource', { name, category, region },
+      supabase.from('resources').insert({ name, category, holiday_region: region, user_id: session!.user.id }).select().single()
     );
-    if (error) { alert('Failed to add resource.'); } 
-    else { setResources(prev => [...prev, data]); }
+    if (error) { 
+      alert('Failed to add resource.'); 
+    } else {
+      fetchData(true);
+    }
   };
 
   const updateResourceCategory = async (id: string, category: Role) => {
@@ -887,6 +892,16 @@ const App: React.FC = () => {
     if (error) { setResources(previousState); alert('Failed to update resource category.'); }
   };
 
+  const updateResourceRegion = async (id: string, region: string | null) => {
+    const previousState = deepClone(resources);
+    setResources(prev => prev.map(r => r.id === id ? { ...r, holiday_region: region || undefined } : r));
+    const { error } = await callSupabase(
+      'UPDATE resource region', { id, region },
+      supabase.from('resources').update({ holiday_region: region }).eq('id', id)
+    );
+    if (error) { setResources(previousState); alert('Failed to update resource region.'); }
+  };
+
   const deleteResource = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this resource? This will unassign them from all tasks.')) {
         const previousState = deepClone(resources);
@@ -895,6 +910,24 @@ const App: React.FC = () => {
         if (error) { setResources(previousState); alert('Failed to delete resource.'); }
     }
   };
+
+  const addIndividualHoliday = async (resourceId: string, date: string, name: string) => {
+    const { error } = await callSupabase(
+      'CREATE individual holiday', { resourceId, date, name },
+      supabase.from('individual_holidays').insert({ resource_id: resourceId, date, name, user_id: session!.user.id })
+    );
+    if (error) { alert('Failed to add individual holiday.'); } 
+    else { fetchData(true); }
+  };
+
+  const deleteIndividualHoliday = async (holidayId: string) => {
+    if (window.confirm('Are you sure you want to delete this individual holiday?')) {
+      const { error } = await callSupabase('DELETE individual holiday', { holidayId }, supabase.from('individual_holidays').delete().eq('id', holidayId));
+      if (error) { alert('Failed to delete individual holiday.'); } 
+      else { fetchData(true); }
+    }
+  };
+
 
   // --- Holiday Management ---
   const addHolidays = async (holidaysToAdd: Omit<Holiday, 'id'>[]) => {
@@ -997,7 +1030,8 @@ const App: React.FC = () => {
                 {activeTab === 'dashboard' && <Dashboard projects={projects} />}
                 {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onCopyAssignment={onCopyAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onReorderAssignments={reorderAssignments} onShiftTask={onShiftTask} onUpdateAssignmentSchedule={updateAssignmentSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={onImportPlan} onShowHistory={() => setShowHistory(true)} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
                 {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
-                {activeTab === 'resources' && <Resources resources={resources} onAddResource={addResource} onDeleteResource={deleteResource} onUpdateResourceCategory={updateResourceCategory} />}
+                {/* FIX: Pass all required props to Resources component */}
+                {activeTab === 'resources' && <Resources resources={resources} onAddResource={addResource} onDeleteResource={deleteResource} onUpdateResourceCategory={updateResourceCategory} onUpdateResourceRegion={updateResourceRegion} onAddIndividualHoliday={addIndividualHoliday} onDeleteIndividualHoliday={deleteIndividualHoliday} />}
                 {activeTab === 'holiday' && <AdminSettings holidays={holidays} onAddHolidays={addHolidays} onDeleteHoliday={deleteHoliday} onDeleteHolidaysByCountry={deleteHolidaysByCountry} />}
                 {activeTab === 'settings' && <Settings isDebugLogEnabled={isDebugLogEnabled} setIsDebugLogEnabled={setIsDebugLogEnabled} />}
               </>
