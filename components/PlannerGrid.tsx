@@ -101,7 +101,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [draggedAssignment, setDraggedAssignment] = useState<{ taskId: string, index: number } | null>(null);
   
   const [sidebarWidth, setSidebarWidth] = useState(350);
-  const [detailsWidth, setDetailsWidth] = useState(220);
+  const [detailsWidth, setDetailsWidth] = useState(180);
   const [colWidthBase, setColWidthBase] = useState(40);
   const isResizingSidebar = useRef(false);
   const isResizingDetails = useRef(false);
@@ -542,26 +542,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       onUpdateAssignmentSchedule(projectId, moduleId, taskId, assignment.id, assignment.startWeekId, newDuration);
     }
   };
-  
-  const holidayDateSet = useMemo(() => new Set(holidays.map(h => h.date)), [holidays]);
-
-  const calculateEndDate = (startDate: Date, duration: number): Date => {
-    let currentDate = new Date(startDate);
-    if (isNaN(currentDate.getTime()) || duration <= 0) return startDate;
-
-    let workingDaysCounted = 0;
-    while(workingDaysCounted < duration) {
-        const dayOfWeek = currentDate.getDay();
-        const dateStr = formatDateForInput(currentDate);
-        if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidayDateSet.has(dateStr)) {
-            workingDaysCounted++;
-        }
-        if (workingDaysCounted < duration) {
-            currentDate.setDate(currentDate.getDate() + 1);
-        }
-    }
-    return currentDate;
-  };
 
   const colWidth = viewMode === 'month' ? colWidthBase * 2 : colWidthBase;
 
@@ -678,9 +658,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   </div>
                   <div className="flex-shrink-0 flex items-center text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative px-2" style={detailsColStyle}>
                     <div className="w-6 shrink-0" />
-                    <div className="flex-1 grid grid-cols-3 gap-2">
+                    <div className="flex-1 grid grid-cols-2 gap-2">
                       <span>S</span>
-                      <span>E</span>
                       <span>D</span>
                     </div>
                     <div className="w-6 shrink-0" />
@@ -716,9 +695,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     </div>
                     <div className="flex-shrink-0 flex items-center text-center text-xs font-bold text-slate-600 border-r border-slate-200 relative px-2" style={detailsColStyle}>
                       <div className="w-6 shrink-0" />
-                      <div className="flex-1 grid grid-cols-3 gap-2">
+                      <div className="flex-1 grid grid-cols-2 gap-2">
                           <span>S</span>
-                          <span>E</span>
                           <span>D</span>
                       </div>
                       <div className="w-6 shrink-0" />
@@ -962,7 +940,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   parseInt(assignment.startWeekId.split('-')[0]), 
                                   parseInt(assignment.startWeekId.split('-')[1])
                                 ) : new Date();
-                                const endDate = calculateEndDate(startDate, assignment.duration || 1);
                                 
                                 return (
                                 <div 
@@ -1001,20 +978,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                       <div className="cursor-grab text-slate-300 hover:text-slate-500" title="Drag to reorder assignment">
                                           <GripVertical size={14} />
                                       </div>
-                                      <div className="flex-1 grid grid-cols-3 gap-2">
+                                      <div className="flex-1 grid grid-cols-2 gap-2">
                                         <input 
                                             type="date"
                                             title="Start Date"
-                                            className="text-xs p-1 rounded-md bg-slate-100 text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer w-full hover:bg-slate-200"
+                                            className="text-xs p-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer w-full hover:bg-slate-100"
                                             value={formatDateForInput(startDate)}
                                             onChange={(e) => handleAssignmentStartDateChange(project.id, module.id, task.id, assignment, e.target.value)}
-                                        />
-                                        <input 
-                                            type="date"
-                                            readOnly
-                                            title="End Date (calculated)"
-                                            className="text-xs p-1 rounded-md bg-slate-100 text-slate-500 cursor-not-allowed w-full focus:ring-0"
-                                            value={formatDateForInput(endDate)}
                                         />
                                         <input 
                                             type="number"
@@ -1022,7 +992,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             title="Duration (days)"
                                             value={assignment.duration || 1}
                                             onChange={(e) => handleAssignmentDurationChange(project.id, module.id, task.id, assignment, e.target.value)}
-                                            className="text-xs p-1 rounded-md bg-slate-100 text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center hover:bg-slate-200"
+                                            className="text-xs p-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center hover:bg-slate-100"
                                         />
                                       </div>
                                       <button 

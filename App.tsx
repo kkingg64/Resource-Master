@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource } from './types';
@@ -130,6 +129,7 @@ const App: React.FC = () => {
   const log = (message: string, payload: any, status: LogEntry['status'] = 'pending'): number => {
     if (!isDebugLogEnabled) return -1;
     const id = nextLogId.current++;
+    // FIX: Simplified Date object creation. `new Date(Date.now())` is redundant.
     const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString('en-US'), message, payload, status };
     setLogEntries(prev => [newEntry, ...prev.slice(0, 99)]);
     return id;
@@ -138,7 +138,6 @@ const App: React.FC = () => {
   const updateLog = (id: number, status: 'success' | 'error', payload?: any) => {
     if (id === -1) return;
     setLogEntries(prev => prev.map(entry =>
-      // FIX: The status of the log entry was not being updated.
       entry.id === id ? { ...entry, status, payload: payload || entry.payload } : entry
     ));
   };
@@ -174,7 +173,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (session) {
-      // FIX: Explicitly pass false for the initial data fetch to resolve the "Expected 1 arguments, but got 0" error.
       fetchData(false);
     }
   }, [session]);
@@ -450,7 +448,6 @@ const App: React.FC = () => {
 
     if (assignError) { return; }
 
-    // FIX: Pass true to indicate a refresh after adding a task.
     fetchData(true);
   };
   
@@ -481,7 +478,6 @@ const App: React.FC = () => {
           duration: duration 
         }).select().single()
     );
-    // FIX: Pass true to indicate a refresh after adding an assignment.
     if (!error) fetchData(true);
   };
 
@@ -546,7 +542,6 @@ const App: React.FC = () => {
         });
         
         const { error } = await callSupabase('DELETE assignment', { id: assignmentId }, supabase.from('task_assignments').delete().eq('id', assignmentId));
-        // FIX: Pass true to indicate a refresh after deleting an assignment.
         if (error) { setProjects(previousState); alert("Failed to delete assignment."); } else { fetchData(true); }
     }
   };
@@ -791,7 +786,7 @@ const App: React.FC = () => {
     
     if (allNewAllocationsForDB.length > 0) {
       const { error: insErr } = await supabase.from('resource_allocations').insert(allNewAllocationsForDB);
-      if (insErr) { setSaveStatus('error'); fetchData(); return; }
+      if (insErr) { setSaveStatus('error'); fetchData(true); return; }
     }
   
     setSaveStatus('success');
@@ -845,7 +840,6 @@ const App: React.FC = () => {
       }
     }
   
-    // FIX: Pass true to indicate a refresh after importing a plan.
     await fetchData(true);
     log('Finished plan import', {}, 'success');
   };
