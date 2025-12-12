@@ -45,6 +45,7 @@ const structureProjectsData = (
       resourceName: a.resource_name,
       startWeekId: a.start_week_id,
       duration: a.duration,
+      sort_order: a.sort_order,
       allocations: allocationsByAssignment.get(a.id) || [],
     });
   });
@@ -58,7 +59,7 @@ const structureProjectsData = (
       id: t.id,
       name: t.name,
       sort_order: t.sort_order,
-      assignments: (assignmentsByTask.get(t.id) || []).sort((a,b) => a.role.localeCompare(b.role)),
+      assignments: (assignmentsByTask.get(t.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
     });
   });
 
@@ -435,7 +436,7 @@ const App: React.FC = () => {
     if (taskError) { alert("Failed to add task."); return; }
     
     const startWeekId = getWeekIdFromDate(new Date());
-    const duration = 1;
+    const duration = 5; // Default to 5 days
     const { error: assignError } = await callSupabase('CREATE assignment', { taskId, role }, supabase.from('task_assignments').insert({ 
       task_id: taskId, 
       role, 
@@ -464,7 +465,7 @@ const App: React.FC = () => {
   
   const addAssignment = async (projectId: string, moduleId: string, taskId: string, role: Role) => {
     const startWeekId = getWeekIdFromDate(new Date());
-    const duration = 1;
+    const duration = 5; // Default to 5 days
 
     const { error } = await callSupabase(
         'CREATE assignment', { taskId, role },
@@ -590,7 +591,7 @@ const App: React.FC = () => {
     if (startWeekId && duration > 0) {
       const startDate = getDateFromWeek(parseInt(startWeekId.split('-')[0]), parseInt(startWeekId.split('-')[1]));
       const endDate = new Date(startDate);
-      endDate.setDate(startDate.getDate() + (duration * 7) - 1);
+      endDate.setDate(startDate.getDate() + duration - 1);
   
       const allocationsMap = new Map<string, { days: Record<string, number> }>();
       const holidayDates = new Set(holidays.map(h => h.date));
@@ -728,6 +729,34 @@ const App: React.FC = () => {
     if (error) { 
         setProjects(previousState); 
         alert("Failed to reorder tasks."); 
+    }
+  };
+
+  const reorderAssignments = async (projectId: string, moduleId: string, taskId: string, startIndex: number, endIndex: number) => {
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const task = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const [removed] = task.assignments.splice(startIndex, 1);
+    task.assignments.splice(endIndex, 0, removed);
+    setProjects(updatedProjects);
+    
+    const updates = task.assignments.map((assignment, index) => ({
+      id: assignment.id,
+      task_id: taskId,
+      role: assignment.role,
+      resource_name: assignment.resourceName,
+      start_week_id: assignment.startWeekId,
+      duration: assignment.duration,
+      sort_order: index,
+      user_id: session!.user.id,
+    }));
+    
+    const { error } = await callSupabase('REORDER assignments', { updates: updates.length }, supabase.from('task_assignments').upsert(updates));
+    if (error) { 
+        setProjects(previousState); 
+        alert("Failed to reorder assignments."); 
     }
   };
   
@@ -975,7 +1004,7 @@ const App: React.FC = () => {
             {loading ? <div className="text-center p-8 text-slate-500">Loading your data...</div> : (
               <>
                 {activeTab === 'dashboard' && <Dashboard projects={projects} />}
-                {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onCopyAssignment={onCopyAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onShiftTask={onShiftTask} onUpdateAssignmentSchedule={updateAssignmentSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={onImportPlan} onShowHistory={() => setShowHistory(true)} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
+                {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onCopyAssignment={onCopyAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onReorderAssignments={reorderAssignments} onShiftTask={onShiftTask} onUpdateAssignmentSchedule={updateAssignmentSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={onImportPlan} onShowHistory={() => setShowHistory(true)} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
                 {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
                 {activeTab === 'resources' && <Resources resources={resources} onAddResource={addResource} onDeleteResource={deleteResource} onUpdateResourceCategory={updateResourceCategory} />}
                 {activeTab === 'holiday' && <AdminSettings holidays={holidays} onAddHolidays={addHolidays} onDeleteHoliday={deleteHoliday} onDeleteHolidaysByCountry={deleteHolidaysByCountry} />}

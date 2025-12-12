@@ -19,6 +19,7 @@ interface PlannerGridProps {
   onCopyAssignment: (projectId: string, moduleId: string, taskId: string, assignmentId: string) => void;
   onReorderModules: (projectId: string, startIndex: number, endIndex: number) => void;
   onReorderTasks: (projectId: string, moduleId: string, startIndex: number, endIndex: number) => void;
+  onReorderAssignments: (projectId: string, moduleId: string, taskId: string, startIndex: number, endIndex: number) => void;
   onShiftTask: (projectId: string, moduleId: string, taskId: string, direction: 'left' | 'right') => void;
   onUpdateAssignmentSchedule: (projectId: string, moduleId: string, taskId: string, assignmentId: string, startWeekId: string, duration: number) => void;
   onAddProject: () => void;
@@ -70,6 +71,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   onCopyAssignment,
   onReorderModules,
   onReorderTasks,
+  onReorderAssignments,
   onShiftTask,
   onUpdateAssignmentSchedule,
   onAddProject,
@@ -94,9 +96,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [draggedModuleIndex, setDraggedModuleIndex] = useState<number | null>(null);
   const [draggedTask, setDraggedTask] = useState<{ moduleId: string; index: number } | null>(null);
+  const [draggedAssignment, setDraggedAssignment] = useState<{ taskId: string; index: number } | null>(null);
 
   // Column Width States
-  const [colWidthBase, setColWidthBase] = useState<number>(40);
+  const [colWidthBase, setColWidthBase] = useState<number>(48);
   const [sidebarWidth, setSidebarWidth] = useState<number>(256); // Default w-64
   const sidebarResizing = useRef(false);
   const [detailsWidth, setDetailsWidth] = useState<number>(240); // Increased width for new controls
@@ -495,6 +498,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }
   };
 
+  // Drag and Drop Handlers
   const handleModuleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.setData("text/plain", index.toString());
     e.dataTransfer.effectAllowed = "move";
@@ -508,15 +512,15 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const handleModuleDrop = (e: React.DragEvent, projectId: string, index: number) => {
     e.preventDefault();
+    setDraggedModuleIndex(null);
     const startIndex = parseInt(e.dataTransfer.getData("text/plain"), 10);
     if (!isNaN(startIndex) && startIndex !== index) {
       onReorderModules(projectId, startIndex, index);
     }
-    setDraggedModuleIndex(null);
   };
 
   const handleTaskDragStart = (e: React.DragEvent, moduleId: string, taskIndex: number) => {
-    e.dataTransfer.setData("application/json", JSON.stringify({ moduleId, taskIndex }));
+    e.dataTransfer.setData("application/json", JSON.stringify({ type: 'task', moduleId, index: taskIndex }));
     e.dataTransfer.effectAllowed = "move";
     setDraggedTask({ moduleId, index: taskIndex });
   };
@@ -528,17 +532,37 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const handleTaskDrop = (e: React.DragEvent, projectId: string, targetModuleId: string, targetTaskIndex: number) => {
       e.preventDefault();
-      if (!draggedTask) return;
-      try {
-          const { moduleId: sourceModuleId, taskIndex: sourceTaskIndex } = JSON.parse(e.dataTransfer.getData("application/json"));
-          if (sourceModuleId === targetModuleId && sourceTaskIndex !== targetTaskIndex) {
-              onReorderTasks(projectId, sourceModuleId, sourceTaskIndex, targetTaskIndex);
-          }
-      } catch (err) {
-          console.error("Error dropping task", err);
-      }
       setDraggedTask(null);
+      try {
+          const data = JSON.parse(e.dataTransfer.getData("application/json"));
+          if (data.type === 'task' && data.moduleId === targetModuleId && data.index !== targetTaskIndex) {
+              onReorderTasks(projectId, data.moduleId, data.index, targetTaskIndex);
+          }
+      } catch (err) { console.error("Error dropping task", err); }
   };
+  
+  const handleAssignmentDragStart = (e: React.DragEvent, taskId: string, assignmentIndex: number) => {
+    e.dataTransfer.setData("application/json", JSON.stringify({ type: 'assignment', taskId, index: assignmentIndex }));
+    e.dataTransfer.effectAllowed = "move";
+    setDraggedAssignment({ taskId, index: assignmentIndex });
+  };
+
+  const handleAssignmentDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleAssignmentDrop = (e: React.DragEvent, projectId: string, moduleId: string, targetTaskId: string, targetAssignmentIndex: number) => {
+      e.preventDefault();
+      setDraggedAssignment(null);
+      try {
+          const data = JSON.parse(e.dataTransfer.getData("application/json"));
+          if (data.type === 'assignment' && data.taskId === targetTaskId && data.index !== targetAssignmentIndex) {
+              onReorderAssignments(projectId, moduleId, data.taskId, data.index, targetAssignmentIndex);
+          }
+      } catch (err) { console.error("Error dropping assignment", err); }
+  };
+
 
   const handleAddTaskClick = (projectId: string, moduleId: string) => {
     const newTaskId = crypto.randomUUID();
@@ -862,7 +886,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           className="flex-shrink-0 p-3 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/30"
                           style={detailsColStyle}
                         >
-                          {module.functionPoints > 0 && <span>{module.functionPoints} FP</span>}
                         </div>
                         
                         {/* Module Summaries */}
@@ -981,14 +1004,21 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             </div>
 
                             {/* Assignment Rows */}
-                            {!isTaskCollapsed && task.assignments.map(assignment => {
+                            {!isTaskCollapsed && task.assignments.map((assignment, assignmentIndex) => {
                               const startDate = assignment.startWeekId ? getDateFromWeek(
                                 parseInt(assignment.startWeekId.split('-')[0]), 
                                 parseInt(assignment.startWeekId.split('-')[1])
                               ) : new Date();
                               
                               return (
-                              <div key={assignment.id} className="flex border-b border-slate-100 group/assign">
+                              <div 
+                                key={assignment.id} 
+                                className={`flex border-b border-slate-100 group/assign ${draggedAssignment?.taskId === task.id && draggedAssignment?.index === assignmentIndex ? 'opacity-30' : ''}`}
+                                draggable
+                                onDragStart={(e) => handleAssignmentDragStart(e, task.id, assignmentIndex)}
+                                onDragOver={handleAssignmentDragOver}
+                                onDrop={(e) => handleAssignmentDrop(e, project.id, module.id, task.id, assignmentIndex)}
+                              >
                                 <div 
                                   className={`flex-shrink-0 py-0.5 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-10 flex items-center justify-between border-l-[3px] ${getRoleColorClass(assignment.role)} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`}
                                   style={stickyStyle}
@@ -1011,6 +1041,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 
                                 <div className="flex-shrink-0 border-r border-slate-200 bg-white flex justify-between items-center px-2 py-1.5 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
                                     <div className="flex items-center gap-2">
+                                      <div className="cursor-grab text-slate-300 hover:text-slate-500" title="Drag to reorder assignment">
+                                        <GripVertical size={14} />
+                                      </div>
                                         <div className="flex items-center gap-1" title="Start Date">
                                             <span className="text-[10px] text-slate-400">Start</span>
                                             <input 
@@ -1020,7 +1053,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                                 onChange={(e) => handleAssignmentStartDateChange(project.id, module.id, task.id, assignment, e.target.value)}
                                             />
                                         </div>
-                                        <div className="flex items-center gap-1" title="Duration in Weeks">
+                                        <div className="flex items-center gap-1" title="Duration in Days">
                                            <span className="text-[10px] text-slate-400">Dur.</span>
                                            <input 
                                               type="number"
@@ -1029,7 +1062,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                               onChange={(e) => handleAssignmentDurationChange(project.id, module.id, task.id, assignment, e.target.value)}
                                               className="text-[10px] p-0.5 border-slate-200 rounded-sm bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-10 text-center"
                                            />
-                                            <span className="text-[10px] text-slate-400">wks</span>
+                                            <span className="text-[10px] text-slate-400">days</span>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-0.5">

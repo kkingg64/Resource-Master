@@ -31,7 +31,8 @@ export interface TaskAssignment {
   resourceName?: string;
   allocations: ResourceAllocation[];
   startWeekId?: string; // Auto-scheduler start
-  duration?: number;    // Auto-scheduler duration in weeks
+  duration?: number;    // Auto-scheduler duration in DAYS
+  sort_order?: number;
 }
 
 export interface ProjectTask {
