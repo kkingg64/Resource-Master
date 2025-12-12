@@ -90,7 +90,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   isRefreshing,
 }) => {
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
-  // FIX: This section was completely broken. Replaced with correct state declarations and event handlers.
   const [collapsedModules, setCollapsedModules] = useState<Record<string, boolean>>({});
   const [collapsedTasks, setCollapsedTasks] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<ViewMode>('week');
@@ -106,6 +105,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [colWidthBase, setColWidthBase] = useState(40);
   const isResizingSidebar = useRef(false);
   const isResizingDetails = useRef(false);
+
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; projectId: string; moduleId: string; taskId: string; assignmentId: string; } | null>(null);
   
   const importInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -116,6 +117,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       editInputRef.current.select();
     }
   }, [editingId]);
+
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, []);
 
   const toggleProject = (id: string) => setCollapsedProjects(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleModule = (id: string) => setCollapsedModules(prev => ({ ...prev, [id]: !prev[id] }));
@@ -141,7 +148,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       setSidebarWidth(prev => Math.max(200, Math.min(600, prev + e.movementX)));
     }
     if (isResizingDetails.current) {
-      setDetailsWidth(prev => Math.max(150, Math.min(500, prev + e.movementX)));
+      setDetailsWidth(prev => Math.max(250, Math.min(500, prev + e.movementX)));
     }
   };
   const handleMouseUp = () => {
@@ -207,7 +214,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
 
   const handleExportExcel = () => {
-    // 1. Create Plan Data
     const planData: any[] = [];
     const weekHeaders = getTimeline('week', timelineStart, timelineEnd).map(w => w.id);
 
@@ -233,10 +239,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       });
     });
 
-    // 2. Create Holidays Data
     const holidaysData = holidays.map(({ id, ...rest }) => rest);
 
-    // 3. Create Workbook
     const wb = XLSX.utils.book_new();
     const planWs = XLSX.utils.json_to_sheet(planData, { header: ['Project', 'Module', 'Task', 'Role', 'Resource', ...weekHeaders] });
     const holidaysWs = XLSX.utils.json_to_sheet(holidaysData);
@@ -244,7 +248,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     XLSX.utils.book_append_sheet(wb, planWs, 'Resource Plan');
     XLSX.utils.book_append_sheet(wb, holidaysWs, 'Holidays');
 
-    // 4. Trigger Download
     XLSX.writeFile(wb, `oms-resource-plan-${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
@@ -258,7 +261,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         const data = e.target?.result;
         const workbook = XLSX.read(data, { type: 'array' });
         
-        // Parse Holidays
         const holidaysSheet = workbook.Sheets['Holidays'];
         if (!holidaysSheet) throw new Error('Holidays sheet not found');
         const importedHolidays: Holiday[] = XLSX.utils.sheet_to_json<any>(holidaysSheet).map((h, i) => ({
@@ -266,7 +268,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           id: `imported-holiday-${i}-${Date.now()}`
         }));
 
-        // Parse Plan
         const planSheet = workbook.Sheets['Resource Plan'];
         if (!planSheet) throw new Error('Resource Plan sheet not found');
         const planJson = XLSX.utils.sheet_to_json<any>(planSheet);
@@ -277,7 +278,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         let currentTask: ProjectTask | null = null;
 
         planJson.forEach((row, index) => {
-            // Find or create project
             if (row.Project && row.Project !== currentProject?.name) {
                 currentProject = { id: `p-${index}`, name: row.Project, modules: [] };
                 importedProjects.push(currentProject);
@@ -286,7 +286,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             }
             if (!currentProject) return;
 
-            // Find or create module
             if (row.Module && row.Module !== currentModule?.name) {
                 currentModule = { id: `m-${index}`, name: row.Module, tasks: [], functionPoints: 0, legacyFunctionPoints: 0 };
                 currentProject.modules.push(currentModule);
@@ -294,17 +293,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             }
             if (!currentModule) return;
 
-            // Find or create task
             if (row.Task && row.Task !== currentTask?.name) {
                 currentTask = { id: `t-${index}`, name: row.Task, assignments: [] };
                 currentModule.tasks.push(currentTask);
             }
             if (!currentTask) return;
 
-            // Create assignment
             const allocations: { weekId: string, count: number }[] = [];
             Object.keys(row).forEach(key => {
-                // Key looks like '2025-44'
                 if (/^\d{4}-\d{2}$/.test(key)) {
                     allocations.push({ weekId: key, count: Number(row[key]) });
                 }
@@ -329,7 +325,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       }
     };
     reader.readAsArrayBuffer(file);
-    event.target.value = ''; // Reset input to allow re-importing same file
+    event.target.value = '';
   };
 
   const timeline = useMemo(() => getTimeline(viewMode, timelineStart, timelineEnd), [viewMode, timelineStart, timelineEnd]);
@@ -337,7 +333,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const today = new Date();
   const currentWeekId = getWeekIdFromDate(today);
 
-  // Helper to check if a column represents the current date/week
   const isCurrentColumn = (col: TimelineColumn) => {
     if (viewMode === 'day' && col.date) {
         return col.date.getDate() === today.getDate() && 
@@ -350,7 +345,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     return false;
   };
 
-  // Compute headers grouping
   const yearHeaders = useMemo(() => {
     return timeline.reduce((acc, col) => {
       const key = col.yearLabel;
@@ -400,23 +394,19 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     return holidays.find(h => h.date === dateStr);
   };
 
-  const isHoliday = (date?: Date) => {
-    return !!getHolidayInfo(date);
-  };
+  const isHoliday = (date?: Date) => !!getHolidayInfo(date);
 
   const getRawCellValue = (assignment: TaskAssignment, col: TimelineColumn): number => {
     if (viewMode === 'week') {
       const alloc = assignment.allocations.find(a => a.weekId === col.id);
       return alloc ? alloc.count : 0;
     }
-    
     if (viewMode === 'month') {
       if (!col.weekIds) return 0;
       return assignment.allocations
         .filter(a => col.weekIds!.includes(a.weekId))
         .reduce((sum, a) => sum + a.count, 0);
     }
-
     if (viewMode === 'day') {
       if (isHoliday(col.date)) return 0;
       if (!col.parentWeekId || !col.date) return 0;
@@ -425,20 +415,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       if (!alloc) return 0;
 
       const dateStr = formatDateForInput(col.date);
-      
-      // If we have explicit daily data, use it
       if (alloc.days && alloc.days[dateStr] !== undefined) {
           return alloc.days[dateStr];
       }
-      
-      // Fallback to average if weekly count exists but no daily breakdown
       if (alloc.count > 0) {
           return alloc.count / 5;
       }
-      
       return 0;
     }
-
     return 0;
   };
 
@@ -447,18 +431,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     return Number.isInteger(val) ? val.toString() : val.toFixed(1);
   };
 
-  // Aggregation Helpers
-  const getTaskTotal = (task: ProjectTask, col: TimelineColumn) => {
-    return task.assignments.reduce((sum, assign) => sum + getRawCellValue(assign, col), 0);
-  };
-
-  const getModuleTotal = (module: ProjectModule, col: TimelineColumn) => {
-    return module.tasks.reduce((sum, task) => sum + getTaskTotal(task, col), 0);
-  };
-
-  const getProjectTotal = (project: Project, col: TimelineColumn) => {
-    return project.modules.reduce((sum, module) => sum + getModuleTotal(module, col), 0);
-  };
+  const getTaskTotal = (task: ProjectTask, col: TimelineColumn) => task.assignments.reduce((sum, assign) => sum + getRawCellValue(assign, col), 0);
+  const getModuleTotal = (module: ProjectModule, col: TimelineColumn) => module.tasks.reduce((sum, task) => sum + getTaskTotal(task, col), 0);
+  const getProjectTotal = (project: Project, col: TimelineColumn) => project.modules.reduce((sum, module) => sum + getModuleTotal(module, col), 0);
 
   const handleCellUpdate = (projectId: string, moduleId: string, taskId: string, assignmentId: string, col: TimelineColumn, value: string) => {
     const numValue = value === '' ? 0 : parseFloat(value);
@@ -474,13 +449,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
        });
     } else if (viewMode === 'day') {
       if (!col.parentWeekId || !col.date) return;
-      // Pass the specific date string to update daily allocation
       const dateStr = formatDateForInput(col.date);
       onUpdateAllocation(projectId, moduleId, taskId, assignmentId, col.parentWeekId, numValue, dateStr);
     }
   };
 
-  // Drag and Drop Handlers
   const handleModuleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.setData("text/plain", index.toString());
     e.dataTransfer.effectAllowed = "move";
@@ -555,7 +528,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     startEditing(`task::${projectId}::${moduleId}::${newTaskId}`, "New Task");
   };
 
-  // Date Picker Handler
   const handleAssignmentStartDateChange = (projectId: string, moduleId: string, taskId: string, assignment: TaskAssignment, newDateStr: string) => {
      if (!newDateStr) return;
      const date = new Date(newDateStr);
@@ -570,350 +542,360 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       onUpdateAssignmentSchedule(projectId, moduleId, taskId, assignment.id, assignment.startWeekId, newDuration);
     }
   };
+  
+  const holidayDateSet = useMemo(() => new Set(holidays.map(h => h.date)), [holidays]);
 
-  // Dynamic Column Width based on slider and view mode
+  const calculateEndDate = (startDate: Date, duration: number): Date => {
+    let currentDate = new Date(startDate);
+    if (isNaN(currentDate.getTime()) || duration <= 0) return startDate;
+
+    let workingDaysCounted = 0;
+    while(workingDaysCounted < duration) {
+        const dayOfWeek = currentDate.getDay();
+        const dateStr = formatDateForInput(currentDate);
+        if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidayDateSet.has(dateStr)) {
+            workingDaysCounted++;
+        }
+        if (workingDaysCounted < duration) {
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+    }
+    return currentDate;
+  };
+
   const colWidth = viewMode === 'month' ? colWidthBase * 2 : colWidthBase;
 
   const stickyStyle = { width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth };
   const detailsColStyle = { width: detailsWidth, minWidth: detailsWidth, maxWidth: detailsWidth };
 
   return (
-    <div className="flex flex-col h-full bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-      {/* Toolbar */}
-      <div className="px-4 py-3 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-slate-500" />
-            <span className="text-sm font-semibold text-slate-700">Timeline</span>
+    <>
+      <div className="flex flex-col h-full bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-slate-500" />
+              <span className="text-sm font-semibold text-slate-700">Timeline</span>
+            </div>
+            
+            <button onClick={handleToggleAll} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors" title="Collapse/Expand All Modules">
+              <ChevronsDownUp size={14} /> Toggle Modules
+            </button>
+
+            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden">
+              <button onClick={() => onExtendTimeline('start')} className="px-2 py-1 hover:bg-slate-100 text-xs text-slate-600 border-r border-slate-200" title="Add Month to Start">
+                &lt; +Month
+              </button>
+              <button onClick={() => onExtendTimeline('end')} className="px-2 py-1 hover:bg-slate-100 text-xs text-slate-600" title="Add Month to End">
+                +Month &gt;
+              </button>
+            </div>
+
+            <div className="h-4 w-px bg-slate-300"></div>
+
+            <div className="flex items-center gap-2" title="Adjust Column Width">
+              <Settings2 size={14} className="text-slate-400" />
+              <input 
+                type="range" 
+                min="20" 
+                max="100" 
+                value={colWidthBase} 
+                onChange={(e) => setColWidthBase(parseInt(e.target.value))}
+                className="w-20 h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+              />
+            </div>
           </div>
-          
-          <button onClick={handleToggleAll} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors" title="Collapse/Expand All Modules">
-             <ChevronsDownUp size={14} /> Toggle Modules
-          </button>
 
-          <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden">
-             <button onClick={() => onExtendTimeline('start')} className="px-2 py-1 hover:bg-slate-100 text-xs text-slate-600 border-r border-slate-200" title="Add Month to Start">
-               &lt; +Month
-             </button>
-             <button onClick={() => onExtendTimeline('end')} className="px-2 py-1 hover:bg-slate-100 text-xs text-slate-600" title="Add Month to End">
-               +Month &gt;
-             </button>
-          </div>
+          <div className="flex gap-4 items-center">
+            <div className="flex items-center gap-2">
+                <button 
+                    onClick={onRefresh}
+                    disabled={isRefreshing}
+                    className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Refresh data from server"
+                >
+                    <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh
+                </button>
+                <SaveStatusIndicator status={saveStatus} />
+                <div className="w-px h-4 bg-slate-300"></div>
 
-          <div className="h-4 w-px bg-slate-300"></div>
-
-          {/* Width Slider */}
-          <div className="flex items-center gap-2" title="Adjust Column Width">
-             <Settings2 size={14} className="text-slate-400" />
-             <input 
-               type="range" 
-               min="20" 
-               max="100" 
-               value={colWidthBase} 
-               onChange={(e) => setColWidthBase(parseInt(e.target.value))}
-               className="w-20 h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-             />
+                <button 
+                    onClick={onShowHistory}
+                    className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors"
+                    title="View and restore saved versions"
+                >
+                    <History size={12} />
+                </button>
+                <button 
+                    onClick={handleExportExcel}
+                    className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors"
+                    title="Export the current plan as an Excel file"
+                >
+                    <Download size={12} />
+                </button>
+                <button 
+                    onClick={() => importInputRef.current?.click()}
+                    className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors"
+                    title="Import a plan from an Excel file"
+                >
+                    <Upload size={12} />
+                </button>
+                <input type="file" ref={importInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
+            </div>
+            <div className="w-px h-4 bg-slate-300"></div>
+            <button 
+              onClick={onAddProject}
+              className="text-xs flex items-center gap-1 bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 transition-colors"
+            >
+              <Plus size={12} /> Add Project
+            </button>
+            <div className="flex bg-slate-200 p-1 rounded-lg">
+              {(['day', 'week', 'month'] as ViewMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all capitalize ${
+                    viewMode === mode 
+                      ? 'bg-white text-indigo-600 shadow-sm' 
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="flex gap-4 items-center">
-           <div className="flex items-center gap-2">
-              <button 
-                  onClick={onRefresh}
-                  disabled={isRefreshing}
-                  className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Refresh data from server"
-              >
-                  <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh
-              </button>
-              <SaveStatusIndicator status={saveStatus} />
-              <div className="w-px h-4 bg-slate-300"></div>
-
-              <button 
-                  onClick={onShowHistory}
-                  className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors"
-                  title="View and restore saved versions"
-              >
-                  <History size={12} />
-              </button>
-              <button 
-                  onClick={handleExportExcel}
-                  className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors"
-                  title="Export the current plan as an Excel file"
-              >
-                  <Download size={12} />
-              </button>
-              <button 
-                  onClick={() => importInputRef.current?.click()}
-                  className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors"
-                  title="Import a plan from an Excel file"
-              >
-                  <Upload size={12} />
-              </button>
-              <input type="file" ref={importInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
-          </div>
-          <div className="w-px h-4 bg-slate-300"></div>
-          <button 
-             onClick={onAddProject}
-             className="text-xs flex items-center gap-1 bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 transition-colors"
-          >
-             <Plus size={12} /> Add Project
-          </button>
-          <div className="flex bg-slate-200 p-1 rounded-lg">
-            {(['day', 'week', 'month'] as ViewMode[]).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-all capitalize ${
-                  viewMode === mode 
-                    ? 'bg-white text-indigo-600 shadow-sm' 
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="overflow-x-auto custom-scrollbar flex-1 relative">
-        <div className="min-w-max">
-          {/* Header Row: Varies with ViewMode */}
-          {viewMode === 'day' ? (
-            <>
-              {/* Day View: 3-Tier Header */}
-              {/* Year */}
-              <div className="flex bg-slate-200/50 border-b border-slate-200 sticky top-0 z-40">
-                <div className="flex-shrink-0 p-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group" style={stickyStyle}>
-                  Project Structure
-                  <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
-                </div>
-                <div className="flex-shrink-0 p-3 text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative" style={detailsColStyle}>Details
-                  <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
-                </div>
-                {Object.values(yearHeaders).map((group, idx) => (<div key={idx} className="text-center p-1 text-xs font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
-              </div>
-              {/* Month */}
-              <div className="flex bg-slate-100/70 border-b border-slate-200 sticky top-[33px] z-40">
-                 <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}></div>
-                 <div className="flex-shrink-0 border-r border-slate-200" style={detailsColStyle}></div>
-                 {Object.values(monthHeaders).map((group, idx) => (<div key={idx} className="text-center p-1 text-xs font-bold text-slate-600 border-r border-slate-200 uppercase" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
-              </div>
-               {/* Day */}
-              <div className="flex bg-slate-50 border-b border-slate-200 sticky top-[66px] z-40 shadow-sm">
-                 <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}></div>
-                 <div className="flex-shrink-0 border-r border-slate-200" style={detailsColStyle}></div>
-                 {timeline.map(col => {
-                    const holidayInfo = getHolidayInfo(col.date);
-                    const isHol = !!holidayInfo;
-                    const isCurrent = isCurrentColumn(col);
-                    return (<div key={col.id} className={`flex-shrink-0 text-center p-1 text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col ${isHol ? 'bg-red-50 text-red-600' : ''} ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px`, height: '32px' }} title={isHol ? `${holidayInfo?.name} (${holidayInfo?.country})` : isCurrent ? 'Current Date' : ''}>
-                      <span>{col.label}</span>
-                      {col.date && <span className={`text-[9px] ${isHol ? 'text-red-500 font-bold' : isCurrent ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>{col.date.getDate()}</span>}
-                    </div>);
-                 })}
-              </div>
-            </>
-          ) : (
-             <>
-               {/* Week/Month View: 2-Tier Header */}
-               <div className="flex bg-slate-100 border-b border-slate-200 sticky top-0 z-40">
+        <div className="overflow-x-auto custom-scrollbar flex-1 relative">
+          <div className="min-w-max">
+            {viewMode === 'day' ? (
+              <>
+                <div className="flex bg-slate-200/50 border-b border-slate-200 sticky top-0 z-40">
                   <div className="flex-shrink-0 p-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group" style={stickyStyle}>
-                     Project Structure
-                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
+                    Project Structure
+                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
                   </div>
-                  <div className="flex-shrink-0 p-3 text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative" style={detailsColStyle}>
-                     Details
-                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
+                  <div className="flex-shrink-0 flex items-center justify-around text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative px-2" style={detailsColStyle}>
+                    <span className="flex-1">Start Date</span>
+                    <span className="flex-1">End Date</span>
+                    <span className="flex-1">Duration</span>
+                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
                   </div>
-                  {Object.values(viewMode === 'week' ? monthHeaders : yearHeaders).map((group, idx) => (<div key={idx} className="text-center p-2 text-xs font-bold text-slate-600 border-r border-slate-200 bg-slate-100 uppercase tracking-wide truncate" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
-               </div>
-               <div className="flex bg-slate-50 border-b border-slate-200 sticky top-[41px] z-40 shadow-sm">
+                  {Object.values(yearHeaders).map((group, idx) => (<div key={idx} className="text-center p-1 text-xs font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+                </div>
+                <div className="flex bg-slate-100/70 border-b border-slate-200 sticky top-[33px] z-40">
+                  <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}></div>
+                  <div className="flex-shrink-0 border-r border-slate-200" style={detailsColStyle}></div>
+                  {Object.values(monthHeaders).map((group, idx) => (<div key={idx} className="text-center p-1 text-xs font-bold text-slate-600 border-r border-slate-200 uppercase" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+                </div>
+                <div className="flex bg-slate-50 border-b border-slate-200 sticky top-[66px] z-40 shadow-sm">
                   <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}></div>
                   <div className="flex-shrink-0 border-r border-slate-200" style={detailsColStyle}></div>
-                  {timeline.map(col => { const isCurrent = isCurrentColumn(col); return (<div key={col.id} className={`flex-shrink-0 text-center p-1 text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px`, height: '32px' }}><span>{col.label}</span></div>); })}
-               </div>
-             </>
-          )}
-
-          {/* Projects Loop */}
-          {projects.map((project) => {
-            const isProjectCollapsed = collapsedProjects[project.id];
-            const isEditingProject = editingId === `project::${project.id}`;
-
-            return (
-              <React.Fragment key={project.id}>
-                {/* Project Header Row */}
-                <div className="flex bg-slate-700 border-b border-slate-600 sticky z-30 group">
-                  <div 
-                    className="flex-shrink-0 p-3 pr-2 border-r border-slate-600 sticky left-0 bg-slate-700 z-40 cursor-pointer flex items-center justify-between text-white shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]"
-                    style={stickyStyle}
-                  >
-                     <div 
-                       className="flex items-center gap-2 overflow-hidden flex-1"
-                       onClick={() => !isEditingProject && toggleProject(project.id)}
-                     >
-                       {isProjectCollapsed ? <ChevronRight className="w-4 h-4 text-slate-300" /> : <ChevronDown className="w-4 h-4 text-slate-300" />}
-                       <Folder className="w-4 h-4 text-slate-200" />
-                       
-                       {isEditingProject ? (
-                          <input 
-                            ref={editInputRef}
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onBlur={saveEdit}
-                            onKeyDown={handleKeyDown}
-                            className="bg-slate-600 text-white text-sm font-bold border border-slate-500 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          />
-                       ) : (
-                          <span 
-                            className="font-bold text-sm truncate select-none flex-1" 
-                            onDoubleClick={(e) => startEditing(`project::${project.id}`, project.name, e)}
-                            title="Double click to rename"
-                          >
-                            {project.name}
-                          </span>
-                       )}
-                     </div>
-                     <button
-                        onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); }}
-                        className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] text-red-300 hover:bg-red-500 hover:text-white p-1 rounded transition-colors"
-                        title="Delete Project"
-                     >
-                       <Trash2 size={12} />
-                     </button>
-                  </div>
-                  <div className="flex-shrink-0 p-3 text-center text-xs font-bold text-slate-300 border-r border-slate-600 flex items-center justify-center gap-2" style={detailsColStyle}>
-                     <button 
-                       onClick={(e) => { e.stopPropagation(); onAddModule(project.id); }}
-                       className="flex items-center gap-1 text-[10px] bg-slate-600 hover:bg-slate-500 px-2 py-0.5 rounded transition-colors"
-                     >
-                        <Plus size={10} /> Module
-                     </button>
-                  </div>
-                   {/* Project Summaries */}
-                   {timeline.map(col => {
-                     const total = getProjectTotal(project, col);
-                     const isCurrent = isCurrentColumn(col);
-                     return (
-                        <div key={col.id} className={`flex-shrink-0 border-r border-slate-600 flex items-center justify-center bg-slate-700 ${isCurrent ? 'bg-slate-600 ring-1 ring-inset ring-amber-400/50' : ''}`} style={{ width: `${colWidth}px` }}>
-                           {total > 0 && (
-                             <span className="text-[10px] font-bold text-slate-200">{formatValue(total)}</span>
-                           )}
-                        </div>
-                     );
+                  {timeline.map(col => {
+                      const holidayInfo = getHolidayInfo(col.date);
+                      const isHol = !!holidayInfo;
+                      const isCurrent = isCurrentColumn(col);
+                      return (<div key={col.id} className={`flex-shrink-0 text-center p-1 text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col ${isHol ? 'bg-red-50 text-red-600' : ''} ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px`, height: '32px' }} title={isHol ? `${holidayInfo?.name} (${holidayInfo?.country})` : isCurrent ? 'Current Date' : ''}>
+                        <span>{col.label}</span>
+                        {col.date && <span className={`text-[9px] ${isHol ? 'text-red-500 font-bold' : isCurrent ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>{col.date.getDate()}</span>}
+                      </div>);
                   })}
                 </div>
+              </>
+            ) : (
+              <>
+                <div className="flex bg-slate-100 border-b border-slate-200 sticky top-0 z-40">
+                    <div className="flex-shrink-0 p-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group" style={stickyStyle}>
+                      Project Structure
+                      <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
+                    </div>
+                    <div className="flex-shrink-0 flex items-center justify-around text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative px-2" style={detailsColStyle}>
+                      <span className="flex-1">Start Date</span>
+                      <span className="flex-1">End Date</span>
+                      <span className="flex-1">Duration (days)</span>
+                      <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
+                    </div>
+                    {Object.values(viewMode === 'week' ? monthHeaders : yearHeaders).map((group, idx) => (<div key={idx} className="text-center p-2 text-xs font-bold text-slate-600 border-r border-slate-200 bg-slate-100 uppercase tracking-wide truncate" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+                </div>
+                <div className="flex bg-slate-50 border-b border-slate-200 sticky top-[41px] z-40 shadow-sm">
+                    <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}></div>
+                    <div className="flex-shrink-0 border-r border-slate-200" style={detailsColStyle}></div>
+                    {timeline.map(col => { const isCurrent = isCurrentColumn(col); return (<div key={col.id} className={`flex-shrink-0 text-center p-1 text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px`, height: '32px' }}><span>{col.label}</span></div>); })}
+                </div>
+              </>
+            )}
 
-                {!isProjectCollapsed && project.modules.map((module, index) => {
-                  const isModuleCollapsed = collapsedModules[module.id];
-                  const moduleEditId = `module::${project.id}::${module.id}`;
-                  const isEditingModule = editingId === moduleEditId;
+            {projects.map((project) => {
+              const isProjectCollapsed = collapsedProjects[project.id];
+              const isEditingProject = editingId === `project::${project.id}`;
 
-                  return (
+              return (
+                <React.Fragment key={project.id}>
+                  <div className="flex bg-slate-700 border-b border-slate-600 sticky z-30 group">
                     <div 
-                      key={module.id}
-                      draggable
-                      onDragStart={(e) => handleModuleDragStart(e, index)}
-                      onDragOver={handleModuleDragOver}
-                      onDrop={(e) => handleModuleDrop(e, project.id, index)}
-                      className={`${draggedModuleIndex === index ? 'opacity-50' : 'opacity-100'}`}
+                      className="flex-shrink-0 p-3 pr-2 border-r border-slate-600 sticky left-0 bg-slate-700 z-40 cursor-pointer flex items-center justify-between text-white shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]"
+                      style={stickyStyle}
                     >
-                      {/* Module Header Row */}
-                      <div className="flex bg-indigo-50/80 border-b border-slate-100 hover:bg-indigo-100/50 transition-colors group">
-                        <div 
-                          className="flex-shrink-0 p-3 pl-6 border-r border-slate-200 sticky left-0 bg-indigo-50/95 backdrop-blur-sm z-30 flex items-center justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]"
-                          style={stickyStyle}
-                        >
-                          <div 
-                            className="flex items-center gap-2 flex-1 overflow-hidden cursor-pointer"
-                            onClick={() => !isEditingModule && toggleModule(module.id)}
-                          >
-                            <div className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500" title="Drag to reorder">
-                              <GripVertical className="w-4 h-4" />
-                            </div>
-                            {isModuleCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-indigo-500" />}
-                            <Layers className="w-4 h-4 text-indigo-600" />
-                            
-                            {isEditingModule ? (
-                              <input 
-                                ref={editInputRef}
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onBlur={saveEdit}
-                                onKeyDown={handleKeyDown}
-                                className="bg-white text-slate-800 text-sm font-semibold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                onClick={(e) => e.stopPropagation()} 
-                              />
-                            ) : (
-                              <span 
-                                className="font-semibold text-sm text-slate-800 truncate select-none flex-1 hover:text-indigo-600" 
-                                onDoubleClick={(e) => startEditing(moduleEditId, module.name, e)}
-                                title="Double click to rename"
-                              >
-                                {module.name}
-                              </span>
+                      <div 
+                        className="flex items-center gap-2 overflow-hidden flex-1"
+                        onClick={() => !isEditingProject && toggleProject(project.id)}
+                      >
+                        {isProjectCollapsed ? <ChevronRight className="w-4 h-4 text-slate-300" /> : <ChevronDown className="w-4 h-4 text-slate-300" />}
+                        <Folder className="w-4 h-4 text-slate-200" />
+                        
+                        {isEditingProject ? (
+                            <input 
+                              ref={editInputRef}
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              onBlur={saveEdit}
+                              onKeyDown={handleKeyDown}
+                              className="bg-slate-600 text-white text-sm font-bold border border-slate-500 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                        ) : (
+                            <span 
+                              className="font-bold text-sm truncate select-none flex-1" 
+                              onDoubleClick={(e) => startEditing(`project::${project.id}`, project.name, e)}
+                              title="Double click to rename"
+                            >
+                              {project.name}
+                            </span>
+                        )}
+                      </div>
+                      <button
+                          onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); }}
+                          className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] text-red-300 hover:bg-red-500 hover:text-white p-1 rounded transition-colors"
+                          title="Delete Project"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                    <div className="flex-shrink-0 p-3 text-center text-xs font-bold text-slate-300 border-r border-slate-600 flex items-center justify-center gap-2" style={detailsColStyle}>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); onAddModule(project.id); }}
+                        className="flex items-center gap-1 text-[10px] bg-slate-600 hover:bg-slate-500 px-2 py-0.5 rounded transition-colors"
+                      >
+                          <Plus size={10} /> Module
+                      </button>
+                    </div>
+                    {timeline.map(col => {
+                      const total = getProjectTotal(project, col);
+                      const isCurrent = isCurrentColumn(col);
+                      return (
+                          <div key={col.id} className={`flex-shrink-0 border-r border-slate-600 flex items-center justify-center bg-slate-700 ${isCurrent ? 'bg-slate-600 ring-1 ring-inset ring-amber-400/50' : ''}`} style={{ width: `${colWidth}px` }}>
+                            {total > 0 && (
+                              <span className="text-[10px] font-bold text-slate-200">{formatValue(total)}</span>
                             )}
                           </div>
-                           <button
-                              onClick={(e) => { e.stopPropagation(); onDeleteModule(project.id, module.id); }}
-                              className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-100 transition-opacity"
-                              title="Delete Module"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                        </div>
-                        <div 
-                          className="flex-shrink-0 p-3 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/30"
-                          style={detailsColStyle}
-                        >
-                        </div>
-                        
-                        {/* Module Summaries */}
-                        {timeline.map(col => {
-                           const total = getModuleTotal(module, col);
-                           const isCurrent = isCurrentColumn(col);
-                           return (
-                              <div key={col.id} className={`flex-shrink-0 border-r border-slate-200/50 flex items-center justify-center bg-indigo-50/20 ${isCurrent ? 'bg-amber-50/30' : ''}`} style={{ width: `${colWidth}px` }}>
-                                 {total > 0 && (
-                                   <span className="text-[10px] font-bold text-indigo-900">{formatValue(total)}</span>
-                                 )}
-                              </div>
-                           );
-                        })}
-                      </div>
+                      );
+                    })}
+                  </div>
 
-                      {/* Tasks */}
-                      {!isModuleCollapsed && module.tasks.map((task, taskIndex) => {
-                        const taskEditId = `task::${project.id}::${module.id}::${task.id}`;
-                        const isTaskCollapsed = collapsedTasks[task.id];
-                        const isEditingTask = editingId === taskEditId;
+                  {!isProjectCollapsed && project.modules.map((module, index) => {
+                    const isModuleCollapsed = collapsedModules[module.id];
+                    const moduleEditId = `module::${project.id}::${module.id}`;
+                    const isEditingModule = editingId === moduleEditId;
 
-                        return (
-                          <React.Fragment key={task.id}>
-                            {/* Task Header Row */}
+                    return (
+                      <div 
+                        key={module.id}
+                        draggable
+                        onDragStart={(e) => handleModuleDragStart(e, index)}
+                        onDragOver={handleModuleDragOver}
+                        onDrop={(e) => handleModuleDrop(e, project.id, index)}
+                        className={`${draggedModuleIndex === index ? 'opacity-50' : 'opacity-100'}`}
+                      >
+                        <div className="flex bg-indigo-50/80 border-b border-slate-100 hover:bg-indigo-100/50 transition-colors group">
+                          <div 
+                            className="flex-shrink-0 p-3 pl-6 border-r border-slate-200 sticky left-0 bg-indigo-50/95 backdrop-blur-sm z-30 flex items-center justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]"
+                            style={stickyStyle}
+                          >
                             <div 
-                              draggable
-                              onDragStart={(e) => handleTaskDragStart(e, module.id, taskIndex)}
-                              onDragOver={handleTaskDragOver}
-                              onDrop={(e) => handleTaskDrop(e, project.id, module.id, taskIndex)}
-                              className={`flex border-b border-slate-100 bg-slate-50/40 group/task ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>
-                              <div 
-                                className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50/95 z-20 flex items-center justify-between pl-6 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]"
-                                style={stickyStyle}
+                              className="flex items-center gap-2 flex-1 overflow-hidden cursor-pointer"
+                              onClick={() => !isEditingModule && toggleModule(module.id)}
+                            >
+                              <div className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500" title="Drag to reorder">
+                                <GripVertical className="w-4 h-4" />
+                              </div>
+                              {isModuleCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-indigo-500" />}
+                              <Layers className="w-4 h-4 text-indigo-600" />
+                              
+                              {isEditingModule ? (
+                                <input 
+                                  ref={editInputRef}
+                                  value={editValue}
+                                  onChange={(e) => setEditValue(e.target.value)}
+                                  onBlur={saveEdit}
+                                  onKeyDown={handleKeyDown}
+                                  className="bg-white text-slate-800 text-sm font-semibold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                  onClick={(e) => e.stopPropagation()} 
+                                />
+                              ) : (
+                                <span 
+                                  className="font-semibold text-sm text-slate-800 truncate select-none flex-1 hover:text-indigo-600" 
+                                  onDoubleClick={(e) => startEditing(moduleEditId, module.name, e)}
+                                  title="Double click to rename"
+                                >
+                                  {module.name}
+                                </span>
+                              )}
+                            </div>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onDeleteModule(project.id, module.id); }}
+                                className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-100 transition-opacity"
+                                title="Delete Module"
                               >
-                                 <div 
-                                   className="flex items-center gap-2 overflow-hidden cursor-pointer flex-1"
-                                   onClick={() => !isEditingTask && toggleTask(task.id)}
-                                 >
-                                   <div className="cursor-grab text-slate-400 hover:text-slate-600" title="Drag to reorder task">
-                                      <GripVertical size={14} />
-                                   </div>
-                                   {isTaskCollapsed ? <ChevronRight size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
-                                   <div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0"></div>
-                                   
-                                   {isEditingTask ? (
+                                <Trash2 size={14} />
+                              </button>
+                          </div>
+                          <div 
+                            className="flex-shrink-0 p-3 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/30"
+                            style={detailsColStyle}
+                          >
+                          </div>
+                          
+                          {timeline.map(col => {
+                            const total = getModuleTotal(module, col);
+                            const isCurrent = isCurrentColumn(col);
+                            return (
+                                <div key={col.id} className={`flex-shrink-0 border-r border-slate-200/50 flex items-center justify-center bg-indigo-50/20 ${isCurrent ? 'bg-amber-50/30' : ''}`} style={{ width: `${colWidth}px` }}>
+                                  {total > 0 && (
+                                    <span className="text-[10px] font-bold text-indigo-900">{formatValue(total)}</span>
+                                  )}
+                                </div>
+                            );
+                          })}
+                        </div>
+
+                        {!isModuleCollapsed && module.tasks.map((task, taskIndex) => {
+                          const taskEditId = `task::${project.id}::${module.id}::${task.id}`;
+                          const isTaskCollapsed = collapsedTasks[task.id];
+                          const isEditingTask = editingId === taskEditId;
+
+                          return (
+                            <React.Fragment key={task.id}>
+                              <div 
+                                draggable
+                                onDragStart={(e) => handleTaskDragStart(e, module.id, taskIndex)}
+                                onDragOver={handleTaskDragOver}
+                                onDrop={(e) => handleTaskDrop(e, project.id, module.id, taskIndex)}
+                                className={`flex border-b border-slate-100 bg-slate-50/40 group/task ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>
+                                <div 
+                                  className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50/95 z-20 flex items-center justify-between pl-6 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]"
+                                  style={stickyStyle}
+                                >
+                                  <div 
+                                    className="flex items-center gap-2 overflow-hidden cursor-pointer flex-1"
+                                    onClick={() => !isEditingTask && toggleTask(task.id)}
+                                  >
+                                    <div className="cursor-grab text-slate-400 hover:text-slate-600" title="Drag to reorder task">
+                                        <GripVertical size={14} />
+                                    </div>
+                                    {isTaskCollapsed ? <ChevronRight size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                    <div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0"></div>
+                                    
+                                    {isEditingTask ? (
                                       <input 
                                         ref={editInputRef}
                                         value={editValue}
@@ -922,7 +904,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                         onKeyDown={handleKeyDown}
                                         className="bg-white text-slate-700 text-xs font-bold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                       />
-                                   ) : (
+                                    ) : (
                                       <span 
                                         className="text-xs text-slate-700 font-bold truncate select-none hover:text-indigo-600 flex-1" 
                                         title="Double click to rename"
@@ -930,229 +912,223 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                       >
                                         {task.name}
                                       </span>
-                                   )}
-                                 </div>
-                                 
-                                 {/* Controls */}
-                                 <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity">
-                                   <button 
-                                      onClick={() => onShiftTask(project.id, module.id, task.id, 'left')}
-                                      className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
-                                      title="Shift entire task back 1 week"
-                                   >
-                                     <ChevronLeft size={12} />
-                                   </button>
-                                   <button 
-                                      onClick={() => onShiftTask(project.id, module.id, task.id, 'right')}
-                                      className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
-                                      title="Shift entire task forward 1 week"
-                                   >
-                                     <ChevronRight size={12} />
-                                   </button>
-                                   <div className="w-px h-3 bg-slate-300 mx-1"></div>
-                                   <button 
+                                    )}
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity">
+                                    <button 
                                       onClick={() => onAddAssignment(project.id, module.id, task.id, Role.DEV)}
                                       className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
                                       title="Add another resource to this task"
-                                   >
-                                     <UserPlus size={14} />
-                                   </button>
-                                   <div className="w-px h-3 bg-slate-300 mx-1"></div>
-                                    <button 
-                                      onClick={() => onDeleteTask(project.id, module.id, task.id)}
-                                      className="text-slate-400 hover:text-red-600 p-0.5 rounded hover:bg-slate-200"
-                                      title="Delete task"
-                                   >
-                                     <Trash2 size={12} />
-                                   </button>
-                                 </div>
-                              </div>
-
-                              {/* Empty Details Column for Task */}
-                              <div className="flex-shrink-0 border-r border-slate-200 bg-slate-50/30" style={detailsColStyle}></div>
-                              
-                              {/* Task Summaries */}
-                              {timeline.map(col => {
-                                const total = getTaskTotal(task, col);
-                                const isCurrent = isCurrentColumn(col);
-                                return (
-                                  <div key={`th-${task.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 flex items-center justify-center bg-slate-50/30 ${isCurrent ? 'bg-amber-50/30' : ''}`} style={{ width: `${colWidth}px` }}>
-                                     {total > 0 && (
-                                       <span className="text-[10px] font-semibold text-slate-600">{formatValue(total)}</span>
-                                     )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-
-                            {/* Assignment Rows */}
-                            {!isTaskCollapsed && task.assignments.map((assignment, assignmentIndex) => {
-                              const startDate = assignment.startWeekId ? getDateFromWeek(
-                                parseInt(assignment.startWeekId.split('-')[0]), 
-                                parseInt(assignment.startWeekId.split('-')[1])
-                              ) : new Date();
-                              
-                              return (
-                              <div 
-                                key={assignment.id} 
-                                className={`flex border-b border-slate-100 group/assign ${draggedAssignment?.taskId === task.id && draggedAssignment?.index === assignmentIndex ? 'opacity-30' : ''}`}
-                                draggable
-                                onDragStart={(e) => handleAssignmentDragStart(e, task.id, assignmentIndex)}
-                                onDragOver={handleAssignmentDragOver}
-                                onDrop={(e) => handleAssignmentDrop(e, project.id, module.id, task.id, assignmentIndex)}
-                              >
-                                <div 
-                                  className={`flex-shrink-0 py-0.5 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-10 flex items-center justify-between border-l-[3px] ${getRoleColorClass(assignment.role)} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`}
-                                  style={stickyStyle}
-                                >
-                                  <div className="flex-1 overflow-hidden flex items-center gap-2 pl-12">
-                                     <select
-                                       value={assignment.resourceName || 'Unassigned'}
-                                       onChange={(e) => onUpdateAssignmentResourceName(project.id, module.id, task.id, assignment.id, e.target.value)}
-                                       className="w-full text-xs text-slate-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer hover:text-indigo-600"
-                                     >
-                                        <option value="Unassigned">Unassigned</option>
-                                        {Object.entries(groupedResources).map(([category, resList]) => (
-                                          <optgroup label={category} key={category}>
-                                            {resList.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
-                                          </optgroup>
-                                        ))}
-                                     </select>
+                                    >
+                                      <UserPlus size={14} />
+                                    </button>
+                                    <div className="w-px h-3 bg-slate-300 mx-1"></div>
+                                      <button 
+                                        onClick={() => onDeleteTask(project.id, module.id, task.id)}
+                                        className="text-slate-400 hover:text-red-600 p-0.5 rounded hover:bg-slate-200"
+                                        title="Delete task"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
                                   </div>
                                 </div>
-                                
-                                <div className="flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 gap-2 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
-                                    <div className="cursor-grab text-slate-300 hover:text-slate-500" title="Drag to reorder assignment">
-                                        <GripVertical size={14} />
-                                    </div>
-                                    <div className="flex items-center gap-1" title="Start Date">
-                                        <span className="text-[10px] text-slate-400">Start</span>
-                                        <input 
-                                            type="date"
-                                            className="text-[10px] p-0.5 border-slate-200 rounded-sm bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-auto cursor-pointer"
-                                            value={formatDateForInput(startDate)}
-                                            onChange={(e) => handleAssignmentStartDateChange(project.id, module.id, task.id, assignment, e.target.value)}
-                                        />
-                                    </div>
-                                    <div className="flex items-center gap-1" title="Duration in Days">
-                                        <span className="text-[10px] text-slate-400">Dur.</span>
-                                        <input 
-                                            type="number"
-                                            min="1"
-                                            value={assignment.duration || 1}
-                                            onChange={(e) => handleAssignmentDurationChange(project.id, module.id, task.id, assignment, e.target.value)}
-                                            className="text-[10px] p-0.5 border-slate-200 rounded-sm bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-10 text-center"
-                                        />
-                                        <span className="text-[10px] text-slate-400">days</span>
-                                    </div>
-                                    <div className="flex-1 min-w-[8px]"></div>
-                                    <div className="flex items-center gap-0.5">
-                                        <button 
-                                            onClick={() => onCopyAssignment(project.id, module.id, task.id, assignment.id)}
-                                            className="text-slate-400 hover:text-indigo-600 p-1 rounded hover:bg-slate-200"
-                                            title="Duplicate this assignment"
-                                        >
-                                            <Copy size={12} />
-                                        </button>
-                                        <button 
-                                            onClick={() => onDeleteAssignment(project.id, module.id, task.id, assignment.id)}
-                                            className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-100"
-                                            title="Delete this assignment"
-                                        >
-                                            <Trash2 size={12} />
-                                        </button>
-                                    </div>
-                                </div>
+
+                                <div className="flex-shrink-0 border-r border-slate-200 bg-slate-50/30" style={detailsColStyle}></div>
                                 
                                 {timeline.map(col => {
-                                  const raw = getRawCellValue(assignment, col);
-                                  const display = formatValue(raw);
-                                  const hasValue = raw > 0;
-                                  const holidayInfo = getHolidayInfo(col.date);
-                                  const isHol = !!holidayInfo;
+                                  const total = getTaskTotal(task, col);
                                   const isCurrent = isCurrentColumn(col);
-
                                   return (
-                                    <div 
-                                      key={`${assignment.id}-${col.id}`} 
-                                      className={`flex-shrink-0 border-r border-slate-100 relative ${isHol ? 'bg-[repeating-linear-gradient(45deg,#fee2e2,#fee2e2_5px,#fef2f2_5px,#fef2f2_10px)]' : isCurrent ? 'bg-amber-50/50' : ''}`} 
-                                      style={{ width: `${colWidth}px` }}
-                                      title={isHol ? holidayInfo?.name : ''}
-                                    >
-                                      <input 
-                                        type="text"
-                                        disabled={isHol}
-                                        className={`w-full h-full text-center text-xs focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors
-                                            ${hasValue ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50'}
-                                            ${isHol ? 'bg-transparent cursor-not-allowed' : ''}
-                                        `}
-                                        value={display}
-                                        placeholder={'-'}
-                                        onChange={(e) => handleCellUpdate(project.id, module.id, task.id, assignment.id, col, e.target.value)}
-                                      />
+                                    <div key={`th-${task.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 flex items-center justify-center bg-slate-50/30 ${isCurrent ? 'bg-amber-50/30' : ''}`} style={{ width: `${colWidth}px` }}>
+                                      {total > 0 && (
+                                        <span className="text-[10px] font-semibold text-slate-600">{formatValue(total)}</span>
+                                      )}
                                     </div>
                                   );
                                 })}
                               </div>
-                            )})}
-                          </React.Fragment>
-                        );
-                      })}
-                      
-                      {/* Add Task Button */}
-                      {!isModuleCollapsed && (
-                        <div className="flex border-b border-slate-100 bg-slate-50/20">
-                          <div 
-                            className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50/80 z-20 pl-12 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]"
-                            style={stickyStyle}
-                          >
-                            <button 
-                              onClick={() => handleAddTaskClick(project.id, module.id)}
-                              className="text-[11px] text-slate-500 hover:text-indigo-600 font-medium flex items-center gap-1 py-1 px-2 rounded hover:bg-slate-100 transition-colors"
+
+                              {!isTaskCollapsed && task.assignments.map((assignment, assignmentIndex) => {
+                                const startDate = assignment.startWeekId ? getDateFromWeek(
+                                  parseInt(assignment.startWeekId.split('-')[0]), 
+                                  parseInt(assignment.startWeekId.split('-')[1])
+                                ) : new Date();
+                                const endDate = calculateEndDate(startDate, assignment.duration || 1);
+                                
+                                return (
+                                <div 
+                                  key={assignment.id} 
+                                  className={`flex border-b border-slate-100 group/assign ${draggedAssignment?.taskId === task.id && draggedAssignment?.index === assignmentIndex ? 'opacity-30' : ''}`}
+                                  draggable
+                                  onDragStart={(e) => handleAssignmentDragStart(e, task.id, assignmentIndex)}
+                                  onDragOver={handleAssignmentDragOver}
+                                  onDrop={(e) => handleAssignmentDrop(e, project.id, module.id, task.id, assignmentIndex)}
+                                  onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    setContextMenu({ x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id, assignmentId: assignment.id });
+                                  }}
+                                >
+                                  <div 
+                                    className={`flex-shrink-0 py-0.5 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-10 flex items-center justify-between border-l-[3px] ${getRoleColorClass(assignment.role)} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`}
+                                    style={stickyStyle}
+                                  >
+                                    <div className="flex-1 overflow-hidden flex items-center gap-2 pl-12">
+                                      <select
+                                        value={assignment.resourceName || 'Unassigned'}
+                                        onChange={(e) => onUpdateAssignmentResourceName(project.id, module.id, task.id, assignment.id, e.target.value)}
+                                        className="w-full text-xs text-slate-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer hover:text-indigo-600"
+                                      >
+                                          <option value="Unassigned">Unassigned</option>
+                                          {Object.entries(groupedResources).map(([category, resList]) => (
+                                            <optgroup label={category} key={category}>
+                                              {resList.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
+                                            </optgroup>
+                                          ))}
+                                      </select>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 gap-2 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
+                                      <div className="cursor-grab text-slate-300 hover:text-slate-500 flex-shrink-0" title="Drag to reorder assignment">
+                                          <GripVertical size={14} />
+                                      </div>
+                                      <input 
+                                          type="date"
+                                          title="Start Date"
+                                          className="text-[11px] p-1 border-slate-200 rounded-md bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer w-full"
+                                          value={formatDateForInput(startDate)}
+                                          onChange={(e) => handleAssignmentStartDateChange(project.id, module.id, task.id, assignment, e.target.value)}
+                                      />
+                                      <input 
+                                          type="date"
+                                          readOnly
+                                          title="End Date (calculated)"
+                                          className="text-[11px] p-1 border-slate-200 rounded-md bg-slate-100 text-slate-500 cursor-default w-full focus:ring-0"
+                                          value={formatDateForInput(endDate)}
+                                      />
+                                      <input 
+                                          type="number"
+                                          min="1"
+                                          title="Duration (days)"
+                                          value={assignment.duration || 1}
+                                          onChange={(e) => handleAssignmentDurationChange(project.id, module.id, task.id, assignment, e.target.value)}
+                                          className="text-[11px] p-1 border-slate-200 rounded-md bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-16 text-center"
+                                      />
+                                      <div className="flex-1 min-w-[2px]"></div>
+                                      <button 
+                                          onClick={() => onDeleteAssignment(project.id, module.id, task.id, assignment.id)}
+                                          className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-100"
+                                          title="Delete this assignment"
+                                      >
+                                          <Trash2 size={12} />
+                                      </button>
+                                  </div>
+                                  
+                                  {timeline.map(col => {
+                                    const raw = getRawCellValue(assignment, col);
+                                    const display = formatValue(raw);
+                                    const hasValue = raw > 0;
+                                    const holidayInfo = getHolidayInfo(col.date);
+                                    const isHol = !!holidayInfo;
+                                    const isCurrent = isCurrentColumn(col);
+
+                                    return (
+                                      <div 
+                                        key={`${assignment.id}-${col.id}`} 
+                                        className={`flex-shrink-0 border-r border-slate-100 relative ${isHol ? 'bg-[repeating-linear-gradient(45deg,#fee2e2,#fee2e2_5px,#fef2f2_5px,#fef2f2_10px)]' : isCurrent ? 'bg-amber-50/50' : ''}`} 
+                                        style={{ width: `${colWidth}px` }}
+                                        title={isHol ? holidayInfo?.name : ''}
+                                      >
+                                        <input 
+                                          type="text"
+                                          disabled={isHol}
+                                          className={`w-full h-full text-center text-xs focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors
+                                              ${hasValue ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50'}
+                                              ${isHol ? 'bg-transparent cursor-not-allowed' : ''}
+                                          `}
+                                          value={display}
+                                          placeholder={'-'}
+                                          onChange={(e) => handleCellUpdate(project.id, module.id, task.id, assignment.id, col, e.target.value)}
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )})}
+                            </React.Fragment>
+                          );
+                        })}
+                        
+                        {!isModuleCollapsed && (
+                          <div className="flex border-b border-slate-100 bg-slate-50/20">
+                            <div 
+                              className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50/80 z-20 pl-12 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]"
+                              style={stickyStyle}
                             >
-                              <Plus size={12} />
-                              Add New Task
-                            </button>
+                              <button 
+                                onClick={() => handleAddTaskClick(project.id, module.id)}
+                                className="text-[11px] text-slate-500 hover:text-indigo-600 font-medium flex items-center gap-1 py-1 px-2 rounded hover:bg-slate-100 transition-colors"
+                              >
+                                <Plus size={12} />
+                                Add New Task
+                              </button>
+                            </div>
+                            <div className="flex-shrink-0 border-r border-slate-200 bg-slate-50/20" style={detailsColStyle}></div>
+                            {timeline.map(col => {
+                              const isCurrent = isCurrentColumn(col);
+                              return (
+                                <div key={`add-${module.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 ${isCurrent ? 'bg-amber-50/30' : ''}`} style={{ width: `${colWidth}px` }}></div>
+                              );
+                            })}
                           </div>
-                           <div className="flex-shrink-0 border-r border-slate-200 bg-slate-50/20" style={detailsColStyle}></div>
-                           {timeline.map(col => {
-                             const isCurrent = isCurrentColumn(col);
-                             return (
-                               <div key={`add-${module.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 ${isCurrent ? 'bg-amber-50/30' : ''}`} style={{ width: `${colWidth}px` }}></div>
-                             );
-                           })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </React.Fragment>
-            );
-          })}
-          
-          {/* Total Row */}
-           <div className="flex bg-slate-800 text-white border-t border-slate-700 sticky bottom-0 z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.2)] mt-0.5">
-             <div 
-               className="flex-shrink-0 p-3 border-r border-slate-700 sticky left-0 bg-slate-800 z-50 font-bold text-sm shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]"
-               style={stickyStyle}
-             >
-               GRAND TOTAL
-             </div>
-             <div className="flex-shrink-0 border-r border-slate-700" style={detailsColStyle}></div>
-             {timeline.map(col => {
-               // Calculate total for this column across all projects
-               const total = projects.reduce((acc, p) => acc + getProjectTotal(p, col), 0);
-               const isCurrent = isCurrentColumn(col);
-               
-               return (
-                 <div key={`total-${col.id}`} className={`flex-shrink-0 border-r border-slate-700 flex items-center justify-center text-xs font-mono font-bold ${isCurrent ? 'bg-slate-700 ring-1 ring-inset ring-amber-400/50' : ''}`} style={{ width: `${colWidth}px` }}>
-                   {total > 0 ? formatValue(total) : ''}
-                 </div>
-               );
-             })}
-           </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })}
+            
+            <div className="flex bg-slate-800 text-white border-t border-slate-700 sticky bottom-0 z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.2)] mt-0.5">
+              <div 
+                className="flex-shrink-0 p-3 border-r border-slate-700 sticky left-0 bg-slate-800 z-50 font-bold text-sm shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]"
+                style={stickyStyle}
+              >
+                GRAND TOTAL
+              </div>
+              <div className="flex-shrink-0 border-r border-slate-700" style={detailsColStyle}></div>
+              {timeline.map(col => {
+                const total = projects.reduce((acc, p) => acc + getProjectTotal(p, col), 0);
+                const isCurrent = isCurrentColumn(col);
+                
+                return (
+                  <div key={`total-${col.id}`} className={`flex-shrink-0 border-r border-slate-700 flex items-center justify-center text-xs font-mono font-bold ${isCurrent ? 'bg-slate-700 ring-1 ring-inset ring-amber-400/50' : ''}`} style={{ width: `${colWidth}px` }}>
+                    {total > 0 ? formatValue(total) : ''}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+      {contextMenu && (
+        <div
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          className="absolute z-50 bg-white shadow-xl rounded-md border border-slate-200 p-1 animate-in fade-in"
+        >
+          <button
+            onClick={() => {
+              onCopyAssignment(contextMenu.projectId, contextMenu.moduleId, contextMenu.taskId, contextMenu.assignmentId);
+              setContextMenu(null);
+            }}
+            className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"
+          >
+            <Copy size={12} />
+            Duplicate Assignment
+          </button>
+        </div>
+      )}
+    </>
   );
 };
