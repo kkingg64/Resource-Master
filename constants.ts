@@ -62,6 +62,48 @@ export const GOV_HOLIDAYS_DB: Record<string, Omit<Holiday, 'id'>[]> = {
     { date: '2025-11-27', name: 'Thanksgiving Day', country: 'US' },
     { date: '2025-12-25', name: 'Christmas Day', country: 'US' },
     { date: '2026-01-01', name: 'New Year Day', country: 'US' },
+  ],
+  'UK': [
+    // 2025
+    { date: '2025-01-01', name: 'New Year\'s Day', country: 'UK' },
+    { date: '2025-04-18', name: 'Good Friday', country: 'UK' },
+    { date: '2025-04-21', name: 'Easter Monday', country: 'UK' },
+    { date: '2025-05-05', name: 'Early May bank holiday', country: 'UK' },
+    { date: '2025-05-26', name: 'Spring bank holiday', country: 'UK' },
+    { date: '2025-08-25', name: 'Summer bank holiday', country: 'UK' },
+    { date: '2025-12-25', name: 'Christmas Day', country: 'UK' },
+    { date: '2025-12-26', name: 'Boxing Day', country: 'UK' },
+    // 2026
+    { date: '2026-01-01', name: 'New Year\'s Day', country: 'UK' },
+    { date: '2026-04-03', name: 'Good Friday', country: 'UK' },
+    { date: '2026-04-06', name: 'Easter Monday', country: 'UK' },
+    { date: '2026-05-04', name: 'Early May bank holiday', country: 'UK' },
+    { date: '2026-05-25', name: 'Spring bank holiday', country: 'UK' },
+    { date: '2026-08-31', name: 'Summer bank holiday', country: 'UK' },
+    { date: '2026-12-25', name: 'Christmas Day', country: 'UK' },
+    { date: '2026-12-28', name: 'Boxing Day (substitute day)', country: 'UK' },
+  ],
+  'DE': [
+    // 2025
+    { date: '2025-01-01', name: 'New Year\'s Day', country: 'DE' },
+    { date: '2025-04-18', name: 'Good Friday', country: 'DE' },
+    { date: '2025-04-21', name: 'Easter Monday', country: 'DE' },
+    { date: '2025-05-01', name: 'Labour Day', country: 'DE' },
+    { date: '2025-05-29', name: 'Ascension Day', country: 'DE' },
+    { date: '2025-06-09', name: 'Whit Monday', country: 'DE' },
+    { date: '2025-10-03', name: 'Day of German Unity', country: 'DE' },
+    { date: '2025-12-25', name: 'Christmas Day', country: 'DE' },
+    { date: '2025-12-26', name: 'St. Stephen\'s Day', country: 'DE' },
+    // 2026
+    { date: '2026-01-01', name: 'New Year\'s Day', country: 'DE' },
+    { date: '2026-04-03', name: 'Good Friday', country: 'DE' },
+    { date: '2026-04-06', name: 'Easter Monday', country: 'DE' },
+    { date: '2026-05-01', name: 'Labour Day', country: 'DE' },
+    { date: '2026-05-14', name: 'Ascension Day', country: 'DE' },
+    { date: '2026-05-25', name: 'Whit Monday', country: 'DE' },
+    { date: '2026-10-03', name: 'Day of German Unity', country: 'DE' },
+    { date: '2026-12-25', name: 'Christmas Day', country: 'DE' },
+    { date: '2026-12-26', name: 'St. Stephen\'s Day', country: 'DE' },
   ]
 };
 
@@ -210,4 +252,41 @@ export const getWeekdaysForWeekId = (weekId: string): string[] => {
     weekdays.push(formatDateForInput(date));
   }
   return weekdays;
+};
+
+export const calculateEndDate = (startDate: string, duration: number, holidays: Set<string>): string => {
+  if (!startDate || duration <= 0) return startDate;
+
+  let currentDate = new Date(startDate.replace(/-/g, '/'));
+  let workingDaysCounted = 0;
+
+  while (workingDaysCounted < duration) {
+    const dayOfWeek = currentDate.getDay();
+    const dateStr = formatDateForInput(currentDate);
+
+    if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidays.has(dateStr)) {
+      workingDaysCounted++;
+    }
+    
+    if (workingDaysCounted < duration) {
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+  }
+
+  return formatDateForInput(currentDate);
+};
+
+export const findNextWorkingDay = (dateStr: string, holidays: Set<string>): string => {
+  let currentDate = new Date(dateStr.replace(/-/g, '/'));
+  currentDate.setDate(currentDate.getDate() + 1); // Start from the next day
+
+  while (true) {
+    const dayOfWeek = currentDate.getDay();
+    const currentDayStr = formatDateForInput(currentDate);
+
+    if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidays.has(currentDayStr)) {
+      return currentDayStr;
+    }
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
 };

@@ -36,6 +36,7 @@ export interface TaskAssignment {
   startDate?: string; // YYYY-MM-DD Auto-scheduler start
   startWeekId?: string; // DEPRECATED: Auto-scheduler start
   duration?: number;    // Auto-scheduler duration in DAYS
+  parentAssignmentId?: string; // ID of the task this one depends on
   sort_order?: number;
 }
 
