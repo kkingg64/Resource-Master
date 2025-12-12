@@ -115,12 +115,10 @@ const App: React.FC = () => {
   const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
   
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
-  const statusTimeoutRef = useRef<number | undefined>();
+  const statusTimeoutRef = useRef<number | undefined>(undefined);
   const timelineInitialized = useRef(false);
 
   useEffect(() => {
-    // FIX: The error "Expected 1 arguments, but got 0" is caused by calling clearTimeout without an argument.
-    // This provides the stored timeout ID from the ref to correctly clear the timeout.
     return () => window.clearTimeout(statusTimeoutRef.current);
   }, []);
 

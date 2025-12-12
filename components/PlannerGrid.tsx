@@ -198,15 +198,17 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   }, [projects]);
 
   const allAssignmentsForDependencies = useMemo(() => {
-    const flatList: { id: string; name: string; parentAssignmentId?: string }[] = [];
+    const flatList: { id: string; name: string; parentAssignmentId?: string; groupLabel: string }[] = [];
     projects.forEach(p => {
       p.modules.forEach(m => {
+        const groupLabel = `${p.name} > ${m.name}`;
         m.tasks.forEach(t => {
           t.assignments.forEach(a => {
             flatList.push({
               id: a.id,
               name: `${t.name} (${a.resourceName || 'Unassigned'})`,
               parentAssignmentId: a.parentAssignmentId,
+              groupLabel
             });
           });
         });
@@ -982,6 +984,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 const possibleParents = allAssignmentsForDependencies.filter(
                                   parent => parent.id !== assignment.id && !isCircularDependency(assignment.id, parent.id)
                                 );
+                                
+                                const groupedParents = possibleParents.reduce((acc, parent) => {
+                                    if (!acc[parent.groupLabel]) acc[parent.groupLabel] = [];
+                                    acc[parent.groupLabel].push(parent);
+                                    return acc;
+                                }, {} as Record<string, typeof possibleParents>);
 
 
                                 return (
@@ -1046,8 +1054,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                               className="absolute inset-0 w-full h-full text-transparent bg-transparent border-none appearance-none cursor-pointer focus:ring-1 focus:ring-indigo-500 rounded-md"
                                             >
                                                 <option value="" className="text-black">- No Dependency -</option>
-                                                {possibleParents.map(parent => (
-                                                    <option key={parent.id} value={parent.id} className="text-black">{parent.name}</option>
+                                                {Object.entries(groupedParents).map(([label, group]) => (
+                                                    <optgroup label={label} key={label}>
+                                                        {group.map(parent => (
+                                                            <option key={parent.id} value={parent.id} className="text-black">{parent.name}</option>
+                                                        ))}
+                                                    </optgroup>
                                                 ))}
                                             </select>
                                             {assignment.parentAssignmentId ? <Link size={14} className="text-indigo-600 pointer-events-none" /> : <Link2 size={14} className="text-slate-400 pointer-events-none" />}
