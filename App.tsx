@@ -499,7 +499,7 @@ const App: React.FC = () => {
             <div className="flex items-center justify-center min-h-screen bg-slate-100">
                 <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
                     <h1 className="text-2xl font-bold mb-6 text-center text-slate-800">Resource Planner Login</h1>
-                    <Auth supabaseClient={supabase} appearance={{ theme: ThemeSupa }} providers={[]} />
+                    <Auth supabaseClient={supabase} appearance={{ theme: ThemeSupa }} providers={['google']} />
                 </div>
             </div>
         );
