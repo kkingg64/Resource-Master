@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2 } from 'lucide-react';
+import { Layers, Calendar, ChevronRight, ChevronDown, ChevronLeft, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface PlannerGridProps {
@@ -102,6 +102,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [draggedAssignment, setDraggedAssignment] = useState<{ taskId: string, index: number } | null>(null);
   
   const [sidebarWidth, setSidebarWidth] = useState(350);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+
   const [detailsWidth, setDetailsWidth] = useState(330);
   const [colWidthBase, setColWidthBase] = useState(40);
   const [isDetailsFrozen, setIsDetailsFrozen] = useState(true);
@@ -149,6 +151,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
   
   const startSidebarResize = (e: React.MouseEvent) => {
+    if (isSidebarCollapsed) return;
     isResizingSidebar.current = true;
     document.body.style.cursor = 'col-resize';
   };
@@ -602,8 +605,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
 
   const colWidth = viewMode === 'month' ? colWidthBase * 2 : colWidthBase;
-
-  const stickyStyle = { width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth };
+  const currentSidebarWidth = isSidebarCollapsed ? 40 : sidebarWidth;
+  const stickyStyle = { width: currentSidebarWidth, minWidth: currentSidebarWidth, maxWidth: currentSidebarWidth };
   const detailsColStyle = { width: detailsWidth, minWidth: detailsWidth, maxWidth: detailsWidth };
 
   return (
@@ -709,18 +712,22 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           <div className="min-w-max">
               <>
                 <div className="flex bg-slate-200/50 border-b border-slate-200 sticky top-0 z-40 h-8 items-center">
-                  <div className="flex-shrink-0 px-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group h-full flex items-center" style={stickyStyle}>
-                    Project Structure
-                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
+                  <div className="flex-shrink-0 px-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group h-full flex items-center justify-between" style={stickyStyle}>
+                     <div className="flex items-center justify-between w-full">
+                         {!isSidebarCollapsed && <span>Project Structure</span>}
+                         <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-0.5 rounded hover:bg-slate-200 text-slate-500">
+                             {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+                         </button>
+                     </div>
+                    {!isSidebarCollapsed && <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>}
                   </div>
-                  <div className={`flex-shrink-0 flex items-center text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative px-2 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}>
+                  <div className={`flex-shrink-0 flex items-center text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative px-2 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: currentSidebarWidth, zIndex: 49 } : detailsColStyle}>
                     <button onClick={() => setIsDetailsFrozen(!isDetailsFrozen)} title={isDetailsFrozen ? 'Unfreeze columns' : 'Freeze columns'} className="w-6 shrink-0 text-slate-400 hover:text-indigo-600">
                       {isDetailsFrozen ? <PinOff size={14} /> : <Pin size={14} />}
                     </button>
                     <div className="flex-1 grid grid-cols-[1fr_60px_30px] gap-2 uppercase items-center">
                       <span>Start</span>
                       <span className="text-center">Days</span>
-                      {/* FIX: The 'title' prop is not valid for lucide-react icons. The icon has been wrapped in a div to apply the title for tooltip functionality. */}
                       <div className="justify-self-center" title="Dependency">
                         <Link2 size={14} className="text-slate-600" />
                       </div>
@@ -733,14 +740,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                 {viewMode === 'day' && (
                   <div className="flex bg-slate-100/70 border-b border-slate-200 sticky top-8 z-40 h-8 items-center">
                     <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
-                    <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100/70 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}></div>
+                    <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100/70 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: currentSidebarWidth, zIndex: 49 } : detailsColStyle}></div>
                     {Object.values(monthHeaders).map((group, idx) => (<div key={idx} className="text-center text-xs font-bold text-slate-600 border-r border-slate-200 uppercase h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                   </div>
                 )}
                 
                 <div className={`flex bg-slate-50 border-b border-slate-200 sticky z-40 shadow-sm h-8 items-center ${viewMode === 'day' ? 'top-16' : 'top-8'}`}>
                   <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
-                  <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}></div>
+                  <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: currentSidebarWidth, zIndex: 49 } : detailsColStyle}></div>
                   {timeline.map(col => {
                       const isCurrent = isCurrentColumn(col);
                       return (<div key={col.id} className={`flex-shrink-0 text-center text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col h-full ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px` }} title={isCurrent ? 'Current Date' : ''}>
@@ -769,34 +776,38 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         {isProjectCollapsed ? <ChevronRight className="w-4 h-4 text-slate-300" /> : <ChevronDown className="w-4 h-4 text-slate-300" />}
                         <Folder className="w-4 h-4 text-slate-200" />
                         
-                        {isEditingProject ? (
-                            <input 
-                              ref={editInputRef}
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              onBlur={saveEdit}
-                              onKeyDown={handleKeyDown}
-                              className="bg-slate-600 text-white text-sm font-bold border border-slate-500 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                            />
-                        ) : (
-                            <span 
-                              className="font-bold text-sm truncate select-none flex-1" 
-                              onDoubleClick={(e) => startEditing(`project::${project.id}`, project.name, e)}
-                              title="Double click to rename"
-                            >
-                              {project.name}
-                            </span>
+                        {!isSidebarCollapsed && (
+                          isEditingProject ? (
+                              <input 
+                                ref={editInputRef}
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onBlur={saveEdit}
+                                onKeyDown={handleKeyDown}
+                                className="bg-slate-600 text-white text-sm font-bold border border-slate-500 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              />
+                          ) : (
+                              <span 
+                                className="font-bold text-sm truncate select-none flex-1" 
+                                onDoubleClick={(e) => startEditing(`project::${project.id}`, project.name, e)}
+                                title="Double click to rename"
+                              >
+                                {project.name}
+                              </span>
+                          )
                         )}
                       </div>
-                      <button
-                          onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); }}
-                          className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] text-red-300 hover:bg-red-500 hover:text-white p-1 rounded transition-colors"
-                          title="Delete Project"
-                      >
-                        <Trash2 size={12} />
-                      </button>
+                      {!isSidebarCollapsed && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); }}
+                            className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] text-red-300 hover:bg-red-500 hover:text-white p-1 rounded transition-colors"
+                            title="Delete Project"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
                     </div>
-                    <div className={`flex-shrink-0 p-3 text-center text-xs font-bold text-slate-300 border-r border-slate-600 flex items-center justify-center gap-2 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 39 } : detailsColStyle}>
+                    <div className={`flex-shrink-0 p-3 text-center text-xs font-bold text-slate-300 border-r border-slate-600 flex items-center justify-center gap-2 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: currentSidebarWidth, zIndex: 39 } : detailsColStyle}>
                       <button 
                         onClick={(e) => { e.stopPropagation(); onAddModule(project.id); }}
                         className="flex items-center gap-1 text-[10px] bg-slate-600 hover:bg-slate-500 px-2 py-0.5 rounded transition-colors"
@@ -840,43 +851,49 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               className="flex items-center gap-2 flex-1 overflow-hidden cursor-pointer"
                               onClick={() => !isEditingModule && toggleModule(module.id)}
                             >
-                              <div className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500" title="Drag to reorder">
-                                <GripVertical className="w-4 h-4" />
-                              </div>
+                              {!isSidebarCollapsed && (
+                                <div className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500" title="Drag to reorder">
+                                  <GripVertical className="w-4 h-4" />
+                                </div>
+                              )}
                               {isModuleCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-indigo-500" />}
                               <Layers className="w-4 h-4 text-indigo-600" />
                               
-                              {isEditingModule ? (
-                                <input 
-                                  ref={editInputRef}
-                                  value={editValue}
-                                  onChange={(e) => setEditValue(e.target.value)}
-                                  onBlur={saveEdit}
-                                  onKeyDown={handleKeyDown}
-                                  className="bg-white text-slate-800 text-sm font-semibold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                  onClick={(e) => e.stopPropagation()} 
-                                />
-                              ) : (
-                                <span 
-                                  className="font-semibold text-sm text-slate-800 truncate select-none flex-1 hover:text-indigo-600" 
-                                  onDoubleClick={(e) => startEditing(moduleEditId, module.name, e)}
-                                  title="Double click to rename"
-                                >
-                                  {module.name}
-                                </span>
+                              {!isSidebarCollapsed && (
+                                isEditingModule ? (
+                                  <input 
+                                    ref={editInputRef}
+                                    value={editValue}
+                                    onChange={(e) => setEditValue(e.target.value)}
+                                    onBlur={saveEdit}
+                                    onKeyDown={handleKeyDown}
+                                    className="bg-white text-slate-800 text-sm font-semibold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    onClick={(e) => e.stopPropagation()} 
+                                  />
+                                ) : (
+                                  <span 
+                                    className="font-semibold text-sm text-slate-800 truncate select-none flex-1 hover:text-indigo-600" 
+                                    onDoubleClick={(e) => startEditing(moduleEditId, module.name, e)}
+                                    title="Double click to rename"
+                                  >
+                                    {module.name}
+                                  </span>
+                                )
                               )}
                             </div>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onDeleteModule(project.id, module.id); }}
-                                className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-100 transition-opacity"
-                                title="Delete Module"
-                              >
-                                <Trash2 size={14} />
-                              </button>
+                            {!isSidebarCollapsed && (
+                              <button
+                                  onClick={(e) => { e.stopPropagation(); onDeleteModule(project.id, module.id); }}
+                                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-100 transition-opacity"
+                                  title="Delete Module"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                            )}
                           </div>
                           <div 
                             className={`flex-shrink-0 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/80 ${isDetailsFrozen ? 'sticky' : ''}`}
-                            style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 29 } : detailsColStyle}
+                            style={isDetailsFrozen ? { ...detailsColStyle, left: currentSidebarWidth, zIndex: 29 } : detailsColStyle}
                           >
                           </div>
                           
@@ -932,44 +949,50 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     className="flex items-center gap-2 overflow-hidden cursor-pointer flex-1"
                                     onClick={() => !isEditingTask && toggleTask(task.id)}
                                   >
-                                    <div className="cursor-grab text-slate-400 hover:text-slate-600" title="Drag to reorder task">
-                                        <GripVertical size={14} />
-                                    </div>
+                                    {!isSidebarCollapsed && (
+                                      <div className="cursor-grab text-slate-400 hover:text-slate-600" title="Drag to reorder task">
+                                          <GripVertical size={14} />
+                                      </div>
+                                    )}
                                     {isTaskCollapsed ? <ChevronRight size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
                                     <div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0"></div>
                                     
-                                    {isEditingTask ? (
-                                      <input 
-                                        ref={editInputRef}
-                                        value={editValue}
-                                        onChange={(e) => setEditValue(e.target.value)}
-                                        onBlur={saveEdit}
-                                        onKeyDown={handleKeyDown}
-                                        className="bg-white text-slate-700 text-xs font-bold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                      />
-                                    ) : (
-                                      <span 
-                                        className="text-xs text-slate-700 font-bold truncate select-none hover:text-indigo-600 flex-1" 
-                                        title="Double click to rename"
-                                        onDoubleClick={(e) => startEditing(taskEditId, task.name, e)}
-                                      >
-                                        {task.name}
-                                      </span>
+                                    {!isSidebarCollapsed && (
+                                      isEditingTask ? (
+                                        <input 
+                                          ref={editInputRef}
+                                          value={editValue}
+                                          onChange={(e) => setEditValue(e.target.value)}
+                                          onBlur={saveEdit}
+                                          onKeyDown={handleKeyDown}
+                                          className="bg-white text-slate-700 text-xs font-bold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                        />
+                                      ) : (
+                                        <span 
+                                          className="text-xs text-slate-700 font-bold truncate select-none hover:text-indigo-600 flex-1" 
+                                          title="Double click to rename"
+                                          onDoubleClick={(e) => startEditing(taskEditId, task.name, e)}
+                                        >
+                                          {task.name}
+                                        </span>
+                                      )
                                     )}
                                   </div>
                                   
-                                  <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity">
-                                    <button 
-                                      onClick={() => onAddAssignment(project.id, module.id, task.id, Role.DEV)}
-                                      className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
-                                      title="Add another resource to this task"
-                                    >
-                                      <UserPlus size={14} />
-                                    </button>
-                                  </div>
+                                  {!isSidebarCollapsed && (
+                                    <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity">
+                                      <button 
+                                        onClick={() => onAddAssignment(project.id, module.id, task.id, Role.DEV)}
+                                        className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
+                                        title="Add another resource to this task"
+                                      >
+                                        <UserPlus size={14} />
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
 
-                                <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-50/40 flex items-center px-2 py-1.5 gap-1 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 19 } : detailsColStyle}>
+                                <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-50/40 flex items-center px-2 py-1.5 gap-1 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: currentSidebarWidth, zIndex: 19 } : detailsColStyle}>
                                   {isTaskCollapsed && (
                                     <>
                                       <div className="w-[14px]"></div> {/* Spacer for grip handle */}
@@ -1037,23 +1060,25 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     className={`flex-shrink-0 py-0.5 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-10 flex items-center justify-between border-l-[3px] ${getRoleColorClass(assignment.role)} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`}
                                     style={stickyStyle}
                                   >
-                                    <div className="flex-1 overflow-hidden flex items-center gap-2 pl-12">
-                                      <select
-                                        value={assignment.resourceName || 'Unassigned'}
-                                        onChange={(e) => onUpdateAssignmentResourceName(project.id, module.id, task.id, assignment.id, e.target.value)}
-                                        className="w-full text-xs text-slate-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer hover:text-indigo-600"
-                                      >
-                                          <option value="Unassigned">Unassigned</option>
-                                          {Object.entries(groupedResources).map(([category, resList]) => (
-                                            <optgroup label={category} key={category}>
-                                              {resList.map(r => <option key={r.id} value={r.name}>{r.name} {r.type === 'External' ? '(Ext.)' : ''}</option>)}
-                                            </optgroup>
-                                          ))}
-                                      </select>
-                                    </div>
+                                    {!isSidebarCollapsed && (
+                                      <div className="flex-1 overflow-hidden flex items-center gap-2 pl-12">
+                                        <select
+                                          value={assignment.resourceName || 'Unassigned'}
+                                          onChange={(e) => onUpdateAssignmentResourceName(project.id, module.id, task.id, assignment.id, e.target.value)}
+                                          className="w-full text-xs text-slate-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer hover:text-indigo-600"
+                                        >
+                                            <option value="Unassigned">Unassigned</option>
+                                            {Object.entries(groupedResources).map(([category, resList]) => (
+                                              <optgroup label={category} key={category}>
+                                                {resList.map(r => <option key={r.id} value={r.name}>{r.name} {r.type === 'External' ? '(Ext.)' : ''}</option>)}
+                                              </optgroup>
+                                            ))}
+                                        </select>
+                                      </div>
+                                    )}
                                   </div>
                                   
-                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 gap-1 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 9 } : detailsColStyle}>
+                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 gap-1 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: currentSidebarWidth, zIndex: 9 } : detailsColStyle}>
                                       <div className="cursor-grab text-slate-300 hover:text-slate-500" title="Drag to reorder assignment">
                                           <GripVertical size={14} />
                                       </div>
@@ -1070,6 +1095,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             type="number"
                                             min="1"
                                             title="Duration (days)"
+                                            data-type="duration-input"
                                             value={isEditingDuration ? editValue : (assignment.duration || 1)}
                                             onFocus={() => {
                                               setEditingId(`duration::${assignment.id}`);
@@ -1084,6 +1110,15 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                                 } else if (e.key === 'Escape') {
                                                     setEditingId(null);
                                                     (e.target as HTMLInputElement).blur();
+                                                } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                                    e.preventDefault();
+                                                    saveDuration(assignment);
+                                                    const inputs = Array.from(document.querySelectorAll('input[data-type="duration-input"]'));
+                                                    const idx = inputs.indexOf(e.target as HTMLInputElement);
+                                                    if (idx !== -1) {
+                                                        const nextIdx = e.key === 'ArrowDown' ? idx + 1 : idx - 1;
+                                                        if (inputs[nextIdx]) (inputs[nextIdx] as HTMLInputElement).focus();
+                                                    }
                                                 }
                                             }}
                                             ref={isEditingDuration ? editInputRef : undefined}
@@ -1162,10 +1197,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 className="text-[11px] text-slate-500 hover:text-indigo-600 font-medium flex items-center gap-1 py-1 px-2 rounded hover:bg-slate-100 transition-colors"
                               >
                                 <Plus size={12} />
-                                Add New Task
+                                {!isSidebarCollapsed && "Add New Task"}
                               </button>
                             </div>
-                            <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-50/20 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 19 } : detailsColStyle}></div>
+                            <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-50/20 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: currentSidebarWidth, zIndex: 19 } : detailsColStyle}></div>
                             {timeline.map(col => {
                               const isCurrent = isCurrentColumn(col);
                               return (
@@ -1186,9 +1221,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                 className="flex-shrink-0 p-3 border-r border-slate-700 sticky left-0 bg-slate-800 z-50 font-bold text-sm shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]"
                 style={stickyStyle}
               >
-                GRAND TOTAL
+                {!isSidebarCollapsed && "GRAND TOTAL"}
               </div>
-              <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}></div>
+              <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: currentSidebarWidth, zIndex: 49 } : detailsColStyle}></div>
               {timeline.map(col => {
                 const total = projects.reduce((acc, p) => acc + getProjectTotal(p, col), 0);
                 const isCurrent = isCurrentColumn(col);
