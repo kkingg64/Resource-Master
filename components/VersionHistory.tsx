@@ -95,7 +95,7 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({ onClose, onResto
                     <li key={version.id} className="bg-slate-50 p-3 rounded-lg flex items-center justify-between border border-slate-200 hover:border-indigo-200">
                       <div>
                         <p className="font-semibold text-slate-800">{version.name}</p>
-                        {/* FIX: Provided locale to toLocaleString for consistent formatting. */}
+                        {/* Fix: Provide locale to toLocaleString for consistent formatting. */}
                         <p className="text-xs text-slate-500">Saved on: {new Date(version.timestamp).toLocaleString('en-US')}</p>
                       </div>
                       <div className="flex items-center gap-2">

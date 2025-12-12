@@ -130,7 +130,7 @@ const App: React.FC = () => {
   const log = (message: string, payload: any, status: LogEntry['status'] = 'pending'): number => {
     if (!isDebugLogEnabled) return -1;
     const id = nextLogId.current++;
-    // FIX: Pass 'en-US' to toLocaleTimeString to provide a locale argument and ensure consistent formatting.
+    // Fix: Provide locale to toLocaleTimeString for consistent formatting.
     const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString('en-US'), message, payload, status };
     setLogEntries(prev => [newEntry, ...prev.slice(0, 99)]);
     return id;
