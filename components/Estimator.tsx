@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { Project, ProjectModule } from '../types';
 import { Calculator, ArrowRight, Save, GripVertical, CheckCircle, AlertCircle, Folder } from 'lucide-react';
@@ -27,7 +25,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
     // If there's a selected project, ensure a valid module is selected.
     if (currentProject) {
         const modules = currentProject.modules;
-        // FIX: Added a check for modules existence and used optional chaining to prevent potential runtime errors when accessing modules[0].
         const moduleExists = modules && modules.some(m => m.id === selectedModuleId);
         if (!moduleExists) {
             setSelectedModuleId(modules?.[0]?.id || '');

@@ -125,7 +125,7 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
         department,
         countries: Object.keys(groups[department]).sort((a, b) => a.localeCompare(b)).map(country => ({
             country,
-            resources: groups[department][country] // Already sorted by name from App.tsx
+            resources: groups[department][country]
         }))
     }));
   }, [resources]);
@@ -162,11 +162,9 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
             <div className="text-center p-4 text-slate-400 border border-dashed rounded-lg">No resources added yet.</div>
           ) : (
              <div className="border border-slate-200 rounded-lg overflow-hidden">
-                {/* FIX: Renamed destructured `countries` to `countryGroups` to avoid shadowing the `countries` variable from the outer scope. */}
                 {groupedAndSortedResources.map(({ department, countries: countryGroups }) => (
                   <div key={department} className="border-b border-slate-200 last:border-b-0">
                     <h3 className="bg-slate-100 p-3 text-sm font-bold text-slate-700 tracking-wider uppercase">{department}</h3>
-                    {/* FIX: Use the renamed `countryGroups` variable for mapping. */}
                     {countryGroups.map(({ country, resources: countryResources }) => (
                       <div key={country}>
                         <h4 className="bg-slate-50 px-6 py-2 text-xs font-semibold text-slate-500 uppercase border-y border-slate-100">{country}</h4>
