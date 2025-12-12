@@ -563,10 +563,27 @@ const App: React.FC = () => {
     }
   };
   
-  const updateAssignmentSchedule = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, startDate: string, duration: number) => {
+  // FIX: Refactored function to accept only the required arguments from PlannerGrid, resolving the type mismatch.
+  const updateAssignmentSchedule = async (assignmentId: string, startDate: string, duration: number) => {
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
-    const assignment = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId)?.assignments.find(a => a.id === assignmentId);
+
+    let assignment: TaskAssignment | undefined;
+    
+    // Find the assignment by its ID
+    for (const p of updatedProjects) {
+      for (const m of p.modules) {
+        for (const t of m.tasks) {
+          const foundAssignment = t.assignments.find(a => a.id === assignmentId);
+          if (foundAssignment) {
+            assignment = foundAssignment;
+            break;
+          }
+        }
+        if (assignment) break;
+      }
+      if (assignment) break;
+    }
   
     if (!assignment) return;
   
