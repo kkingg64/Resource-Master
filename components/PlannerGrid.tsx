@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy } from 'lucide-react';
+import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface PlannerGridProps {
@@ -100,8 +100,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [draggedAssignment, setDraggedAssignment] = useState<{ taskId: string, index: number } | null>(null);
   
   const [sidebarWidth, setSidebarWidth] = useState(350);
-  const [detailsWidth, setDetailsWidth] = useState(180);
+  const [detailsWidth, setDetailsWidth] = useState(220);
   const [colWidthBase, setColWidthBase] = useState(40);
+  const [isDetailsFrozen, setIsDetailsFrozen] = useState(true);
   const isResizingSidebar = useRef(false);
   const isResizingDetails = useRef(false);
 
@@ -651,23 +652,26 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     Project Structure
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
                   </div>
-                  <div className="flex-shrink-0 flex items-center text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative px-2 h-full" style={detailsColStyle}>
-                    <div className="w-6 shrink-0" />
-                    <div className="flex-1 grid grid-cols-2 gap-2">
-                      <span>S</span>
-                      <span>D</span>
+                  <div className={`flex-shrink-0 flex items-center text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative px-2 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}>
+                    <button onClick={() => setIsDetailsFrozen(!isDetailsFrozen)} title={isDetailsFrozen ? 'Unfreeze columns' : 'Freeze columns'} className="w-6 shrink-0 text-slate-400 hover:text-indigo-600">
+                      {isDetailsFrozen ? <PinOff size={14} /> : <Pin size={14} />}
+                    </button>
+                    <div className="flex-1 grid grid-cols-2 gap-2 uppercase">
+                      <span>Start</span>
+                      <span>Days</span>
                     </div>
+                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
                   </div>
                   {Object.values(yearHeaders).map((group, idx) => (<div key={idx} className="text-center text-xs font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                 </div>
                 <div className="flex bg-slate-100/70 border-b border-slate-200 sticky top-8 z-40 h-8 items-center">
                   <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
-                  <div className="flex-shrink-0 border-r border-slate-200 h-full" style={detailsColStyle}></div>
+                  <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100/70 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}></div>
                   {Object.values(monthHeaders).map((group, idx) => (<div key={idx} className="text-center text-xs font-bold text-slate-600 border-r border-slate-200 uppercase h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                 </div>
                 <div className="flex bg-slate-50 border-b border-slate-200 sticky top-16 z-40 shadow-sm h-8 items-center">
                   <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
-                  <div className="flex-shrink-0 border-r border-slate-200 h-full" style={detailsColStyle}></div>
+                  <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}></div>
                   {timeline.map(col => {
                       const isCurrent = isCurrentColumn(col);
                       return (<div key={col.id} className={`flex-shrink-0 text-center text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col h-full ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px` }} title={isCurrent ? 'Current Date' : ''}>
@@ -684,18 +688,21 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                       Project Structure
                       <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
                     </div>
-                    <div className="flex-shrink-0 flex items-center text-center text-xs font-bold text-slate-600 border-r border-slate-200 relative px-2 h-full" style={detailsColStyle}>
-                      <div className="w-6 shrink-0" />
-                      <div className="flex-1 grid grid-cols-2 gap-2">
-                          <span>S</span>
-                          <span>D</span>
-                      </div>
+                    <div className={`flex-shrink-0 flex items-center text-center text-xs font-bold text-slate-600 border-r border-slate-200 relative px-2 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}>
+                        <button onClick={() => setIsDetailsFrozen(!isDetailsFrozen)} title={isDetailsFrozen ? 'Unfreeze columns' : 'Freeze columns'} className="w-6 shrink-0 text-slate-400 hover:text-indigo-600">
+                          {isDetailsFrozen ? <PinOff size={14} /> : <Pin size={14} />}
+                        </button>
+                        <div className="flex-1 grid grid-cols-2 gap-2 uppercase">
+                            <span>Start</span>
+                            <span>Days</span>
+                        </div>
+                        <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
                     </div>
                     {Object.values(viewMode === 'week' ? monthHeaders : yearHeaders).map((group, idx) => (<div key={idx} className="text-center text-xs font-bold text-slate-600 border-r border-slate-200 bg-slate-100 uppercase tracking-wide truncate h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                 </div>
                 <div className="flex bg-slate-50 border-b border-slate-200 sticky top-8 z-40 shadow-sm h-8 items-center">
                     <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
-                    <div className="flex-shrink-0 border-r border-slate-200 h-full" style={detailsColStyle}></div>
+                    <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}></div>
                     {timeline.map(col => { const isCurrent = isCurrentColumn(col); return (<div key={col.id} className={`flex-shrink-0 text-center text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col h-full ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px` }}><span>{col.label}</span></div>); })}
                 </div>
               </>
@@ -746,7 +753,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         <Trash2 size={12} />
                       </button>
                     </div>
-                    <div className="flex-shrink-0 p-3 text-center text-xs font-bold text-slate-300 border-r border-slate-600 flex items-center justify-center gap-2" style={detailsColStyle}>
+                    <div className={`flex-shrink-0 p-3 text-center text-xs font-bold text-slate-300 border-r border-slate-600 flex items-center justify-center gap-2 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 39 } : detailsColStyle}>
                       <button 
                         onClick={(e) => { e.stopPropagation(); onAddModule(project.id); }}
                         className="flex items-center gap-1 text-[10px] bg-slate-600 hover:bg-slate-500 px-2 py-0.5 rounded transition-colors"
@@ -825,8 +832,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               </button>
                           </div>
                           <div 
-                            className="flex-shrink-0 p-3 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/30"
-                            style={detailsColStyle}
+                            className={`flex-shrink-0 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/80 ${isDetailsFrozen ? 'sticky' : ''}`}
+                            style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 29 } : detailsColStyle}
                           >
                           </div>
                           
@@ -901,7 +908,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   </div>
                                 </div>
 
-                                <div className="flex-shrink-0 border-r border-slate-200 bg-slate-50/30" style={detailsColStyle}></div>
+                                <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-50/40 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 19 } : detailsColStyle}></div>
                                 
                                 {timeline.map(col => {
                                   const total = getTaskTotal(task, col);
@@ -966,7 +973,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     </div>
                                   </div>
                                   
-                                  <div className="flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 gap-2 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
+                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 gap-2 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 9 } : detailsColStyle}>
                                       <div className="cursor-grab text-slate-300 hover:text-slate-500" title="Drag to reorder assignment">
                                           <GripVertical size={14} />
                                       </div>
@@ -996,28 +1003,32 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     const isCurrent = isCurrentColumn(col);
                                     
                                     const dateStr = col.date ? formatDateForInput(col.date) : '';
-                                    const isHol = !!(resourceHolidayData && resourceHolidayData.dateSet.has(dateStr));
+                                    const isHol = viewMode === 'day' && !!(resourceHolidayData && resourceHolidayData.dateSet.has(dateStr));
                                     const holidayInfo = isHol ? resourceHolidayData!.holidays.find(h => h.date === dateStr) : undefined;
-
 
                                     return (
                                       <div 
                                         key={`${assignment.id}-${col.id}`} 
-                                        className={`flex-shrink-0 border-r border-slate-100 relative ${isHol ? 'bg-[repeating-linear-gradient(45deg,#e0e7ff,#e0e7ff_5px,#eef2ff_5px,#eef2ff_10px)]' : isCurrent ? 'bg-amber-50/50' : ''}`} 
+                                        className={`flex-shrink-0 border-r border-slate-100 relative ${isHol ? 'bg-[repeating-linear-gradient(45deg,theme(colors.red.50),theme(colors.red.50)_5px,theme(colors.red.100)_5px,theme(colors.red.100)_10px)]' : isCurrent ? 'bg-amber-50/50' : ''}`} 
                                         style={{ width: `${colWidth}px` }}
                                         title={holidayInfo?.name}
                                       >
-                                        <input 
-                                          type="text"
-                                          disabled={isHol}
-                                          className={`w-full h-full text-center text-xs focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors
-                                              ${hasValue ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50'}
-                                              ${isHol ? 'bg-transparent cursor-not-allowed' : ''}
-                                          `}
-                                          value={display}
-                                          placeholder={'-'}
-                                          onChange={(e) => handleCellUpdate(project.id, module.id, task.id, assignment.id, col, e.target.value)}
-                                        />
+                                        {isHol && holidayInfo ? (
+                                          <div className="flex items-center justify-center h-full text-xs font-bold text-red-700 select-none">
+                                            {/* Fix: Property 'country' does not exist on type 'IndividualHoliday'. Added a type guard to check for 'country' property and provide a fallback 'Leave' for individual holidays. */}
+                                            {'country' in holidayInfo ? holidayInfo.country : 'Leave'}
+                                          </div>
+                                        ) : (
+                                          <input 
+                                            type="text"
+                                            className={`w-full h-full text-center text-xs focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors
+                                                ${hasValue ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50'}
+                                            `}
+                                            value={display}
+                                            placeholder={'-'}
+                                            onChange={(e) => handleCellUpdate(project.id, module.id, task.id, assignment.id, col, e.target.value)}
+                                          />
+                                        )}
                                       </div>
                                     );
                                   })}
@@ -1041,7 +1052,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 Add New Task
                               </button>
                             </div>
-                            <div className="flex-shrink-0 border-r border-slate-200 bg-slate-50/20" style={detailsColStyle}></div>
+                            <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-50/20 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 19 } : detailsColStyle}></div>
                             {timeline.map(col => {
                               const isCurrent = isCurrentColumn(col);
                               return (
@@ -1064,7 +1075,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
               >
                 GRAND TOTAL
               </div>
-              <div className="flex-shrink-0 border-r border-slate-700" style={detailsColStyle}></div>
+              <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}></div>
               {timeline.map(col => {
                 const total = projects.reduce((acc, p) => acc + getProjectTotal(p, col), 0);
                 const isCurrent = isCurrentColumn(col);

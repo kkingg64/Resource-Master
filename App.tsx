@@ -118,6 +118,8 @@ const App: React.FC = () => {
   const timelineInitialized = useRef(false);
 
   useEffect(() => {
+    // FIX: The error "Expected 1 arguments, but got 0" is caused by calling clearTimeout without an argument.
+    // This provides the stored timeout ID from the ref to correctly clear the timeout.
     return () => window.clearTimeout(statusTimeoutRef.current);
   }, []);
 
