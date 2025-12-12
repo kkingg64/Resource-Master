@@ -116,7 +116,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   useEffect(() => {
     if (editingId && editInputRef.current) {
       editInputRef.current.focus();
-      editInputRef.current.select();
+      // Only select content if it's a text input or the duration number input
+      if (editInputRef.current.type === 'text' || editInputRef.current.type === 'number') {
+        editInputRef.current.select();
+      }
     }
   }, [editingId]);
 
@@ -255,7 +258,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     } else if (type === 'resource') {
       const [_, projectId, moduleId, taskId, assignmentId] = parts;
       onUpdateAssignmentResourceName(projectId, moduleId, taskId, assignmentId, editValue);
-    }
+    } 
+    // Duration is handled separately via onBlur/onKeyDown in the input itself, but if we click away, this might trigger.
+    // We can add logic here or rely on the input's onBlur. 
+    // For simplicity, input onBlur handles duration save.
 
     setEditingId(null);
   };
@@ -565,18 +571,26 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
      onUpdateAssignmentSchedule(assignment.id, newDateStr, assignment.duration || 1);
   };
 
-  const handleAssignmentDurationChange = (assignment: TaskAssignment, newDurationStr: string) => {
+  // Helper to save duration on blur/enter
+  const saveDuration = (assignment: TaskAssignment) => {
+    if (editingId !== `duration::${assignment.id}`) return;
+
     let startDate = assignment.startDate;
     if (!startDate && assignment.startWeekId) {
         const d = getDateFromWeek(parseInt(assignment.startWeekId.split('-')[0]), parseInt(assignment.startWeekId.split('-')[1]));
         startDate = formatDateForInput(d);
     }
-    if (!startDate) return;
+    if (!startDate) {
+        setEditingId(null);
+        return;
+    }
 
-    const newDuration = parseInt(newDurationStr, 10);
-    if (!isNaN(newDuration) && newDuration > 0) {
+    const newDuration = parseInt(editValue, 10);
+    // Only update if value is valid and changed
+    if (!isNaN(newDuration) && newDuration > 0 && newDuration !== assignment.duration) {
       onUpdateAssignmentSchedule(assignment.id, startDate, newDuration);
     }
+    setEditingId(null);
   };
 
   const colWidth = viewMode === 'month' ? colWidthBase * 2 : colWidthBase;
@@ -991,6 +1005,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     return acc;
                                 }, {} as Record<string, typeof possibleParents>);
 
+                                const isEditingDuration = editingId === `duration::${assignment.id}`;
 
                                 return (
                                 <div 
@@ -1042,8 +1057,23 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             type="number"
                                             min="1"
                                             title="Duration (days)"
-                                            value={assignment.duration || 1}
-                                            onChange={(e) => handleAssignmentDurationChange(assignment, e.target.value)}
+                                            value={isEditingDuration ? editValue : (assignment.duration || 1)}
+                                            onFocus={() => {
+                                              setEditingId(`duration::${assignment.id}`);
+                                              setEditValue((assignment.duration || 1).toString());
+                                            }}
+                                            onChange={(e) => setEditValue(e.target.value)}
+                                            onBlur={() => saveDuration(assignment)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    saveDuration(assignment);
+                                                    (e.target as HTMLInputElement).blur();
+                                                } else if (e.key === 'Escape') {
+                                                    setEditingId(null);
+                                                    (e.target as HTMLInputElement).blur();
+                                                }
+                                            }}
+                                            ref={isEditingDuration ? editInputRef : undefined}
                                             className="text-xs py-0.5 px-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center hover:bg-slate-100"
                                         />
                                         <div className="relative h-full flex items-center justify-center">
