@@ -113,10 +113,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [contextMenu, setContextMenu] = useState<{ 
     x: number; 
     y: number; 
-    type: 'task' | 'assignment';
+    type: 'project' | 'module' | 'task' | 'assignment';
     projectId: string; 
-    moduleId: string; 
-    taskId: string; 
+    moduleId?: string; 
+    taskId?: string; 
     assignmentId?: string; 
   } | null>(null);
   
@@ -764,7 +764,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
               return (
                 <React.Fragment key={project.id}>
-                  <div className="flex bg-slate-700 border-b border-slate-600 sticky z-30 group">
+                  <div 
+                    className="flex bg-slate-700 border-b border-slate-600 sticky z-30 group"
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setContextMenu({ type: 'project', x: e.pageX, y: e.pageY, projectId: project.id });
+                    }}
+                  >
                     <div 
                       className="flex-shrink-0 p-3 pr-2 border-r border-slate-600 sticky left-0 bg-slate-700 z-40 cursor-pointer flex items-center justify-between text-white shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]"
                       style={stickyStyle}
@@ -808,12 +814,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                       )}
                     </div>
                     <div className={`flex-shrink-0 p-3 text-center text-xs font-bold text-slate-300 border-r border-slate-600 flex items-center justify-center gap-2 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: currentSidebarWidth, zIndex: 39 } : detailsColStyle}>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); onAddModule(project.id); }}
-                        className="flex items-center gap-1 text-[10px] bg-slate-600 hover:bg-slate-500 px-2 py-0.5 rounded transition-colors"
-                      >
-                          <Plus size={10} /> Module
-                      </button>
                     </div>
                     {timeline.map(col => {
                       const total = getProjectTotal(project, col);
@@ -842,7 +842,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         onDrop={(e) => handleModuleDrop(e, project.id, index)}
                         className={`${draggedModuleIndex === index ? 'opacity-50' : 'opacity-100'}`}
                       >
-                        <div className="flex bg-indigo-50/80 border-b border-slate-100 hover:bg-indigo-100/50 transition-colors group">
+                        <div 
+                          className="flex bg-indigo-50/80 border-b border-slate-100 hover:bg-indigo-100/50 transition-colors group"
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setContextMenu({ type: 'module', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id });
+                          }}
+                        >
                           <div 
                             className="flex-shrink-0 p-3 pl-6 border-r border-slate-200 sticky left-0 bg-indigo-50/95 backdrop-blur-sm z-30 flex items-center justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]"
                             style={stickyStyle}
@@ -881,15 +887,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 )
                               )}
                             </div>
-                            {!isSidebarCollapsed && (
-                              <button
-                                  onClick={(e) => { e.stopPropagation(); onDeleteModule(project.id, module.id); }}
-                                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-100 transition-opacity"
-                                  title="Delete Module"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                            )}
                           </div>
                           <div 
                             className={`flex-shrink-0 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/80 ${isDetailsFrozen ? 'sticky' : ''}`}
@@ -1185,30 +1182,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             </React.Fragment>
                           );
                         })}
-                        
-                        {!isModuleCollapsed && (
-                          <div className="flex border-b border-slate-100 bg-slate-50/20">
-                            <div 
-                              className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50/80 z-20 pl-12 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]"
-                              style={stickyStyle}
-                            >
-                              <button 
-                                onClick={() => handleAddTaskClick(project.id, module.id)}
-                                className="text-[11px] text-slate-500 hover:text-indigo-600 font-medium flex items-center gap-1 py-1 px-2 rounded hover:bg-slate-100 transition-colors"
-                              >
-                                <Plus size={12} />
-                                {!isSidebarCollapsed && "Add New Task"}
-                              </button>
-                            </div>
-                            <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-50/20 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: currentSidebarWidth, zIndex: 19 } : detailsColStyle}></div>
-                            {timeline.map(col => {
-                              const isCurrent = isCurrentColumn(col);
-                              return (
-                                <div key={`add-${module.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 ${isCurrent ? 'bg-amber-50/30' : ''}`} style={{ width: `${colWidth}px` }}></div>
-                              );
-                            })}
-                          </div>
-                        )}
                       </div>
                     );
                   })}
@@ -1243,42 +1216,73 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           style={{ top: contextMenu.y, left: contextMenu.x }}
           className="absolute z-50 bg-white shadow-xl rounded-md border border-slate-200 p-1 animate-in fade-in"
         >
-          {contextMenu.type === 'assignment' && contextMenu.assignmentId && (
+          {contextMenu.type === 'project' && (
+            <button
+              onClick={() => {
+                onAddModule(contextMenu.projectId);
+                setContextMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"
+            >
+              <Plus size={12} /> Add New Module
+            </button>
+          )}
+          {contextMenu.type === 'module' && (
             <>
               <button
                 onClick={() => {
-                  onCopyAssignment(contextMenu.projectId, contextMenu.moduleId, contextMenu.taskId, contextMenu.assignmentId!);
+                  handleAddTaskClick(contextMenu.projectId, contextMenu.moduleId!);
                   setContextMenu(null);
                 }}
                 className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"
               >
-                <Copy size={12} />
-                Duplicate Assignment
+                <Plus size={12} /> Add New Task
               </button>
               <div className="h-px bg-slate-100 my-1"></div>
               <button
                 onClick={() => {
-                  onDeleteAssignment(contextMenu.projectId, contextMenu.moduleId, contextMenu.taskId, contextMenu.assignmentId!);
+                  onDeleteModule(contextMenu.projectId, contextMenu.moduleId!);
                   setContextMenu(null);
                 }}
                 className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"
               >
-                <Trash2 size={12} />
-                Delete Assignment
+                <Trash2 size={12} /> Delete Module
               </button>
             </>
           )}
           {contextMenu.type === 'task' && (
              <button
                 onClick={() => {
-                  onDeleteTask(contextMenu.projectId, contextMenu.moduleId, contextMenu.taskId);
+                  onDeleteTask(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!);
                   setContextMenu(null);
                 }}
                 className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"
               >
-                <Trash2 size={12} />
-                Delete Task
+                <Trash2 size={12} /> Delete Task
               </button>
+          )}
+          {contextMenu.type === 'assignment' && contextMenu.assignmentId && (
+            <>
+              <button
+                onClick={() => {
+                  onCopyAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!);
+                  setContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"
+              >
+                <Copy size={12} /> Duplicate Assignment
+              </button>
+              <div className="h-px bg-slate-100 my-1"></div>
+              <button
+                onClick={() => {
+                  onDeleteAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!);
+                  setContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"
+              >
+                <Trash2 size={12} /> Delete Assignment
+              </button>
+            </>
           )}
         </div>
       )}
