@@ -33,7 +33,8 @@ export interface TaskAssignment {
   role: Role;
   resourceName?: string;
   allocations: ResourceAllocation[];
-  startWeekId?: string; // Auto-scheduler start
+  startDate?: string; // YYYY-MM-DD Auto-scheduler start
+  startWeekId?: string; // DEPRECATED: Auto-scheduler start
   duration?: number;    // Auto-scheduler duration in DAYS
   sort_order?: number;
 }

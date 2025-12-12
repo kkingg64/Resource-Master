@@ -42,7 +42,8 @@ const structureProjectsData = (
       id: a.id,
       role: a.role,
       resourceName: a.resource_name,
-      startWeekId: a.start_week_id,
+      startDate: a.start_date, // New day-based field
+      startWeekId: a.start_week_id, // Keep for backward compatibility
       duration: a.duration,
       sort_order: a.sort_order,
       allocations: allocationsByAssignment.get(a.id) || [],
@@ -113,12 +114,11 @@ const App: React.FC = () => {
   const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
   
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
-  // FIX: The type for useRef should allow for `undefined` when no initial value is provided.
   const statusTimeoutRef = useRef<number | undefined>();
   const timelineInitialized = useRef(false);
 
   useEffect(() => {
-    return () => clearTimeout(statusTimeoutRef.current);
+    return () => window.clearTimeout(statusTimeoutRef.current);
   }, []);
 
   // Debug Log State
@@ -148,7 +148,7 @@ const App: React.FC = () => {
   ) => {
     const logId = log(message, payload);
     setSaveStatus('saving');
-    clearTimeout(statusTimeoutRef.current);
+    window.clearTimeout(statusTimeoutRef.current);
     
     const result = await supabasePromise;
     if (result.error) {
@@ -166,8 +166,16 @@ const App: React.FC = () => {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
-    return () => subscription.unsubscribe();
+    
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+      }
+    );
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -418,15 +426,13 @@ const App: React.FC = () => {
 
     if (taskError) { alert("Failed to add task."); return; }
     
-    const startWeekId = getWeekIdFromDate(new Date());
-    const duration = 5; // Default to 5 days
     const { error: assignError } = await callSupabase('CREATE assignment', { taskId, role }, supabase.from('task_assignments').insert({ 
       task_id: taskId, 
       role, 
       resource_name: 'Unassigned', 
       user_id: session!.user.id,
-      start_week_id: startWeekId,
-      duration: duration
+      start_date: formatDateForInput(new Date()),
+      duration: 5
     }).select().single());
 
     if (assignError) { return; }
@@ -447,9 +453,6 @@ const App: React.FC = () => {
   };
   
   const addAssignment = async (projectId: string, moduleId: string, taskId: string, role: Role) => {
-    const startWeekId = getWeekIdFromDate(new Date());
-    const duration = 5; // Default to 5 days
-
     const { error } = await callSupabase(
         'CREATE assignment', { taskId, role },
         supabase.from('task_assignments').insert({ 
@@ -457,8 +460,8 @@ const App: React.FC = () => {
           role, 
           resource_name: 'Unassigned', 
           user_id: session!.user.id,
-          start_week_id: startWeekId,
-          duration: duration 
+          start_date: formatDateForInput(new Date()),
+          duration: 5
         }).select().single()
     );
     if (!error) fetchData(true);
@@ -480,7 +483,7 @@ const App: React.FC = () => {
             role: originalAssignment.role,
             resource_name: 'Unassigned',
             user_id: session!.user.id,
-            start_week_id: originalAssignment.startWeekId,
+            start_date: originalAssignment.startDate || formatDateForInput(new Date()),
             duration: originalAssignment.duration,
         }).select().single()
     );
@@ -558,19 +561,20 @@ const App: React.FC = () => {
     }
   };
   
-  const updateAssignmentSchedule = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, startWeekId: string, duration: number) => {
+  const updateAssignmentSchedule = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, startDate: string, duration: number) => {
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
     const assignment = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId)?.assignments.find(a => a.id === assignmentId);
   
     if (!assignment) return;
   
-    assignment.startWeekId = startWeekId;
+    assignment.startDate = startDate;
     assignment.duration = duration;
   
     const newAllocations: ResourceAllocation[] = [];
-    if (startWeekId && duration > 0) {
-      const startDate = getDateFromWeek(parseInt(startWeekId.split('-')[0]), parseInt(startWeekId.split('-')[1]));
+    if (startDate && duration > 0) {
+      // Use replace to avoid timezone issues with `new Date()`
+      const allocationStartDate = new Date(startDate.replace(/-/g, '/'));
       
       const allocationsMap = new Map<string, { days: Record<string, number> }>();
       
@@ -586,7 +590,7 @@ const App: React.FC = () => {
         ]);
       }
 
-      let currentDate = new Date(startDate);
+      let currentDate = new Date(allocationStartDate);
       let workingDaysAllocated = 0;
 
       while (workingDaysAllocated < duration) {
@@ -619,8 +623,8 @@ const App: React.FC = () => {
   
     const { error: scheduleError } = await callSupabase(
       'UPDATE assignment schedule', 
-      { id: assignmentId, startWeekId, duration }, 
-      supabase.from('task_assignments').update({ start_week_id: startWeekId, duration }).eq('id', assignmentId)
+      { id: assignmentId, startDate, duration }, 
+      supabase.from('task_assignments').update({ start_date: startDate, duration }).eq('id', assignmentId)
     );
   
     if (scheduleError) {
@@ -732,7 +736,7 @@ const App: React.FC = () => {
       task_id: taskId,
       role: assignment.role,
       resource_name: assignment.resourceName,
-      start_week_id: assignment.startWeekId,
+      start_date: assignment.startDate,
       duration: assignment.duration,
       sort_order: index,
       user_id: session!.user.id,
@@ -815,7 +819,7 @@ const App: React.FC = () => {
               }).select().single());
               if (newTask) {
                 for (const assignment of task.assignments) {
-                  const { data: newAssignment } = await callSupabase('INSERT imported assignment', {role: assignment.role}, supabase.from('task_assignments').insert({ task_id: newTask.id, role: assignment.role, resource_name: assignment.resourceName, user_id: session!.user.id, start_week_id: getWeekIdFromDate(new Date()), duration: 1 }).select().single());
+                  const { data: newAssignment } = await callSupabase('INSERT imported assignment', {role: assignment.role}, supabase.from('task_assignments').insert({ task_id: newTask.id, role: assignment.role, resource_name: assignment.resourceName, user_id: session!.user.id, start_date: formatDateForInput(new Date()), duration: 1 }).select().single());
                   if (newAssignment && assignment.allocations.length > 0) {
                     const allocationsToInsert = assignment.allocations.map(alloc => ({ assignment_id: newAssignment.id, week_id: alloc.weekId, count: alloc.count, days: alloc.days || {}, user_id: session!.user.id, }));
                     await callSupabase('INSERT imported allocations', {}, supabase.from('resource_allocations').insert(allocationsToInsert));

@@ -20,7 +20,7 @@ interface PlannerGridProps {
   onReorderTasks: (projectId: string, moduleId: string, startIndex: number, endIndex: number) => void;
   onReorderAssignments: (projectId: string, moduleId: string, taskId: string, startIndex: number, endIndex: number) => void;
   onShiftTask: (projectId: string, moduleId: string, taskId: string, direction: 'left' | 'right') => void;
-  onUpdateAssignmentSchedule: (projectId: string, moduleId: string, taskId: string, assignmentId: string, startWeekId: string, duration: number) => void;
+  onUpdateAssignmentSchedule: (projectId: string, moduleId: string, taskId: string, assignmentId: string, startDate: string, duration: number) => void;
   onAddProject: () => void;
   onAddModule: (projectId: string) => void;
   onUpdateProjectName: (projectId: string, name: string) => void;
@@ -520,16 +520,21 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const handleAssignmentStartDateChange = (projectId: string, moduleId: string, taskId: string, assignment: TaskAssignment, newDateStr: string) => {
      if (!newDateStr) return;
-     const date = new Date(newDateStr);
-     const newStartWeekId = getWeekIdFromDate(date);
-     onUpdateAssignmentSchedule(projectId, moduleId, taskId, assignment.id, newStartWeekId, assignment.duration || 1);
+     onUpdateAssignmentSchedule(projectId, moduleId, taskId, assignment.id, newDateStr, assignment.duration || 1);
   };
 
   const handleAssignmentDurationChange = (projectId: string, moduleId: string, taskId: string, assignment: TaskAssignment, newDurationStr: string) => {
-    if (!assignment.startWeekId) return;
+    let startDate = assignment.startDate;
+    // Backwards compatibility for old data
+    if (!startDate && assignment.startWeekId) {
+        const d = getDateFromWeek(parseInt(assignment.startWeekId.split('-')[0]), parseInt(assignment.startWeekId.split('-')[1]));
+        startDate = formatDateForInput(d);
+    }
+    if (!startDate) return; // Cannot update duration without a start date
+
     const newDuration = parseInt(newDurationStr, 10);
     if (!isNaN(newDuration) && newDuration > 0) {
-      onUpdateAssignmentSchedule(projectId, moduleId, taskId, assignment.id, assignment.startWeekId, newDuration);
+      onUpdateAssignmentSchedule(projectId, moduleId, taskId, assignment.id, startDate, newDuration);
     }
   };
 
@@ -641,31 +646,31 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           <div className="min-w-max">
             {viewMode === 'day' ? (
               <>
-                <div className="flex bg-slate-200/50 border-b border-slate-200 sticky top-0 z-40">
-                  <div className="flex-shrink-0 p-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group" style={stickyStyle}>
+                <div className="flex bg-slate-200/50 border-b border-slate-200 sticky top-0 z-40 h-8 items-center">
+                  <div className="flex-shrink-0 px-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group h-full flex items-center" style={stickyStyle}>
                     Project Structure
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
                   </div>
-                  <div className="flex-shrink-0 flex items-center text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative px-2" style={detailsColStyle}>
+                  <div className="flex-shrink-0 flex items-center text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative px-2 h-full" style={detailsColStyle}>
                     <div className="w-6 shrink-0" />
                     <div className="flex-1 grid grid-cols-2 gap-2">
                       <span>S</span>
                       <span>D</span>
                     </div>
                   </div>
-                  {Object.values(yearHeaders).map((group, idx) => (<div key={idx} className="text-center p-1 text-xs font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+                  {Object.values(yearHeaders).map((group, idx) => (<div key={idx} className="text-center text-xs font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                 </div>
-                <div className="flex bg-slate-100/70 border-b border-slate-200 sticky top-[33px] z-40">
-                  <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}></div>
-                  <div className="flex-shrink-0 border-r border-slate-200" style={detailsColStyle}></div>
-                  {Object.values(monthHeaders).map((group, idx) => (<div key={idx} className="text-center p-1 text-xs font-bold text-slate-600 border-r border-slate-200 uppercase" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+                <div className="flex bg-slate-100/70 border-b border-slate-200 sticky top-8 z-40 h-8 items-center">
+                  <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
+                  <div className="flex-shrink-0 border-r border-slate-200 h-full" style={detailsColStyle}></div>
+                  {Object.values(monthHeaders).map((group, idx) => (<div key={idx} className="text-center text-xs font-bold text-slate-600 border-r border-slate-200 uppercase h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                 </div>
-                <div className="flex bg-slate-50 border-b border-slate-200 sticky top-[66px] z-40 shadow-sm">
-                  <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}></div>
-                  <div className="flex-shrink-0 border-r border-slate-200" style={detailsColStyle}></div>
+                <div className="flex bg-slate-50 border-b border-slate-200 sticky top-16 z-40 shadow-sm h-8 items-center">
+                  <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
+                  <div className="flex-shrink-0 border-r border-slate-200 h-full" style={detailsColStyle}></div>
                   {timeline.map(col => {
                       const isCurrent = isCurrentColumn(col);
-                      return (<div key={col.id} className={`flex-shrink-0 text-center p-1 text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px`, height: '32px' }} title={isCurrent ? 'Current Date' : ''}>
+                      return (<div key={col.id} className={`flex-shrink-0 text-center text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col h-full ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px` }} title={isCurrent ? 'Current Date' : ''}>
                         <span>{col.label}</span>
                         {col.date && <span className={`text-[9px] ${isCurrent ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>{col.date.getDate()}</span>}
                       </div>);
@@ -674,24 +679,24 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
               </>
             ) : (
               <>
-                <div className="flex bg-slate-100 border-b border-slate-200 sticky top-0 z-40">
-                    <div className="flex-shrink-0 p-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group" style={stickyStyle}>
+                <div className="flex bg-slate-100 border-b border-slate-200 sticky top-0 z-40 h-8 items-center">
+                    <div className="flex-shrink-0 px-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group h-full flex items-center" style={stickyStyle}>
                       Project Structure
                       <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
                     </div>
-                    <div className="flex-shrink-0 flex items-center text-center text-xs font-bold text-slate-600 border-r border-slate-200 relative px-2" style={detailsColStyle}>
+                    <div className="flex-shrink-0 flex items-center text-center text-xs font-bold text-slate-600 border-r border-slate-200 relative px-2 h-full" style={detailsColStyle}>
                       <div className="w-6 shrink-0" />
                       <div className="flex-1 grid grid-cols-2 gap-2">
                           <span>S</span>
                           <span>D</span>
                       </div>
                     </div>
-                    {Object.values(viewMode === 'week' ? monthHeaders : yearHeaders).map((group, idx) => (<div key={idx} className="text-center p-2 text-xs font-bold text-slate-600 border-r border-slate-200 bg-slate-100 uppercase tracking-wide truncate" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+                    {Object.values(viewMode === 'week' ? monthHeaders : yearHeaders).map((group, idx) => (<div key={idx} className="text-center text-xs font-bold text-slate-600 border-r border-slate-200 bg-slate-100 uppercase tracking-wide truncate h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                 </div>
-                <div className="flex bg-slate-50 border-b border-slate-200 sticky top-[41px] z-40 shadow-sm">
-                    <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}></div>
-                    <div className="flex-shrink-0 border-r border-slate-200" style={detailsColStyle}></div>
-                    {timeline.map(col => { const isCurrent = isCurrentColumn(col); return (<div key={col.id} className={`flex-shrink-0 text-center p-1 text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px`, height: '32px' }}><span>{col.label}</span></div>); })}
+                <div className="flex bg-slate-50 border-b border-slate-200 sticky top-8 z-40 shadow-sm h-8 items-center">
+                    <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
+                    <div className="flex-shrink-0 border-r border-slate-200 h-full" style={detailsColStyle}></div>
+                    {timeline.map(col => { const isCurrent = isCurrentColumn(col); return (<div key={col.id} className={`flex-shrink-0 text-center text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col h-full ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px` }}><span>{col.label}</span></div>); })}
                 </div>
               </>
             )}
@@ -912,10 +917,19 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               </div>
 
                               {!isTaskCollapsed && task.assignments.map((assignment, assignmentIndex) => {
-                                const startDate = assignment.startWeekId ? getDateFromWeek(
-                                  parseInt(assignment.startWeekId.split('-')[0]), 
-                                  parseInt(assignment.startWeekId.split('-')[1])
-                                ) : new Date();
+                                let assignmentStartDate;
+                                if (assignment.startDate) {
+                                    // Replace dashes with slashes to avoid one-day-off bug in some browsers
+                                    assignmentStartDate = new Date(assignment.startDate.replace(/-/g, '/'));
+                                } else if (assignment.startWeekId) {
+                                    // Backward compatibility for old data
+                                    assignmentStartDate = getDateFromWeek(
+                                        parseInt(assignment.startWeekId.split('-')[0]),
+                                        parseInt(assignment.startWeekId.split('-')[1])
+                                    );
+                                } else {
+                                    assignmentStartDate = new Date(); // Fallback
+                                }
 
                                 const resourceHolidayData = resourceHolidaysMap.get(assignment.resourceName || '');
                                 
@@ -961,7 +975,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             type="date"
                                             title="Start Date"
                                             className="text-xs p-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer w-full hover:bg-slate-100"
-                                            value={formatDateForInput(startDate)}
+                                            value={formatDateForInput(assignmentStartDate)}
                                             onChange={(e) => handleAssignmentStartDateChange(project.id, module.id, task.id, assignment, e.target.value)}
                                         />
                                         <input 
