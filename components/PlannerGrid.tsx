@@ -693,10 +693,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     <button onClick={() => setIsDetailsFrozen(!isDetailsFrozen)} title={isDetailsFrozen ? 'Unfreeze columns' : 'Freeze columns'} className="w-6 shrink-0 text-slate-400 hover:text-indigo-600">
                       {isDetailsFrozen ? <PinOff size={14} /> : <Pin size={14} />}
                     </button>
-                    <div className="flex-1 grid grid-cols-3 gap-2 uppercase">
+                    <div className="flex-1 grid grid-cols-[1fr_60px_30px] gap-2 uppercase items-center">
                       <span>Start</span>
-                      <span>Days</span>
-                      <span>Depends On</span>
+                      <span className="text-center">Days</span>
+                      {/* FIX: The 'title' prop is not valid for lucide-react icons. The icon has been wrapped in a div to apply the title for tooltip functionality. */}
+                      <div className="justify-self-center" title="Dependency">
+                        <Link2 size={14} className="text-slate-600" />
+                      </div>
                     </div>
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
                   </div>
@@ -938,13 +941,16 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   </div>
                                 </div>
 
-                                <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-50/40 flex items-center justify-center ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 19 } : detailsColStyle}>
-                                   {isTaskCollapsed && (
-                                    <div className="grid grid-cols-3 gap-2 text-xs text-slate-500 font-medium p-1 text-center items-center w-full">
-                                      <span title="Earliest Start Date" className="bg-slate-200/50 rounded p-1">{earliestStartDate ? earliestStartDate.substring(5) : '-'}</span>
-                                      <span title="Total Duration (days)" className="bg-slate-200/50 rounded p-1">{totalDuration > 0 ? `${totalDuration}d` : '-'}</span>
-                                      <div></div>
-                                    </div>
+                                <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-50/40 flex items-center px-2 py-1.5 gap-1 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 19 } : detailsColStyle}>
+                                  {isTaskCollapsed && (
+                                    <>
+                                      <div className="w-[14px]"></div> {/* Spacer for grip handle */}
+                                      <div className="flex-1 grid grid-cols-[1fr_60px_30px] gap-2 text-xs text-slate-500 font-medium text-center items-center">
+                                        <span title="Earliest Start Date" className="bg-slate-200/50 rounded p-1 text-left">{earliestStartDate ? earliestStartDate.substring(5) : '-'}</span>
+                                        <span title="Total Duration (days)" className="bg-slate-200/50 rounded p-1">{totalDuration > 0 ? `${totalDuration}d` : '-'}</span>
+                                        <div></div>
+                                      </div>
+                                    </>
                                   )}
                                 </div>
                                 
@@ -1015,7 +1021,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                       <div className="cursor-grab text-slate-300 hover:text-slate-500" title="Drag to reorder assignment">
                                           <GripVertical size={14} />
                                       </div>
-                                      <div className="flex-1 grid grid-cols-3 gap-1">
+                                      <div className="flex-1 grid grid-cols-[1fr_60px_30px] gap-2 items-center">
                                         <input 
                                             type="date"
                                             title="Start Date"
@@ -1032,19 +1038,19 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             onChange={(e) => handleAssignmentDurationChange(assignment, e.target.value)}
                                             className="text-xs p-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center hover:bg-slate-100"
                                         />
-                                        <div className="relative">
+                                        <div className="relative h-full flex items-center justify-center">
                                            <select 
                                               value={assignment.parentAssignmentId || ''}
                                               onChange={(e) => onUpdateAssignmentDependency(assignment.id, e.target.value || null)}
-                                              title="Depends On"
-                                              className="w-full text-xs p-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 appearance-none hover:bg-slate-100 pr-6"
+                                              title="Task Dependency"
+                                              className="absolute inset-0 w-full h-full text-transparent bg-transparent border-none appearance-none cursor-pointer focus:ring-1 focus:ring-indigo-500 rounded-md"
                                             >
-                                                <option value="">- No Dependency -</option>
+                                                <option value=""></option>
                                                 {possibleParents.map(parent => (
                                                     <option key={parent.id} value={parent.id}>{parent.name}</option>
                                                 ))}
                                             </select>
-                                            {assignment.parentAssignmentId ? <Link size={12} className="absolute right-1 top-2 text-indigo-600" /> : <Link2 size={12} className="absolute right-1 top-2 text-slate-400" />}
+                                            {assignment.parentAssignmentId ? <Link size={14} className="text-indigo-600 pointer-events-none" /> : <Link2 size={14} className="text-slate-400 pointer-events-none" />}
                                         </div>
                                       </div>
                                   </div>
@@ -1170,13 +1176,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           </button>
         </div>
       )}
-      <div className="fixed bottom-4 left-4 bg-yellow-500 text-white p-3 rounded-lg shadow-lg text-sm font-medium">
-         <h3 className="font-bold">Database Update Required!</h3>
-         <p>To enable task dependencies, run the following SQL in your Supabase SQL Editor:</p>
-         <code className="block bg-black/20 p-2 rounded mt-2 text-xs">
-           ALTER TABLE public.task_assignments ADD COLUMN parent_assignment_id UUID REFERENCES public.task_assignments(id) ON DELETE SET NULL;
-         </code>
-      </div>
     </>
   );
 };

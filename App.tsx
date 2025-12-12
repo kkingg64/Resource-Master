@@ -45,6 +45,7 @@ const structureProjectsData = (
       startDate: a.start_date, // New day-based field
       startWeekId: a.start_week_id, // Keep for backward compatibility
       duration: a.duration,
+      parentAssignmentId: a.parent_assignment_id,
       sort_order: a.sort_order,
       allocations: allocationsByAssignment.get(a.id) || [],
     });
@@ -487,6 +488,7 @@ const App: React.FC = () => {
             user_id: session!.user.id,
             start_date: originalAssignment.startDate || formatDateForInput(new Date()),
             duration: originalAssignment.duration,
+            parent_assignment_id: originalAssignment.parentAssignmentId,
         }).select().single()
     );
 
@@ -560,6 +562,47 @@ const App: React.FC = () => {
     if (error) { 
       setProjects(previousState); 
       alert("Failed to update resource assignment."); 
+    }
+  };
+
+  const updateAssignmentDependency = async (assignmentId: string, parentAssignmentId: string | null) => {
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    
+    let assignment: TaskAssignment | undefined;
+    for (const project of updatedProjects) {
+        for (const module of project.modules) {
+            for (const task of module.tasks) {
+                const found = task.assignments.find(a => a.id === assignmentId);
+                if (found) {
+                    assignment = found;
+                    break;
+                }
+            }
+            if (assignment) break;
+        }
+        if (assignment) break;
+    }
+
+    if (assignment) {
+        assignment.parentAssignmentId = parentAssignmentId || undefined;
+        setProjects(updatedProjects);
+    } else {
+        return; // Assignment not found
+    }
+
+    const { error } = await callSupabase(
+        'UPDATE assignment dependency', 
+        { id: assignmentId, parent_assignment_id: parentAssignmentId }, 
+        supabase.from('task_assignments').update({ parent_assignment_id: parentAssignmentId }).eq('id', assignmentId)
+    );
+
+    if (error) {
+        setProjects(previousState);
+        alert("Failed to update task dependency.");
+    } else {
+        // Dependencies can affect calculated start dates, so refresh data.
+        await fetchData(true);
     }
   };
   
@@ -757,6 +800,7 @@ const App: React.FC = () => {
       resource_name: assignment.resourceName,
       start_date: assignment.startDate,
       duration: assignment.duration,
+      parent_assignment_id: assignment.parentAssignmentId,
       sort_order: index,
       user_id: session!.user.id,
     }));
@@ -1001,7 +1045,7 @@ const App: React.FC = () => {
             {loading ? <div className="text-center p-8 text-slate-500">Loading your data...</div> : (
               <>
                 {activeTab === 'dashboard' && <Dashboard projects={projects} />}
-                {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onCopyAssignment={onCopyAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onReorderAssignments={reorderAssignments} onShiftTask={onShiftTask} onUpdateAssignmentSchedule={updateAssignmentSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={onImportPlan} onShowHistory={() => setShowHistory(true)} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
+                {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentResourceName={updateAssignmentResourceName} onUpdateAssignmentDependency={updateAssignmentDependency} onAddTask={addTask} onAddAssignment={addAssignment} onCopyAssignment={onCopyAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onReorderAssignments={reorderAssignments} onShiftTask={onShiftTask} onUpdateAssignmentSchedule={updateAssignmentSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={onImportPlan} onShowHistory={() => setShowHistory(true)} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
                 {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
                 {activeTab === 'resources' && <Resources resources={resources} onAddResource={addResource} onDeleteResource={deleteResource} onUpdateResourceCategory={updateResourceCategory} onUpdateResourceRegion={updateResourceRegion} onAddIndividualHoliday={addIndividualHoliday} onDeleteIndividualHoliday={deleteIndividualHoliday} onUpdateResourceType={updateResourceType} />}
                 {activeTab === 'settings' && <Settings isDebugLogEnabled={isDebugLogEnabled} setIsDebugLogEnabled={setIsDebugLogEnabled} />}
