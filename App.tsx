@@ -116,6 +116,7 @@ const App: React.FC = () => {
   
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const statusTimeoutRef = useRef<number | undefined>(undefined);
+  const allocationTimeouts = useRef<Record<string, number>>({});
   const timelineInitialized = useRef(false);
 
   useEffect(() => {
@@ -341,10 +342,38 @@ const App: React.FC = () => {
     setProjects(updatedProjects);
 
     if (allocationToUpdate) {
-        const { data: existingAlloc } = await supabase.from('resource_allocations').select('id').eq('assignment_id', assignmentId).eq('week_id', weekId).maybeSingle();
-        const upsertData = { id: existingAlloc?.id, assignment_id: assignmentId, user_id: session!.user.id, week_id: weekId, count: allocationToUpdate.count, days: allocationToUpdate.days };
-        const { error } = await callSupabase('UPSERT allocation', upsertData, supabase.from('resource_allocations').upsert(upsertData));
-        if (error) { setProjects(previousState); alert("Error: Could not save allocation."); }
+        const key = `${assignmentId}-${weekId}`;
+        
+        // Clear existing timeout for this specific cell to debounce
+        if (allocationTimeouts.current[key]) {
+            window.clearTimeout(allocationTimeouts.current[key]);
+        }
+
+        setSaveStatus('saving');
+
+        // Set new timeout for DB save
+        allocationTimeouts.current[key] = window.setTimeout(async () => {
+            const { data: existingAlloc } = await supabase.from('resource_allocations').select('id').eq('assignment_id', assignmentId).eq('week_id', weekId).maybeSingle();
+            
+            const upsertData = { 
+                id: existingAlloc?.id, 
+                assignment_id: assignmentId, 
+                user_id: session!.user.id, 
+                week_id: weekId, 
+                count: allocationToUpdate.count, 
+                days: allocationToUpdate.days 
+            };
+            
+            const { error } = await callSupabase('UPSERT allocation', upsertData, supabase.from('resource_allocations').upsert(upsertData));
+            
+            if (error) { 
+                console.error("Failed to save allocation", error);
+                // We typically don't revert state here to avoid jumping UI during fast typing, but we alert the user.
+                alert("Error: Could not save allocation. Please check connection."); 
+            }
+            
+            delete allocationTimeouts.current[key];
+        }, 1000); // 1 second debounce
     }
   };
 
