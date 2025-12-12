@@ -1,12 +1,11 @@
 
+
 import React, { useState } from 'react';
-// FIX: Replaced non-existent ResourceCategory with Role enum.
 import { Resource, Role } from '../types';
 import { Users, Plus, Trash2 } from 'lucide-react';
 
 interface ResourcesProps {
   resources: Resource[];
-  // FIX: Changed category type from ResourceCategory to Role.
   onAddResource: (name: string, category: Role) => Promise<void>;
   onDeleteResource: (id: string) => Promise<void>;
   onUpdateResourceCategory: (id: string, category: Role) => Promise<void>;
@@ -14,7 +13,6 @@ interface ResourcesProps {
 
 export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, onDeleteResource, onUpdateResourceCategory }) => {
   const [newResourceName, setNewResourceName] = useState('');
-  // FIX: Changed state to use Role enum and a default value from it.
   const [newResourceCategory, setNewResourceCategory] = useState<Role>(Role.DEV);
   const [isAdding, setIsAdding] = useState(false);
 
@@ -28,7 +26,6 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
     setNewResourceName('');
   };
   
-  // FIX: Updated categoryColors to match the Role enum from types.ts. This resolves type errors.
   const categoryColors: Record<Role, string> = {
     [Role.CNF]: 'bg-slate-100 text-slate-800 border-slate-200 focus:ring-slate-500',
     [Role.BRAND_SOLUTIONS]: 'bg-orange-100 text-orange-800 border-orange-200 focus:ring-orange-500',
@@ -57,7 +54,6 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
             placeholder="e.g., John Doe"
             className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
           />
-          {/* FIX: Changed select to use Role enum and cast value correctly. */}
           <select
             value={newResourceCategory}
             onChange={(e) => setNewResourceCategory(e.target.value as Role)}

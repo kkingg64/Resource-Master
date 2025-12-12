@@ -3,7 +3,6 @@
 import React, { useMemo } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
-// FIX: Import getTimeline and default start/end to generate timeline data.
 import { getTimeline, DEFAULT_START, DEFAULT_END } from '../constants';
 
 interface DashboardProps {
@@ -12,13 +11,11 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
   
-  // FIX: Generate timeline data dynamically as it's not exported from constants.
   const GLOBAL_TIMELINE_DATA = useMemo(() => getTimeline('week', DEFAULT_START, DEFAULT_END), []);
 
   // Aggregate data for charts
   const chartData = useMemo(() => {
     return GLOBAL_TIMELINE_DATA.map(week => {
-      // FIX: Property 'groupLabel' does not exist on type 'TimelineColumn'. Using 'monthLabel' instead.
       const [month] = week.monthLabel.split(' ');
       const summary: any = {
         name: `${week.label} (${month})`,

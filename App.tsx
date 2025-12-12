@@ -114,6 +114,7 @@ const App: React.FC = () => {
   
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const statusTimeoutRef = useRef<number>();
+  const timelineInitialized = useRef(false);
 
   useEffect(() => {
     return () => clearTimeout(statusTimeoutRef.current);
@@ -127,8 +128,8 @@ const App: React.FC = () => {
   const log = (message: string, payload: any, status: LogEntry['status'] = 'pending'): number => {
     if (!isDebugLogEnabled) return -1;
     const id = nextLogId.current++;
-    // FIX: Pass an empty array to `toLocaleTimeString` to use the default locale and satisfy TypeScript's requirement for at least one argument.
-    const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString([]), message, payload, status };
+    // FIX: Pass 'en-US' to toLocaleTimeString to provide a locale argument and ensure consistent formatting.
+    const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString('en-US'), message, payload, status };
     setLogEntries(prev => [newEntry, ...prev.slice(0, 99)]);
     return id;
   };
@@ -174,6 +175,40 @@ const App: React.FC = () => {
       fetchData();
     }
   }, [session]);
+
+  useEffect(() => {
+    if (projects.length === 0 || loading || timelineInitialized.current) {
+        return;
+    }
+
+    let minWeekId: string | null = null;
+    projects.forEach(project => {
+        project.modules.forEach(module => {
+            module.tasks.forEach(task => {
+                task.assignments.forEach(assignment => {
+                    assignment.allocations.forEach(alloc => {
+                        if (alloc.weekId && (!minWeekId || alloc.weekId < minWeekId)) {
+                            minWeekId = alloc.weekId;
+                        }
+                    });
+                });
+            });
+        });
+    });
+
+    if (minWeekId) {
+        const [yearStr, weekStr] = minWeekId.split('-');
+        const year = parseInt(yearStr, 10);
+        const week = parseInt(weekStr, 10);
+
+        if (!isNaN(year) && !isNaN(week)) {
+            setTimelineStart({ year, week });
+            timelineInitialized.current = true;
+        }
+    } else {
+        timelineInitialized.current = true;
+    }
+  }, [projects, loading]);
   
   const dateToCountryMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -187,8 +222,12 @@ const App: React.FC = () => {
 
   const fetchData = async (isRefresh: boolean = false) => {
     if (!session) return;
-    if (isRefresh) setIsRefreshing(true);
-    else setLoading(true);
+    if (isRefresh) {
+      setIsRefreshing(true);
+      timelineInitialized.current = false;
+    } else {
+      setLoading(true);
+    }
 
     // Fetch projects
     const { data: projectsData, error: projectsError } = await supabase.from('projects').select('*').eq('user_id', session.user.id);
@@ -914,7 +953,9 @@ const App: React.FC = () => {
           </div>
         </aside>
         <main className="flex-1 flex flex-col overflow-hidden">
-          <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8"><h1 className="text-xl font-bold text-slate-800">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</h1></header>
+          <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
+            <h1 className="text-xl font-bold text-slate-800">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</h1>
+          </header>
           <div className="flex-1 overflow-auto p-6">
             {loading ? <div className="text-center p-8 text-slate-500">Loading your data...</div> : (
               <>

@@ -1,6 +1,5 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-// FIX: Removed non-existent ResourceCategory from imports.
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource } from '../types';
 import { getTimeline, ALL_WEEK_IDS, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput } from '../constants';
 import { Layers, Calendar, ChevronRight, ChevronDown, Info, GripVertical, Plus, UserPlus, ChevronLeft, Clock, PlayCircle, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp } from 'lucide-react';
@@ -179,15 +178,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
 
   const handleToggleAll = () => {
-    const allProjectIds = projects.map(p => p.id);
     const allModuleIds = projects.flatMap(p => p.modules.map(m => m.id));
-
-    const shouldCollapse = allProjectIds.some(id => !collapsedProjects[id]);
-
-    const newProjectStates = Object.fromEntries(allProjectIds.map(id => [id, shouldCollapse]));
+    const shouldCollapse = allModuleIds.some(id => !collapsedModules[id]);
     const newModuleStates = Object.fromEntries(allModuleIds.map(id => [id, shouldCollapse]));
-
-    setCollapsedProjects(newProjectStates);
     setCollapsedModules(newModuleStates);
   };
 
@@ -553,7 +546,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       toggleModule(moduleId);
     }
     onAddTask(projectId, moduleId, newTaskId, "New Task", Role.DEV);
-    // FIX: 'project' is not defined in this scope. Use 'projectId' from function arguments.
     startEditing(`task::${projectId}::${moduleId}::${newTaskId}`, "New Task");
   };
 
@@ -595,8 +587,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             <span className="text-sm font-semibold text-slate-700">Timeline</span>
           </div>
           
-          <button onClick={handleToggleAll} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors" title="Collapse/Expand All">
-             <ChevronsDownUp size={14} /> Toggle All
+          <button onClick={handleToggleAll} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors" title="Collapse/Expand All Modules">
+             <ChevronsDownUp size={14} /> Toggle Modules
           </button>
 
           <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden">
@@ -876,7 +868,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           className="flex-shrink-0 p-3 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/30"
                           style={detailsColStyle}
                         >
-                          <span>{module.functionPoints} FP</span>
+                          {module.functionPoints > 0 && <span>{module.functionPoints} FP</span>}
                         </div>
                         
                         {/* Module Summaries */}
@@ -1007,7 +999,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               return (
                               <div key={assignment.id} className="flex border-b border-slate-100 group/assign">
                                 <div 
-                                  className={`flex-shrink-0 py-1 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-10 flex items-center justify-between border-l-[3px] ${getRoleColorClass(assignment.role)} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`}
+                                  className={`flex-shrink-0 py-0.5 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-10 flex items-center justify-between border-l-[3px] ${getRoleColorClass(assignment.role)} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`}
                                   style={stickyStyle}
                                 >
                                   <div className="flex-1 overflow-hidden flex items-center gap-2 pl-12">
@@ -1033,7 +1025,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   </div>
                                 </div>
                                 
-                                <div className="flex-shrink-0 border-r border-slate-200 bg-white flex flex-col justify-center gap-1 px-2 py-1 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
+                                <div className="flex-shrink-0 border-r border-slate-200 bg-white flex flex-col justify-center gap-1 px-2 py-0.5 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
                                     <div className="flex items-center justify-end h-[16px]">
                                       <div className="flex items-center gap-0.5 opacity-0 group-hover/assign:opacity-100 transition-opacity">
                                         <button 
@@ -1050,7 +1042,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                         </button>
                                       </div>
                                     </div>
-                                    <div className="flex flex-col gap-0.5 border-t border-slate-100 mt-1 pt-1">
+                                    <div className="flex flex-col gap-0.5 border-t border-slate-100 mt-0.5 pt-0.5">
                                       <div className="flex items-center gap-1" title="Start Date">
                                         <span className="text-[9px] text-slate-400 w-6">Start</span>
                                         <input 
