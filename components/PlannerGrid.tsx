@@ -90,123 +90,105 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   isRefreshing,
 }) => {
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
+  // FIX: This section was completely broken. Replaced with correct state declarations and event handlers.
   const [collapsedModules, setCollapsedModules] = useState<Record<string, boolean>>({});
   const [collapsedTasks, setCollapsedTasks] = useState<Record<string, boolean>>({});
-  
-  const [viewMode, setViewMode] = useState<ViewMode>('day');
-  const [draggedModuleIndex, setDraggedModuleIndex] = useState<number | null>(null);
-  const [draggedTask, setDraggedTask] = useState<{ moduleId: string; index: number } | null>(null);
-  const [draggedAssignment, setDraggedAssignment] = useState<{ taskId: string; index: number } | null>(null);
-
-  // Column Width States
-  const [colWidthBase, setColWidthBase] = useState<number>(48);
-  const [sidebarWidth, setSidebarWidth] = useState<number>(256); // Default w-64
-  const sidebarResizing = useRef(false);
-  const [detailsWidth, setDetailsWidth] = useState<number>(240); // Increased width for new controls
-  const detailsResizing = useRef(false);
-
-  // Editing State
+  const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
-  const editInputRef = useRef<HTMLInputElement>(null);
-  const importInputRef = useRef<HTMLInputElement>(null);
   
-  const groupedResources = useMemo(() => {
-    return resources.reduce((acc, resource) => {
-      const category = resource.category || 'Uncategorized';
-      if (!acc[category as keyof typeof acc]) {
-        acc[category as keyof typeof acc] = [];
-      }
-      (acc[category as keyof typeof acc] as Resource[]).push(resource);
-      return acc;
-    }, {} as Record<string, Resource[]>);
-  }, [resources]);
+  const [draggedModuleIndex, setDraggedModuleIndex] = useState<number | null>(null);
+  const [draggedTask, setDraggedTask] = useState<{ moduleId: string, index: number } | null>(null);
+  const [draggedAssignment, setDraggedAssignment] = useState<{ taskId: string, index: number } | null>(null);
+  
+  const [sidebarWidth, setSidebarWidth] = useState(350);
+  const [detailsWidth, setDetailsWidth] = useState(300);
+  const [colWidthBase, setColWidthBase] = useState(40);
+  const isResizingSidebar = useRef(false);
+  const isResizingDetails = useRef(false);
+  
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const editInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (editingId && editInputRef.current) {
       editInputRef.current.focus();
+      editInputRef.current.select();
     }
   }, [editingId]);
 
-  // Handle Column Resizing
+  const toggleProject = (id: string) => setCollapsedProjects(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleModule = (id: string) => setCollapsedModules(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleTask = (id: string) => setCollapsedTasks(prev => ({ ...prev, [id]: !prev[id] }));
+
+  const handleToggleAll = () => {
+    const allModuleIds = projects.flatMap(p => p.modules.map(m => m.id));
+    const areSomeCollapsed = allModuleIds.some(id => collapsedModules[id]);
+    const newCollapsedState = areSomeCollapsed ? {} : allModuleIds.reduce((acc, id) => ({ ...acc, [id]: true }), {});
+    setCollapsedModules(newCollapsedState);
+  };
+  
+  const startSidebarResize = (e: React.MouseEvent) => {
+    isResizingSidebar.current = true;
+    document.body.style.cursor = 'col-resize';
+  };
+  const startDetailsResize = (e: React.MouseEvent) => {
+    isResizingDetails.current = true;
+    document.body.style.cursor = 'col-resize';
+  };
+  const handleMouseMove = (e: MouseEvent) => {
+    if (isResizingSidebar.current) {
+      setSidebarWidth(prev => Math.max(200, Math.min(600, prev + e.movementX)));
+    }
+    if (isResizingDetails.current) {
+      setDetailsWidth(prev => Math.max(150, Math.min(500, prev + e.movementX)));
+    }
+  };
+  const handleMouseUp = () => {
+    isResizingSidebar.current = false;
+    isResizingDetails.current = false;
+    document.body.style.cursor = 'default';
+  };
+
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (sidebarResizing.current) {
-        const newWidth = Math.max(200, Math.min(600, e.clientX));
-        setSidebarWidth(newWidth);
-      }
-      if (detailsResizing.current) {
-        const newWidth = Math.max(200, Math.min(500, e.clientX - sidebarWidth));
-        setDetailsWidth(newWidth);
-      }
-    };
-
-    const handleMouseUp = () => {
-      sidebarResizing.current = false;
-      detailsResizing.current = false;
-      document.body.style.cursor = 'default';
-    };
-
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [sidebarWidth]);
+  }, []);
 
-  const startSidebarResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    sidebarResizing.current = true;
-    document.body.style.cursor = 'col-resize';
-  };
-  
-  const startDetailsResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    detailsResizing.current = true;
-    document.body.style.cursor = 'col-resize';
-  };
-
-  const toggleProject = (id: string) => {
-    setCollapsedProjects(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const toggleModule = (id: string) => {
-    setCollapsedModules(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const toggleTask = (id: string) => {
-    setCollapsedTasks(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const handleToggleAll = () => {
-    const allModuleIds = projects.flatMap(p => p.modules.map(m => m.id));
-    const shouldCollapse = allModuleIds.some(id => !collapsedModules[id]);
-    const newModuleStates = Object.fromEntries(allModuleIds.map(id => [id, shouldCollapse]));
-    setCollapsedModules(newModuleStates);
-  };
+  const groupedResources = useMemo(() => {
+    return resources.reduce((acc, resource) => {
+      const category = resource.category || 'Uncategorized';
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(resource);
+      return acc;
+    }, {} as Record<string, Resource[]>);
+  }, [resources]);
 
   const startEditing = (id: string, initialValue: string, e?: React.MouseEvent) => {
-    e?.stopPropagation(); // Prevent toggling collapse
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
     setEditingId(id);
     setEditValue(initialValue);
   };
-  
+
   const saveEdit = () => {
     if (!editingId) return;
-
-    const parts = editingId.split('::');
-    const type = parts[0];
+    const [type, ...parts] = editingId.split('::');
 
     if (type === 'project') {
-      const projectId = parts[1];
+      const [projectId] = parts;
       onUpdateProjectName(projectId, editValue);
     } else if (type === 'module') {
-      const [_, projectId, moduleId] = parts;
+      const [projectId, moduleId] = parts;
       onUpdateModuleName(projectId, moduleId, editValue);
     } else if (type === 'task') {
-      const [_, projectId, moduleId, taskId] = parts;
+      const [projectId, moduleId, taskId] = parts;
       onUpdateTaskName(projectId, moduleId, taskId, editValue);
     } else if (type === 'resource') {
       const [_, projectId, moduleId, taskId, assignmentId] = parts;
@@ -1039,32 +1021,31 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   </div>
                                 </div>
                                 
-                                <div className="flex-shrink-0 border-r border-slate-200 bg-white flex justify-between items-center px-2 py-1.5 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
-                                    <div className="flex items-center gap-2">
-                                      <div className="cursor-grab text-slate-300 hover:text-slate-500" title="Drag to reorder assignment">
+                                <div className="flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 gap-2 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
+                                    <div className="cursor-grab text-slate-300 hover:text-slate-500" title="Drag to reorder assignment">
                                         <GripVertical size={14} />
-                                      </div>
-                                        <div className="flex items-center gap-1" title="Start Date">
-                                            <span className="text-[10px] text-slate-400">Start</span>
-                                            <input 
-                                                type="date"
-                                                className="text-[10px] p-0.5 border-slate-200 rounded-sm bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-[100px] cursor-pointer"
-                                                value={formatDateForInput(startDate)}
-                                                onChange={(e) => handleAssignmentStartDateChange(project.id, module.id, task.id, assignment, e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="flex items-center gap-1" title="Duration in Days">
-                                           <span className="text-[10px] text-slate-400">Dur.</span>
-                                           <input 
-                                              type="number"
-                                              min="1"
-                                              value={assignment.duration || 1}
-                                              onChange={(e) => handleAssignmentDurationChange(project.id, module.id, task.id, assignment, e.target.value)}
-                                              className="text-[10px] p-0.5 border-slate-200 rounded-sm bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-10 text-center"
-                                           />
-                                            <span className="text-[10px] text-slate-400">days</span>
-                                        </div>
                                     </div>
+                                    <div className="flex items-center gap-1" title="Start Date">
+                                        <span className="text-[10px] text-slate-400">Start</span>
+                                        <input 
+                                            type="date"
+                                            className="text-[10px] p-0.5 border-slate-200 rounded-sm bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-auto cursor-pointer"
+                                            value={formatDateForInput(startDate)}
+                                            onChange={(e) => handleAssignmentStartDateChange(project.id, module.id, task.id, assignment, e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-1" title="Duration in Days">
+                                        <span className="text-[10px] text-slate-400">Dur.</span>
+                                        <input 
+                                            type="number"
+                                            min="1"
+                                            value={assignment.duration || 1}
+                                            onChange={(e) => handleAssignmentDurationChange(project.id, module.id, task.id, assignment, e.target.value)}
+                                            className="text-[10px] p-0.5 border-slate-200 rounded-sm bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-10 text-center"
+                                        />
+                                        <span className="text-[10px] text-slate-400">days</span>
+                                    </div>
+                                    <div className="flex-1 min-w-[8px]"></div>
                                     <div className="flex items-center gap-0.5">
                                         <button 
                                             onClick={() => onCopyAssignment(project.id, module.id, task.id, assignment.id)}
