@@ -479,6 +479,48 @@ const App: React.FC = () => {
     );
     if (!error) fetchData();
   };
+
+  const onCopyAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
+    const originalAssignment = projects.find(p => p.id === projectId)
+        ?.modules.find(m => m.id === moduleId)
+        ?.tasks.find(t => t.id === taskId)
+        ?.assignments.find(a => a.id === assignmentId);
+
+    if (!originalAssignment) return;
+
+    // Create the new assignment in the DB
+    const { data: newAssignment, error: assignError } = await callSupabase(
+        'COPY assignment', { taskId: taskId, role: originalAssignment.role },
+        supabase.from('task_assignments').insert({
+            task_id: taskId,
+            role: originalAssignment.role,
+            resource_name: 'Unassigned',
+            user_id: session!.user.id,
+            start_week_id: originalAssignment.startWeekId,
+            duration: originalAssignment.duration,
+        }).select().single()
+    );
+
+    if (assignError || !newAssignment) {
+        alert("Failed to copy assignment.");
+        return;
+    }
+
+    // Copy allocations if they exist
+    if (originalAssignment.allocations.length > 0) {
+        const newAllocations = originalAssignment.allocations.map(alloc => ({
+            assignment_id: newAssignment.id,
+            user_id: session!.user.id,
+            week_id: alloc.weekId,
+            count: alloc.count,
+            days: alloc.days || {},
+        }));
+        await callSupabase('COPY allocations', { count: newAllocations.length }, supabase.from('resource_allocations').insert(newAllocations));
+    }
+    
+    // Refresh data to show the new assignment
+    await fetchData(true);
+  };
   
   const deleteAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
     if (window.confirm('Are you sure you want to delete this resource assignment?')) {
@@ -687,51 +729,6 @@ const App: React.FC = () => {
         setProjects(previousState); 
         alert("Failed to reorder tasks."); 
     }
-  };
-  
-  const onShiftAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, direction: 'left' | 'right') => {
-    const assignmentInState = projects.find(p => p.id === projectId)
-      ?.modules.find(m => m.id === moduleId)
-      ?.tasks.find(t => t.id === taskId)
-      ?.assignments.find(a => a.id === assignmentId);
-    if (!assignmentInState || assignmentInState.allocations.length === 0) return;
-  
-    const newAllocationsMap = new Map<string, ResourceAllocation>();
-    for (const alloc of assignmentInState.allocations) {
-      const newWeekId = shiftWeekId(alloc.weekId, direction);
-      if (newAllocationsMap.has(newWeekId)) {
-        const existing = newAllocationsMap.get(newWeekId)!;
-        existing.count += alloc.count;
-        existing.days = {}; // Merging daily details is complex, simplify by clearing.
-      } else {
-        newAllocationsMap.set(newWeekId, { ...alloc, weekId: newWeekId });
-      }
-    }
-    const newAllocations = Array.from(newAllocationsMap.values());
-  
-    const previousState = deepClone(projects);
-    const updatedProjects = deepClone(projects);
-    const assignmentToUpdate = updatedProjects.find(p => p.id === projectId)
-      ?.modules.find(m => m.id === moduleId)
-      ?.tasks.find(t => t.id === taskId)
-      ?.assignments.find(a => a.id === assignmentId);
-    if(assignmentToUpdate) {
-      assignmentToUpdate.allocations = newAllocations;
-      setProjects(updatedProjects);
-    }
-  
-    setSaveStatus('saving');
-    const { error: delErr } = await supabase.from('resource_allocations').delete().eq('assignment_id', assignmentId);
-    if (delErr) { setSaveStatus('error'); setProjects(previousState); return; }
-    
-    if (newAllocations.length > 0) {
-      const toInsert = newAllocations.map(a => ({ assignment_id: assignmentId, user_id: session!.user.id, week_id: a.weekId, count: a.count, days: a.days || {} }));
-      const { error: insErr } = await supabase.from('resource_allocations').insert(toInsert);
-      if (insErr) { setSaveStatus('error'); fetchData(); return; }
-    }
-  
-    setSaveStatus('success');
-    statusTimeoutRef.current = window.setTimeout(() => setSaveStatus('idle'), 3000);
   };
   
   const onShiftTask = async (projectId: string, moduleId: string, taskId: string, direction: 'left' | 'right') => {
@@ -978,7 +975,7 @@ const App: React.FC = () => {
             {loading ? <div className="text-center p-8 text-slate-500">Loading your data...</div> : (
               <>
                 {activeTab === 'dashboard' && <Dashboard projects={projects} />}
-                {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onShiftTask={onShiftTask} onShiftAssignment={onShiftAssignment} onUpdateAssignmentSchedule={updateAssignmentSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={onImportPlan} onShowHistory={() => setShowHistory(true)} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
+                {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onCopyAssignment={onCopyAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onShiftTask={onShiftTask} onUpdateAssignmentSchedule={updateAssignmentSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={onImportPlan} onShowHistory={() => setShowHistory(true)} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
                 {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
                 {activeTab === 'resources' && <Resources resources={resources} onAddResource={addResource} onDeleteResource={deleteResource} onUpdateResourceCategory={updateResourceCategory} />}
                 {activeTab === 'holiday' && <AdminSettings holidays={holidays} onAddHolidays={addHolidays} onDeleteHoliday={deleteHoliday} onDeleteHolidaysByCountry={deleteHolidaysByCountry} />}

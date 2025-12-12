@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource } from '../types';
 import { getTimeline, ALL_WEEK_IDS, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, Info, GripVertical, Plus, UserPlus, ChevronLeft, Clock, PlayCircle, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp } from 'lucide-react';
+import { Layers, Calendar, ChevronRight, ChevronDown, Info, GripVertical, Plus, UserPlus, ChevronLeft, Clock, PlayCircle, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface PlannerGridProps {
@@ -16,10 +16,10 @@ interface PlannerGridProps {
   onUpdateAssignmentResourceName: (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => void;
   onAddTask: (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => void;
   onAddAssignment: (projectId: string, moduleId: string, taskId: string, role: Role) => void;
+  onCopyAssignment: (projectId: string, moduleId: string, taskId: string, assignmentId: string) => void;
   onReorderModules: (projectId: string, startIndex: number, endIndex: number) => void;
   onReorderTasks: (projectId: string, moduleId: string, startIndex: number, endIndex: number) => void;
   onShiftTask: (projectId: string, moduleId: string, taskId: string, direction: 'left' | 'right') => void;
-  onShiftAssignment: (projectId: string, moduleId: string, taskId: string, assignmentId: string, direction: 'left' | 'right') => void;
   onUpdateAssignmentSchedule: (projectId: string, moduleId: string, taskId: string, assignmentId: string, startWeekId: string, duration: number) => void;
   onAddProject: () => void;
   onAddModule: (projectId: string) => void;
@@ -67,10 +67,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   onUpdateAssignmentResourceName,
   onAddTask, 
   onAddAssignment,
+  onCopyAssignment,
   onReorderModules,
   onReorderTasks,
   onShiftTask,
-  onShiftAssignment,
   onUpdateAssignmentSchedule,
   onAddProject,
   onAddModule,
@@ -99,7 +99,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [colWidthBase, setColWidthBase] = useState<number>(40);
   const [sidebarWidth, setSidebarWidth] = useState<number>(256); // Default w-64
   const sidebarResizing = useRef(false);
-  const [detailsWidth, setDetailsWidth] = useState<number>(200); // Default w-32
+  const [detailsWidth, setDetailsWidth] = useState<number>(240); // Increased width for new controls
   const detailsResizing = useRef(false);
 
   // Editing State
@@ -133,7 +133,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         setSidebarWidth(newWidth);
       }
       if (detailsResizing.current) {
-        const newWidth = Math.max(150, Math.min(500, e.clientX - sidebarWidth));
+        const newWidth = Math.max(200, Math.min(500, e.clientX - sidebarWidth));
         setDetailsWidth(newWidth);
       }
     };
@@ -557,18 +557,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
      onUpdateAssignmentSchedule(projectId, moduleId, taskId, assignment.id, newStartWeekId, assignment.duration || 1);
   };
 
-  const handleAssignmentEndDateChange = (projectId: string, moduleId: string, taskId: string, assignment: TaskAssignment, newDateStr: string) => {
-     if (!newDateStr || !assignment.startWeekId) return;
-     const endDate = new Date(newDateStr);
-     const endWeekId = getWeekIdFromDate(endDate);
-
-     const [y1, w1] = assignment.startWeekId.split('-').map(Number);
-     const [y2, w2] = endWeekId.split('-').map(Number);
-     
-     const weekDiff = (y2 - y1) * 52 + (w2 - w1) + 1;
-     const newDuration = Math.max(1, weekDiff);
-
-     onUpdateAssignmentSchedule(projectId, moduleId, taskId, assignment.id, assignment.startWeekId, newDuration);
+  const handleAssignmentDurationChange = (projectId: string, moduleId: string, taskId: string, assignment: TaskAssignment, newDurationStr: string) => {
+    if (!assignment.startWeekId) return;
+    const newDuration = parseInt(newDurationStr, 10);
+    if (!isNaN(newDuration) && newDuration > 0) {
+      onUpdateAssignmentSchedule(projectId, moduleId, taskId, assignment.id, assignment.startWeekId, newDuration);
+    }
   };
 
   // Dynamic Column Width based on slider and view mode
@@ -993,9 +987,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 parseInt(assignment.startWeekId.split('-')[1])
                               ) : new Date();
                               
-                              const endDate = new Date(startDate);
-                              endDate.setDate(startDate.getDate() + ((assignment.duration || 1) * 7) - 3);
-
                               return (
                               <div key={assignment.id} className="flex border-b border-slate-100 group/assign">
                                 <div 
@@ -1015,52 +1006,46 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                           </optgroup>
                                         ))}
                                      </select>
-                                     <button 
-                                      onClick={(e) => { e.stopPropagation(); onDeleteAssignment(project.id, module.id, task.id, assignment.id); }}
-                                      className="opacity-0 group-hover/assign:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-100 transition-opacity ml-2"
-                                      title="Delete resource"
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
                                   </div>
                                 </div>
                                 
-                                <div className="flex-shrink-0 border-r border-slate-200 bg-white flex justify-between items-center px-2 py-0.5 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
-                                    <div className="flex flex-col gap-0.5">
+                                <div className="flex-shrink-0 border-r border-slate-200 bg-white flex justify-between items-center px-2 py-1.5 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
+                                    <div className="flex items-center gap-2">
                                         <div className="flex items-center gap-1" title="Start Date">
-                                            <span className="text-[9px] text-slate-400 w-6">Start</span>
+                                            <span className="text-[10px] text-slate-400">Start</span>
                                             <input 
-                                            type="date"
-                                            className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer"
-                                            value={formatDateForInput(startDate)}
-                                            onChange={(e) => handleAssignmentStartDateChange(project.id, module.id, task.id, assignment, e.target.value)}
+                                                type="date"
+                                                className="text-[10px] p-0.5 border-slate-200 rounded-sm bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-[100px] cursor-pointer"
+                                                value={formatDateForInput(startDate)}
+                                                onChange={(e) => handleAssignmentStartDateChange(project.id, module.id, task.id, assignment, e.target.value)}
                                             />
                                         </div>
-                                        <div className="flex items-center gap-1" title="End Date">
-                                            <span className="text-[9px] text-slate-400 w-6">End</span>
-                                            <input 
-                                            type="date"
-                                            className="text-[9px] p-0 border-none bg-transparent text-slate-600 focus:ring-0 w-full cursor-pointer"
-                                            value={formatDateForInput(endDate)}
-                                            min={formatDateForInput(startDate)}
-                                            onChange={(e) => handleAssignmentEndDateChange(project.id, module.id, task.id, assignment, e.target.value)}
-                                            />
+                                        <div className="flex items-center gap-1" title="Duration in Weeks">
+                                           <span className="text-[10px] text-slate-400">Dur.</span>
+                                           <input 
+                                              type="number"
+                                              min="1"
+                                              value={assignment.duration || 1}
+                                              onChange={(e) => handleAssignmentDurationChange(project.id, module.id, task.id, assignment, e.target.value)}
+                                              className="text-[10px] p-0.5 border-slate-200 rounded-sm bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-10 text-center"
+                                           />
+                                            <span className="text-[10px] text-slate-400">wks</span>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-0.5 opacity-0 group-hover/assign:opacity-100 transition-opacity">
+                                    <div className="flex items-center gap-0.5">
                                         <button 
-                                            onClick={() => onShiftAssignment(project.id, module.id, task.id, assignment.id, 'left')}
-                                            className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
-                                            title="Shift backward one week"
+                                            onClick={() => onCopyAssignment(project.id, module.id, task.id, assignment.id)}
+                                            className="text-slate-400 hover:text-indigo-600 p-1 rounded hover:bg-slate-200"
+                                            title="Duplicate this assignment"
                                         >
-                                            <ChevronLeft size={12} />
+                                            <Copy size={12} />
                                         </button>
                                         <button 
-                                            onClick={() => onShiftAssignment(project.id, module.id, task.id, assignment.id, 'right')}
-                                            className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
-                                            title="Shift forward one week"
+                                            onClick={() => onDeleteAssignment(project.id, module.id, task.id, assignment.id)}
+                                            className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-100"
+                                            title="Delete this assignment"
                                         >
-                                            <ChevronRight size={12} />
+                                            <Trash2 size={12} />
                                         </button>
                                     </div>
                                 </div>
