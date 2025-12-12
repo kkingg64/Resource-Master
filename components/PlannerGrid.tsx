@@ -676,10 +676,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     Project Structure
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
                   </div>
-                  <div className="flex-shrink-0 flex items-center justify-around text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative px-2" style={detailsColStyle}>
-                    <span className="flex-1">Start Date</span>
-                    <span className="flex-1">End Date</span>
-                    <span className="flex-1">Dur</span>
+                  <div className="flex-shrink-0 flex items-center text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative px-2" style={detailsColStyle}>
+                    <div className="w-6 shrink-0" />
+                    <div className="flex-1 grid grid-cols-3 gap-2">
+                      <span>Start Date</span>
+                      <span>End Date</span>
+                      <span>Dur</span>
+                    </div>
+                    <div className="w-6 shrink-0" />
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
                   </div>
                   {Object.values(yearHeaders).map((group, idx) => (<div key={idx} className="text-center p-1 text-xs font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
@@ -710,10 +714,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                       Project Structure
                       <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
                     </div>
-                    <div className="flex-shrink-0 flex items-center justify-around text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative px-2" style={detailsColStyle}>
-                      <span className="flex-1">Start Date</span>
-                      <span className="flex-1">End Date</span>
-                      <span className="flex-1">Dur</span>
+                    <div className="flex-shrink-0 flex items-center text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative px-2" style={detailsColStyle}>
+                      <div className="w-6 shrink-0" />
+                      <div className="flex-1 grid grid-cols-3 gap-2">
+                          <span>Start Date</span>
+                          <span>End Date</span>
+                          <span>Dur</span>
+                      </div>
+                      <div className="w-6 shrink-0" />
                       <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
                     </div>
                     {Object.values(viewMode === 'week' ? monthHeaders : yearHeaders).map((group, idx) => (<div key={idx} className="text-center p-2 text-xs font-bold text-slate-600 border-r border-slate-200 bg-slate-100 uppercase tracking-wide truncate" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
@@ -990,38 +998,32 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   </div>
                                   
                                   <div className="flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 gap-2 relative group-hover/assign:bg-slate-50" style={detailsColStyle}>
-                                      <div className="cursor-grab text-slate-300 hover:text-slate-500 flex-shrink-0" title="Drag to reorder assignment">
+                                      <div className="cursor-grab text-slate-300 hover:text-slate-500" title="Drag to reorder assignment">
                                           <GripVertical size={14} />
                                       </div>
-                                      <div className="flex-1 flex items-center justify-around gap-2">
-                                        <div className="flex-1">
-                                          <input 
-                                              type="date"
-                                              title="Start Date"
-                                              className="text-xs p-1 border border-slate-200 rounded-md bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer w-full"
-                                              value={formatDateForInput(startDate)}
-                                              onChange={(e) => handleAssignmentStartDateChange(project.id, module.id, task.id, assignment, e.target.value)}
-                                          />
-                                        </div>
-                                        <div className="flex-1">
-                                          <input 
-                                              type="date"
-                                              readOnly
-                                              title="End Date (calculated)"
-                                              className="text-xs p-1 border border-slate-200 rounded-md bg-slate-100 text-slate-500 cursor-not-allowed w-full focus:ring-0"
-                                              value={formatDateForInput(endDate)}
-                                          />
-                                        </div>
-                                        <div className="flex-1 max-w-16">
-                                          <input 
-                                              type="number"
-                                              min="1"
-                                              title="Duration (days)"
-                                              value={assignment.duration || 1}
-                                              onChange={(e) => handleAssignmentDurationChange(project.id, module.id, task.id, assignment, e.target.value)}
-                                              className="text-xs p-1 border border-slate-200 rounded-md bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center"
-                                          />
-                                        </div>
+                                      <div className="flex-1 grid grid-cols-3 gap-2">
+                                        <input 
+                                            type="date"
+                                            title="Start Date"
+                                            className="text-xs p-1 border border-slate-200 rounded-md bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer w-full"
+                                            value={formatDateForInput(startDate)}
+                                            onChange={(e) => handleAssignmentStartDateChange(project.id, module.id, task.id, assignment, e.target.value)}
+                                        />
+                                        <input 
+                                            type="date"
+                                            readOnly
+                                            title="End Date (calculated)"
+                                            className="text-xs p-1 border border-slate-200 rounded-md bg-slate-100 text-slate-500 cursor-not-allowed w-full focus:ring-0"
+                                            value={formatDateForInput(endDate)}
+                                        />
+                                        <input 
+                                            type="number"
+                                            min="1"
+                                            title="Duration (days)"
+                                            value={assignment.duration || 1}
+                                            onChange={(e) => handleAssignmentDurationChange(project.id, module.id, task.id, assignment, e.target.value)}
+                                            className="text-xs p-1 border border-slate-200 rounded-md bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center"
+                                        />
                                       </div>
                                       <button 
                                           onClick={() => onDeleteAssignment(project.id, module.id, task.id, assignment.id)}

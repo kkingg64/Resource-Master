@@ -130,8 +130,8 @@ const App: React.FC = () => {
   const log = (message: string, payload: any, status: LogEntry['status'] = 'pending'): number => {
     if (!isDebugLogEnabled) return -1;
     const id = nextLogId.current++;
-    // Fix: Provide locale to toLocaleTimeString for consistent formatting.
-    const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString('en-US'), message, payload, status };
+    // FIX: The call to toLocaleTimeString was causing an error. Removed the 'en-US' argument to use the default locale and resolve the issue.
+    const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString(), message, payload, status };
     setLogEntries(prev => [newEntry, ...prev.slice(0, 99)]);
     return id;
   };
@@ -583,36 +583,38 @@ const App: React.FC = () => {
   
     if (!assignment) return;
   
-    // Update schedule properties in local state
     assignment.startWeekId = startWeekId;
     assignment.duration = duration;
   
-    // Auto-generate allocations
     const newAllocations: ResourceAllocation[] = [];
     if (startWeekId && duration > 0) {
       const startDate = getDateFromWeek(parseInt(startWeekId.split('-')[0]), parseInt(startWeekId.split('-')[1]));
-      const endDate = new Date(startDate);
-      endDate.setDate(startDate.getDate() + duration - 1);
-  
+      
       const allocationsMap = new Map<string, { days: Record<string, number> }>();
       const holidayDates = new Set(holidays.map(h => h.date));
-  
-      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-        const dayOfWeek = d.getDay();
-        if (dayOfWeek === 0 || dayOfWeek === 6) continue; // Skip weekends
-  
-        const dateStr = formatDateForInput(d);
-        if (holidayDates.has(dateStr)) continue; // Skip holidays
-  
-        const weekId = getWeekIdFromDate(d);
-        if (!allocationsMap.has(weekId)) {
-          allocationsMap.set(weekId, { days: {} });
+      
+      let currentDate = new Date(startDate);
+      let workingDaysAllocated = 0;
+
+      while (workingDaysAllocated < duration) {
+        const dayOfWeek = currentDate.getDay();
+        const dateStr = formatDateForInput(currentDate);
+
+        if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidayDates.has(dateStr)) {
+          const weekId = getWeekIdFromDate(currentDate);
+          if (!allocationsMap.has(weekId)) {
+            allocationsMap.set(weekId, { days: {} });
+          }
+          const weekData = allocationsMap.get(weekId)!;
+          weekData.days[dateStr] = 1; // Allocate 1 manday
+          workingDaysAllocated++;
         }
-        allocationsMap.get(weekId)!.days[dateStr] = 1;
+        
+        currentDate.setDate(currentDate.getDate() + 1);
       }
   
       for (const [weekId, allocData] of allocationsMap.entries()) {
-        const count = Object.keys(allocData.days).length;
+        const count = Object.values(allocData.days).reduce((s, dayCount) => s + dayCount, 0);
         if (count > 0) {
           newAllocations.push({ weekId, count, days: allocData.days });
         }
@@ -622,8 +624,6 @@ const App: React.FC = () => {
   
     setProjects(updatedProjects);
   
-    // --- DB Operations ---
-    // 1. Update assignment schedule
     const { error: scheduleError } = await callSupabase(
       'UPDATE assignment schedule', 
       { id: assignmentId, startWeekId, duration }, 
@@ -636,19 +636,12 @@ const App: React.FC = () => {
       return;
     }
   
-    // 2. Delete old allocations
-    const { error: deleteError } = await callSupabase(
+    await callSupabase(
       'DELETE old allocations', 
       { assignmentId }, 
       supabase.from('resource_allocations').delete().eq('assignment_id', assignmentId)
     );
   
-    if (deleteError) {
-      fetchData(true); // Re-fetch to sync state if deletion fails
-      return;
-    }
-  
-    // 3. Insert new allocations
     if (newAllocations.length > 0) {
       const toInsert = newAllocations.map(a => ({
         assignment_id: assignmentId,
@@ -657,15 +650,13 @@ const App: React.FC = () => {
         count: a.count,
         days: a.days || {}
       }));
-      const { error: insertError } = await callSupabase(
+      await callSupabase(
         'INSERT new allocations', 
         { count: toInsert.length }, 
         supabase.from('resource_allocations').insert(toInsert)
       );
-      if (insertError) {
-        fetchData(true); // Re-fetch to sync state
-      }
     }
+    fetchData(true);
   };
   
 
