@@ -108,7 +108,15 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const isResizingSidebar = useRef(false);
   const isResizingDetails = useRef(false);
 
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; projectId: string; moduleId: string; taskId: string; assignmentId: string; } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ 
+    x: number; 
+    y: number; 
+    type: 'task' | 'assignment';
+    projectId: string; 
+    moduleId: string; 
+    taskId: string; 
+    assignmentId?: string; 
+  } | null>(null);
   
   const importInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -911,6 +919,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 onDragStart={(e) => handleTaskDragStart(e, module.id, taskIndex)}
                                 onDragOver={handleTaskDragOver}
                                 onDrop={(e) => handleTaskDrop(e, project.id, module.id, taskIndex)}
+                                onContextMenu={(e) => {
+                                  e.preventDefault();
+                                  setContextMenu({ type: 'task', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id });
+                                }}
                                 className={`flex border-b border-slate-100 bg-slate-50/40 group/task ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>
                                 <div 
                                   className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50/95 z-20 flex items-center justify-between pl-6 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]"
@@ -1017,7 +1029,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   onDrop={(e) => handleAssignmentDrop(e, project.id, module.id, task.id, assignmentIndex)}
                                   onContextMenu={(e) => {
                                     e.preventDefault();
-                                    setContextMenu({ x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id, assignmentId: assignment.id });
+                                    e.stopPropagation();
+                                    setContextMenu({ type: 'assignment', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id, assignmentId: assignment.id });
                                   }}
                                 >
                                   <div 
@@ -1195,27 +1208,43 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           style={{ top: contextMenu.y, left: contextMenu.x }}
           className="absolute z-50 bg-white shadow-xl rounded-md border border-slate-200 p-1 animate-in fade-in"
         >
-          <button
-            onClick={() => {
-              onCopyAssignment(contextMenu.projectId, contextMenu.moduleId, contextMenu.taskId, contextMenu.assignmentId);
-              setContextMenu(null);
-            }}
-            className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"
-          >
-            <Copy size={12} />
-            Duplicate Assignment
-          </button>
-          <div className="h-px bg-slate-100 my-1"></div>
-          <button
-            onClick={() => {
-              onDeleteAssignment(contextMenu.projectId, contextMenu.moduleId, contextMenu.taskId, contextMenu.assignmentId);
-              setContextMenu(null);
-            }}
-            className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"
-          >
-            <Trash2 size={12} />
-            Delete Assignment
-          </button>
+          {contextMenu.type === 'assignment' && contextMenu.assignmentId && (
+            <>
+              <button
+                onClick={() => {
+                  onCopyAssignment(contextMenu.projectId, contextMenu.moduleId, contextMenu.taskId, contextMenu.assignmentId!);
+                  setContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"
+              >
+                <Copy size={12} />
+                Duplicate Assignment
+              </button>
+              <div className="h-px bg-slate-100 my-1"></div>
+              <button
+                onClick={() => {
+                  onDeleteAssignment(contextMenu.projectId, contextMenu.moduleId, contextMenu.taskId, contextMenu.assignmentId!);
+                  setContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"
+              >
+                <Trash2 size={12} />
+                Delete Assignment
+              </button>
+            </>
+          )}
+          {contextMenu.type === 'task' && (
+             <button
+                onClick={() => {
+                  onDeleteTask(contextMenu.projectId, contextMenu.moduleId, contextMenu.taskId);
+                  setContextMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"
+              >
+                <Trash2 size={12} />
+                Delete Task
+              </button>
+          )}
         </div>
       )}
     </>
