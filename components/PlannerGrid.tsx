@@ -1,8 +1,7 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource } from '../types';
-import { getTimeline, ALL_WEEK_IDS, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, Info, GripVertical, Plus, UserPlus, ChevronLeft, Clock, PlayCircle, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy } from 'lucide-react';
+import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday } from '../types';
+import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput } from '../constants';
+import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface PlannerGridProps {
@@ -92,7 +91,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
   const [collapsedModules, setCollapsedModules] = useState<Record<string, boolean>>({});
   const [collapsedTasks, setCollapsedTasks] = useState<Record<string, boolean>>({});
-  const [viewMode, setViewMode] = useState<ViewMode>('week');
+  const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   
@@ -165,6 +164,20 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, []);
+
+  const resourceHolidaysMap = useMemo(() => {
+    const map = new Map<string, { holidays: (Omit<Holiday, 'id'> | IndividualHoliday)[], dateSet: Set<string> }>();
+    resources.forEach(resource => {
+        const regional = resource.holiday_region ? GOV_HOLIDAYS_DB[resource.holiday_region] || [] : [];
+        const individual = resource.individual_holidays || [];
+        const allHolidays = [...regional, ...individual];
+        map.set(resource.name, {
+            holidays: allHolidays,
+            dateSet: new Set(allHolidays.map(h => h.date))
+        });
+    });
+    return map;
+  }, [resources]);
 
   const groupedResources = useMemo(() => {
     return resources.reduce((acc, resource) => {
@@ -239,15 +252,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       });
     });
 
-    const holidaysData = holidays.map(({ id, ...rest }) => rest);
-
     const wb = XLSX.utils.book_new();
     const planWs = XLSX.utils.json_to_sheet(planData, { header: ['Project', 'Module', 'Task', 'Role', 'Resource', ...weekHeaders] });
-    const holidaysWs = XLSX.utils.json_to_sheet(holidaysData);
 
     XLSX.utils.book_append_sheet(wb, planWs, 'Resource Plan');
-    XLSX.utils.book_append_sheet(wb, holidaysWs, 'Holidays');
-
     XLSX.writeFile(wb, `oms-resource-plan-${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
@@ -261,13 +269,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         const data = e.target?.result;
         const workbook = XLSX.read(data, { type: 'array' });
         
-        const holidaysSheet = workbook.Sheets['Holidays'];
-        if (!holidaysSheet) throw new Error('Holidays sheet not found');
-        const importedHolidays: Holiday[] = XLSX.utils.sheet_to_json<any>(holidaysSheet).map((h, i) => ({
-          ...h,
-          id: `imported-holiday-${i}-${Date.now()}`
-        }));
-
         const planSheet = workbook.Sheets['Resource Plan'];
         if (!planSheet) throw new Error('Resource Plan sheet not found');
         const planJson = XLSX.utils.sheet_to_json<any>(planSheet);
@@ -316,7 +317,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         });
 
         if (window.confirm('This will overwrite your current plan. Are you sure?')) {
-            onImportPlan(importedProjects, importedHolidays);
+            onImportPlan(importedProjects, []);
         }
 
       } catch (error: any) {
@@ -363,17 +364,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }, {} as Record<string, { label: string, colspan: number }>);
   }, [timeline]);
 
-  const weekHeaders = useMemo(() => {
-    if (viewMode !== 'day') return null;
-    return timeline.reduce((acc, col) => {
-      const key = col.weekLabel;
-      if (!acc[key]) acc[key] = { label: key, colspan: 0 };
-      acc[key].colspan++;
-      return acc;
-    }, {} as Record<string, { label: string, colspan: number }>);
-  }, [timeline, viewMode]);
-
-
   const getRoleColorClass = (role: Role) => {
     switch (role) {
       case Role.DEV: return 'border-l-blue-500';
@@ -388,15 +378,15 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }
   };
 
-  const getHolidayInfo = (date?: Date) => {
-    if (!date) return null;
-    const dateStr = formatDateForInput(date);
-    return holidays.find(h => h.date === dateStr);
-  };
-
-  const isHoliday = (date?: Date) => !!getHolidayInfo(date);
-
   const getRawCellValue = (assignment: TaskAssignment, col: TimelineColumn): number => {
+    const resourceHolidayData = resourceHolidaysMap.get(assignment.resourceName || '');
+
+    if (viewMode === 'day') {
+        if (!col.date) return 0;
+        const dateStr = formatDateForInput(col.date);
+        if (resourceHolidayData?.dateSet.has(dateStr)) return 0;
+    }
+
     if (viewMode === 'week') {
       const alloc = assignment.allocations.find(a => a.weekId === col.id);
       return alloc ? alloc.count : 0;
@@ -408,7 +398,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         .reduce((sum, a) => sum + a.count, 0);
     }
     if (viewMode === 'day') {
-      if (isHoliday(col.date)) return 0;
       if (!col.parentWeekId || !col.date) return 0;
       
       const alloc = assignment.allocations.find(a => a.weekId === col.parentWeekId);
@@ -418,8 +407,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       if (alloc.days && alloc.days[dateStr] !== undefined) {
           return alloc.days[dateStr];
       }
-      if (alloc.count > 0) {
-          return alloc.count / 5;
+      if (alloc.count > 0 && Object.keys(alloc.days || {}).length === 0) {
+          const weekdaysInWeek = 5; // simplified
+          return alloc.count / weekdaysInWeek;
       }
       return 0;
     }
@@ -662,8 +652,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                       <span>S</span>
                       <span>D</span>
                     </div>
-                    <div className="w-6 shrink-0" />
-                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
                   </div>
                   {Object.values(yearHeaders).map((group, idx) => (<div key={idx} className="text-center p-1 text-xs font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                 </div>
@@ -676,12 +664,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}></div>
                   <div className="flex-shrink-0 border-r border-slate-200" style={detailsColStyle}></div>
                   {timeline.map(col => {
-                      const holidayInfo = getHolidayInfo(col.date);
-                      const isHol = !!holidayInfo;
                       const isCurrent = isCurrentColumn(col);
-                      return (<div key={col.id} className={`flex-shrink-0 text-center p-1 text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col ${isHol ? 'bg-red-50 text-red-600' : ''} ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px`, height: '32px' }} title={isHol ? `${holidayInfo?.name} (${holidayInfo?.country})` : isCurrent ? 'Current Date' : ''}>
+                      return (<div key={col.id} className={`flex-shrink-0 text-center p-1 text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px`, height: '32px' }} title={isCurrent ? 'Current Date' : ''}>
                         <span>{col.label}</span>
-                        {col.date && <span className={`text-[9px] ${isHol ? 'text-red-500 font-bold' : isCurrent ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>{col.date.getDate()}</span>}
+                        {col.date && <span className={`text-[9px] ${isCurrent ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>{col.date.getDate()}</span>}
                       </div>);
                   })}
                 </div>
@@ -699,8 +685,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           <span>S</span>
                           <span>D</span>
                       </div>
-                      <div className="w-6 shrink-0" />
-                      <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
                     </div>
                     {Object.values(viewMode === 'week' ? monthHeaders : yearHeaders).map((group, idx) => (<div key={idx} className="text-center p-2 text-xs font-bold text-slate-600 border-r border-slate-200 bg-slate-100 uppercase tracking-wide truncate" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                 </div>
@@ -909,14 +893,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     >
                                       <UserPlus size={14} />
                                     </button>
-                                    <div className="w-px h-3 bg-slate-300 mx-1"></div>
-                                      <button 
-                                        onClick={() => onDeleteTask(project.id, module.id, task.id)}
-                                        className="text-slate-400 hover:text-red-600 p-0.5 rounded hover:bg-slate-200"
-                                        title="Delete task"
-                                    >
-                                      <Trash2 size={12} />
-                                    </button>
                                   </div>
                                 </div>
 
@@ -940,6 +916,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   parseInt(assignment.startWeekId.split('-')[0]), 
                                   parseInt(assignment.startWeekId.split('-')[1])
                                 ) : new Date();
+
+                                const resourceHolidayData = resourceHolidaysMap.get(assignment.resourceName || '');
                                 
                                 return (
                                 <div 
@@ -967,7 +945,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                           <option value="Unassigned">Unassigned</option>
                                           {Object.entries(groupedResources).map(([category, resList]) => (
                                             <optgroup label={category} key={category}>
-                                              {resList.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
+                                              {resList.map(r => <option key={r.id} value={r.name}>{r.name} {r.type === 'External' ? '(Ext.)' : ''}</option>)}
                                             </optgroup>
                                           ))}
                                       </select>
@@ -995,29 +973,25 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             className="text-xs p-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center hover:bg-slate-100"
                                         />
                                       </div>
-                                      <button 
-                                          onClick={() => onDeleteAssignment(project.id, module.id, task.id, assignment.id)}
-                                          className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-100"
-                                          title="Delete this assignment"
-                                      >
-                                          <Trash2 size={12} />
-                                      </button>
                                   </div>
                                   
                                   {timeline.map(col => {
                                     const raw = getRawCellValue(assignment, col);
                                     const display = formatValue(raw);
                                     const hasValue = raw > 0;
-                                    const holidayInfo = getHolidayInfo(col.date);
-                                    const isHol = !!holidayInfo;
                                     const isCurrent = isCurrentColumn(col);
+                                    
+                                    const dateStr = col.date ? formatDateForInput(col.date) : '';
+                                    const isHol = !!(resourceHolidayData && resourceHolidayData.dateSet.has(dateStr));
+                                    const holidayInfo = isHol ? resourceHolidayData!.holidays.find(h => h.date === dateStr) : undefined;
+
 
                                     return (
                                       <div 
                                         key={`${assignment.id}-${col.id}`} 
-                                        className={`flex-shrink-0 border-r border-slate-100 relative ${isHol ? 'bg-[repeating-linear-gradient(45deg,#fee2e2,#fee2e2_5px,#fef2f2_5px,#fef2f2_10px)]' : isCurrent ? 'bg-amber-50/50' : ''}`} 
+                                        className={`flex-shrink-0 border-r border-slate-100 relative ${isHol ? 'bg-[repeating-linear-gradient(45deg,#e0e7ff,#e0e7ff_5px,#eef2ff_5px,#eef2ff_10px)]' : isCurrent ? 'bg-amber-50/50' : ''}`} 
                                         style={{ width: `${colWidth}px` }}
-                                        title={isHol ? holidayInfo?.name : ''}
+                                        title={holidayInfo?.name}
                                       >
                                         <input 
                                           type="text"
@@ -1105,6 +1079,17 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           >
             <Copy size={12} />
             Duplicate Assignment
+          </button>
+          <div className="h-px bg-slate-100 my-1"></div>
+          <button
+            onClick={() => {
+              onDeleteAssignment(contextMenu.projectId, contextMenu.moduleId, contextMenu.taskId, contextMenu.assignmentId);
+              setContextMenu(null);
+            }}
+            className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"
+          >
+            <Trash2 size={12} />
+            Delete Assignment
           </button>
         </div>
       )}

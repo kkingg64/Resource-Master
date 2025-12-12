@@ -4,12 +4,11 @@ import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask,
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
 import { Estimator } from './components/Estimator';
-import { AdminSettings } from './components/AdminSettings';
 import { Settings } from './components/Settings';
 import { Resources } from './components/Resources';
 import { VersionHistory } from './components/VersionHistory';
 import { DebugLog } from './components/DebugLog';
-import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, Globe, ChevronLeft, ChevronRight, LogOut, Users } from 'lucide-react';
+import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
@@ -106,7 +105,7 @@ const App: React.FC = () => {
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'planner' | 'estimator' | 'holiday' | 'settings' | 'resources'>('planner');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'planner' | 'estimator' | 'settings' | 'resources'>('planner');
   const [showHistory, setShowHistory] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
@@ -114,7 +113,8 @@ const App: React.FC = () => {
   const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
   
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
-  const statusTimeoutRef = useRef<number>();
+  // FIX: The type for useRef should allow for `undefined` when no initial value is provided.
+  const statusTimeoutRef = useRef<number | undefined>();
   const timelineInitialized = useRef(false);
 
   useEffect(() => {
@@ -129,8 +129,6 @@ const App: React.FC = () => {
   const log = (message: string, payload: any, status: LogEntry['status'] = 'pending'): number => {
     if (!isDebugLogEnabled) return -1;
     const id = nextLogId.current++;
-    // FIX: Simplified Date object creation. `new Date(Date.now())` is redundant.
-    // FIX: Changed toISOString for a more reliable timestamp format, resolving a potential environment-specific error with toLocaleTimeString.
     const newEntry: LogEntry = { id, timestamp: new Date().toISOString(), message, payload, status };
     setLogEntries(prev => [newEntry, ...prev.slice(0, 99)]);
     return id;
@@ -212,16 +210,6 @@ const App: React.FC = () => {
     }
   }, [projects, loading]);
   
-  const dateToCountryMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const countryCode in GOV_HOLIDAYS_DB) {
-      for (const holiday of GOV_HOLIDAYS_DB[countryCode]) {
-        map.set(holiday.date, holiday.country);
-      }
-    }
-    return map;
-  }, []);
-
   const fetchData = async (isRefresh: boolean = false) => {
     if (!session) return;
     if (isRefresh) {
@@ -271,22 +259,15 @@ const App: React.FC = () => {
     }
     setProjects(structureProjectsData(finalProjectsData, modulesData, tasksData, assignmentsData, allocationsData));
 
-    // Fetch holidays and resources in parallel
-    const [holidaysResponse, resourcesResponse] = await Promise.all([
-      supabase.from('holidays').select('id, date, name').eq('user_id', session.user.id),
-      // FIX: Fetch individual_holidays associated with each resource.
-      supabase.from('resources').select('*, individual_holidays(*)').eq('user_id', session.user.id).order('name')
-    ]);
-
-    if (holidaysResponse.data) {
-      const hydratedHolidays = holidaysResponse.data.map(h => ({
-        ...h,
-        id: h.id.toString(),
-        country: dateToCountryMap.get(h.date) || 'Global'
-      }));
-      setHolidays(hydratedHolidays);
-    }
-    if (resourcesResponse.data) setResources(resourcesResponse.data);
+    // Fetch resources with their individual holidays
+    const { data: resourcesData, error: resourcesError } = await supabase
+      .from('resources')
+      .select('*, individual_holidays(*)')
+      .eq('user_id', session.user.id)
+      .order('name');
+    
+    if (resourcesError) console.error(resourcesError);
+    else if (resourcesData) setResources(resourcesData);
 
     if (isRefresh) setIsRefreshing(false);
     else setLoading(false);
@@ -592,8 +573,19 @@ const App: React.FC = () => {
       const startDate = getDateFromWeek(parseInt(startWeekId.split('-')[0]), parseInt(startWeekId.split('-')[1]));
       
       const allocationsMap = new Map<string, { days: Record<string, number> }>();
-      const holidayDates = new Set(holidays.map(h => h.date));
       
+      // Get holidays for the specific resource
+      const resource = resources.find(r => r.name === assignment.resourceName);
+      let resourceHolidayDates = new Set<string>();
+      if (resource) {
+        const regionalHolidays = resource.holiday_region ? (GOV_HOLIDAYS_DB[resource.holiday_region] || []) : [];
+        const individualHolidays = resource.individual_holidays || [];
+        resourceHolidayDates = new Set([
+            ...regionalHolidays.map(h => h.date),
+            ...individualHolidays.map(h => h.date)
+        ]);
+      }
+
       let currentDate = new Date(startDate);
       let workingDaysAllocated = 0;
 
@@ -601,7 +593,7 @@ const App: React.FC = () => {
         const dayOfWeek = currentDate.getDay();
         const dateStr = formatDateForInput(currentDate);
 
-        if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidayDates.has(dateStr)) {
+        if (dayOfWeek !== 0 && dayOfWeek !== 6 && !resourceHolidayDates.has(dateStr)) {
           const weekId = getWeekIdFromDate(currentDate);
           if (!allocationsMap.has(weekId)) {
             allocationsMap.set(weekId, { days: {} });
@@ -800,12 +792,6 @@ const App: React.FC = () => {
     setLoading(true);
   
     await callSupabase('DELETE all projects for import', {}, supabase.from('projects').delete().eq('user_id', session!.user.id));
-    await callSupabase('DELETE all holidays for import', {}, supabase.from('holidays').delete().eq('user_id', session!.user.id));
-    
-    const holidaysToInsert = importedHolidays.map(h => ({ date: h.date, name: h.name, user_id: session!.user.id, }));
-    if (holidaysToInsert.length > 0) {
-      await callSupabase('INSERT imported holidays', {}, supabase.from('holidays').insert(holidaysToInsert));
-    }
     
     for (const project of importedProjects) {
       const { data: newProject } = await callSupabase('INSERT imported project', {name: project.name}, supabase.from('projects').insert({ name: project.name, user_id: session!.user.id }).select().single());
@@ -858,11 +844,9 @@ const App: React.FC = () => {
     
     log('Start restoring version', { id });
     await supabase.from('projects').delete().eq('user_id', session!.user.id);
-    await supabase.from('holidays').delete().eq('user_id', session!.user.id);
     await supabase.from('resources').delete().eq('user_id', session!.user.id);
     
     setProjects(version.data.projects || []);
-    setHolidays(version.data.holidays || []);
     setResources(version.data.resources || []);
     
     alert(`Version restored. Any new changes will be saved to your current state.`);
@@ -870,10 +854,10 @@ const App: React.FC = () => {
   };
 
   // --- Resource Management ---
-  const addResource = async (name: string, category: Role, region: string) => {
+  const addResource = async (name: string, category: Role, region: string, type: 'Internal' | 'External') => {
     const { error } = await callSupabase(
-      'CREATE resource', { name, category, region },
-      supabase.from('resources').insert({ name, category, holiday_region: region, user_id: session!.user.id }).select().single()
+      'CREATE resource', { name, category, region, type },
+      supabase.from('resources').insert({ name, category, holiday_region: region, type, user_id: session!.user.id }).select().single()
     );
     if (error) { 
       alert('Failed to add resource.'); 
@@ -883,31 +867,37 @@ const App: React.FC = () => {
   };
 
   const updateResourceCategory = async (id: string, category: Role) => {
-    const previousState = deepClone(resources);
-    setResources(prev => prev.map(r => r.id === id ? { ...r, category } : r));
     const { error } = await callSupabase(
       'UPDATE resource category', { id, category },
       supabase.from('resources').update({ category }).eq('id', id)
     );
-    if (error) { setResources(previousState); alert('Failed to update resource category.'); }
+    if (error) { alert('Failed to update resource category.'); }
+    else { fetchData(true); }
   };
 
   const updateResourceRegion = async (id: string, region: string | null) => {
-    const previousState = deepClone(resources);
-    setResources(prev => prev.map(r => r.id === id ? { ...r, holiday_region: region || undefined } : r));
     const { error } = await callSupabase(
       'UPDATE resource region', { id, region },
       supabase.from('resources').update({ holiday_region: region }).eq('id', id)
     );
-    if (error) { setResources(previousState); alert('Failed to update resource region.'); }
+    if (error) { alert('Failed to update resource region.'); }
+    else { fetchData(true); }
+  };
+  
+  const updateResourceType = async (id: string, type: 'Internal' | 'External') => {
+    const { error } = await callSupabase(
+      'UPDATE resource type', { id, type },
+      supabase.from('resources').update({ type }).eq('id', id)
+    );
+    if (error) { alert('Failed to update resource type.'); }
+    else { fetchData(true); }
   };
 
   const deleteResource = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this resource? This will unassign them from all tasks.')) {
-        const previousState = deepClone(resources);
-        setResources(prev => prev.filter(r => r.id !== id));
         const { error } = await callSupabase('DELETE resource', { id }, supabase.from('resources').delete().eq('id', id));
-        if (error) { setResources(previousState); alert('Failed to delete resource.'); }
+        if (error) { alert('Failed to delete resource.'); }
+        else { fetchData(true); }
     }
   };
 
@@ -927,45 +917,6 @@ const App: React.FC = () => {
       else { fetchData(true); }
     }
   };
-
-
-  // --- Holiday Management ---
-  const addHolidays = async (holidaysToAdd: Omit<Holiday, 'id'>[]) => {
-    // Exclude country from insert to prevent errors if column doesn't exist in DB
-    const holidaysToInsert = holidaysToAdd.map(h => ({ date: h.date, name: h.name, user_id: session!.user.id }));
-    const { error } = await callSupabase(
-        'SYNC holidays', { count: holidaysToInsert.length, country: holidaysToAdd[0]?.country },
-        supabase.from('holidays').upsert(holidaysToInsert, { onConflict: 'user_id,date' })
-    );
-    if (error) { alert('Failed to sync holidays.'); } 
-    else { fetchData(true); }
-  };
-  
-  const deleteHoliday = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this holiday?')) {
-        const previousState = deepClone(holidays);
-        setHolidays(prev => prev.filter(h => h.id !== id));
-        const { error } = await callSupabase('DELETE holiday', { id }, supabase.from('holidays').delete().eq('id', id));
-        if (error) { setHolidays(previousState); alert('Failed to delete holiday.'); }
-    }
-  };
-  
-  const deleteHolidaysByCountry = async (country: string) => {
-    if (window.confirm(`Are you sure you want to remove all holidays for ${country}?`)) {
-        const previousState = deepClone(holidays);
-        const datesToDelete = GOV_HOLIDAYS_DB[country]?.map(h => h.date) || [];
-        if (datesToDelete.length === 0) return;
-
-        setHolidays(prev => prev.filter(h => !datesToDelete.includes(h.date)));
-        const { error } = await callSupabase(
-        'DELETE holidays by country', 
-        { country, dates: datesToDelete.length }, 
-        supabase.from('holidays').delete().in('date', datesToDelete).eq('user_id', session!.user.id)
-        );
-        if (error) { setHolidays(previousState); alert(`Failed to delete holidays for ${country}.`); }
-    }
-  };
-
 
   if (!session) {
     return (
@@ -999,7 +950,6 @@ const App: React.FC = () => {
             <button onClick={() => setActiveTab('planner')} title="Planner" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'planner' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><Calendar size={20} />{!isSidebarCollapsed && <span className="font-medium">Planner</span>}</button>
             <button onClick={() => setActiveTab('estimator')} title="Estimator" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'estimator' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><Calculator size={20} />{!isSidebarCollapsed && <span className="font-medium">Estimator</span>}</button>
             <button onClick={() => setActiveTab('resources')} title="Resources" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'resources' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><Users size={20} />{!isSidebarCollapsed && <span className="font-medium">Resources</span>}</button>
-            <button onClick={() => setActiveTab('holiday')} title="Holidays" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'holiday' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><Globe size={20} />{!isSidebarCollapsed && <span className="font-medium">Holidays</span>}</button>
           </nav>
           <div className="p-2 border-t border-slate-800">
             <div className={`p-2 ${isSidebarCollapsed ? '' : 'mb-2'}`}>
@@ -1030,9 +980,7 @@ const App: React.FC = () => {
                 {activeTab === 'dashboard' && <Dashboard projects={projects} />}
                 {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentResourceName={updateAssignmentResourceName} onAddTask={addTask} onAddAssignment={addAssignment} onCopyAssignment={onCopyAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onReorderAssignments={reorderAssignments} onShiftTask={onShiftTask} onUpdateAssignmentSchedule={updateAssignmentSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={onImportPlan} onShowHistory={() => setShowHistory(true)} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
                 {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
-                {/* FIX: Pass all required props to Resources component */}
-                {activeTab === 'resources' && <Resources resources={resources} onAddResource={addResource} onDeleteResource={deleteResource} onUpdateResourceCategory={updateResourceCategory} onUpdateResourceRegion={updateResourceRegion} onAddIndividualHoliday={addIndividualHoliday} onDeleteIndividualHoliday={deleteIndividualHoliday} />}
-                {activeTab === 'holiday' && <AdminSettings holidays={holidays} onAddHolidays={addHolidays} onDeleteHoliday={deleteHoliday} onDeleteHolidaysByCountry={deleteHolidaysByCountry} />}
+                {activeTab === 'resources' && <Resources resources={resources} onAddResource={addResource} onDeleteResource={deleteResource} onUpdateResourceCategory={updateResourceCategory} onUpdateResourceRegion={updateResourceRegion} onAddIndividualHoliday={addIndividualHoliday} onDeleteIndividualHoliday={deleteIndividualHoliday} onUpdateResourceType={updateResourceType} />}
                 {activeTab === 'settings' && <Settings isDebugLogEnabled={isDebugLogEnabled} setIsDebugLogEnabled={setIsDebugLogEnabled} />}
               </>
             )}

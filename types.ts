@@ -1,6 +1,8 @@
 
 
 
+
+
 export enum Role {
   CNF = 'CNF',
   BRAND_SOLUTIONS = 'Brand Solutions',
@@ -116,4 +118,5 @@ export interface Resource {
   category: Role;
   holiday_region?: string;
   individual_holidays?: IndividualHoliday[];
+  type: 'Internal' | 'External';
 }
