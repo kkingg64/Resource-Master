@@ -1026,7 +1026,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             type="date"
                                             title="Start Date"
                                             disabled={!!assignment.parentAssignmentId}
-                                            className={`text-xs p-1 rounded-md bg-transparent border-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full hover:bg-slate-100 ${!!assignment.parentAssignmentId ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-600'}`}
+                                            className={`text-xs py-0.5 px-1 rounded-md bg-transparent border-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full hover:bg-slate-100 ${!!assignment.parentAssignmentId ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-600'}`}
                                             value={formatDateForInput(assignmentStartDate)}
                                             onChange={(e) => handleAssignmentStartDateChange(assignment, e.target.value)}
                                         />
@@ -1036,7 +1036,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             title="Duration (days)"
                                             value={assignment.duration || 1}
                                             onChange={(e) => handleAssignmentDurationChange(assignment, e.target.value)}
-                                            className="text-xs p-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center hover:bg-slate-100"
+                                            className="text-xs py-0.5 px-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center hover:bg-slate-100"
                                         />
                                         <div className="relative h-full flex items-center justify-center">
                                            <select 
@@ -1045,9 +1045,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                               title="Task Dependency"
                                               className="absolute inset-0 w-full h-full text-transparent bg-transparent border-none appearance-none cursor-pointer focus:ring-1 focus:ring-indigo-500 rounded-md"
                                             >
-                                                <option value=""></option>
+                                                <option value="" className="text-black">- No Dependency -</option>
                                                 {possibleParents.map(parent => (
-                                                    <option key={parent.id} value={parent.id}>{parent.name}</option>
+                                                    <option key={parent.id} value={parent.id} className="text-black">{parent.name}</option>
                                                 ))}
                                             </select>
                                             {assignment.parentAssignmentId ? <Link size={14} className="text-indigo-600 pointer-events-none" /> : <Link2 size={14} className="text-slate-400 pointer-events-none" />}
