@@ -101,7 +101,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [draggedAssignment, setDraggedAssignment] = useState<{ taskId: string, index: number } | null>(null);
   
   const [sidebarWidth, setSidebarWidth] = useState(350);
-  const [detailsWidth, setDetailsWidth] = useState(300);
+  const [detailsWidth, setDetailsWidth] = useState(220);
   const [colWidthBase, setColWidthBase] = useState(40);
   const isResizingSidebar = useRef(false);
   const isResizingDetails = useRef(false);
@@ -148,7 +148,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       setSidebarWidth(prev => Math.max(200, Math.min(600, prev + e.movementX)));
     }
     if (isResizingDetails.current) {
-      setDetailsWidth(prev => Math.max(250, Math.min(500, prev + e.movementX)));
+      setDetailsWidth(prev => Math.max(200, Math.min(500, prev + e.movementX)));
     }
   };
   const handleMouseUp = () => {
@@ -679,9 +679,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   <div className="flex-shrink-0 flex items-center text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative px-2" style={detailsColStyle}>
                     <div className="w-6 shrink-0" />
                     <div className="flex-1 grid grid-cols-3 gap-2">
-                      <span>Start Date</span>
-                      <span>End Date</span>
-                      <span>Dur</span>
+                      <span>S</span>
+                      <span>E</span>
+                      <span>D</span>
                     </div>
                     <div className="w-6 shrink-0" />
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
@@ -714,12 +714,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                       Project Structure
                       <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
                     </div>
-                    <div className="flex-shrink-0 flex items-center text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative px-2" style={detailsColStyle}>
+                    <div className="flex-shrink-0 flex items-center text-center text-xs font-bold text-slate-600 border-r border-slate-200 relative px-2" style={detailsColStyle}>
                       <div className="w-6 shrink-0" />
                       <div className="flex-1 grid grid-cols-3 gap-2">
-                          <span>Start Date</span>
-                          <span>End Date</span>
-                          <span>Dur</span>
+                          <span>S</span>
+                          <span>E</span>
+                          <span>D</span>
                       </div>
                       <div className="w-6 shrink-0" />
                       <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
@@ -1005,7 +1005,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                         <input 
                                             type="date"
                                             title="Start Date"
-                                            className="text-xs p-1 border border-slate-200 rounded-md bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer w-full"
+                                            className="text-xs p-1 rounded-md bg-slate-100 text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer w-full hover:bg-slate-200"
                                             value={formatDateForInput(startDate)}
                                             onChange={(e) => handleAssignmentStartDateChange(project.id, module.id, task.id, assignment, e.target.value)}
                                         />
@@ -1013,7 +1013,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             type="date"
                                             readOnly
                                             title="End Date (calculated)"
-                                            className="text-xs p-1 border border-slate-200 rounded-md bg-slate-100 text-slate-500 cursor-not-allowed w-full focus:ring-0"
+                                            className="text-xs p-1 rounded-md bg-slate-100 text-slate-500 cursor-not-allowed w-full focus:ring-0"
                                             value={formatDateForInput(endDate)}
                                         />
                                         <input 
@@ -1022,7 +1022,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             title="Duration (days)"
                                             value={assignment.duration || 1}
                                             onChange={(e) => handleAssignmentDurationChange(project.id, module.id, task.id, assignment, e.target.value)}
-                                            className="text-xs p-1 border border-slate-200 rounded-md bg-transparent text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center"
+                                            className="text-xs p-1 rounded-md bg-slate-100 text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center hover:bg-slate-200"
                                         />
                                       </div>
                                       <button 

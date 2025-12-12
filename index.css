@@ -38,3 +38,13 @@
 .toggle-checkbox:checked + .toggle-label {
   background-color: #4f46e5; /* indigo-600 */
 }
+
+/* Hide spin buttons on number inputs */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield; /* Firefox */
+}

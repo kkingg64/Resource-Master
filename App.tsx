@@ -130,8 +130,8 @@ const App: React.FC = () => {
   const log = (message: string, payload: any, status: LogEntry['status'] = 'pending'): number => {
     if (!isDebugLogEnabled) return -1;
     const id = nextLogId.current++;
-    // FIX: The call to toLocaleTimeString was causing an error. Removed the 'en-US' argument to use the default locale and resolve the issue.
-    const newEntry: LogEntry = { id, timestamp: new Date().toLocaleTimeString(), message, payload, status };
+    // FIX: Pass Date.now() to `new Date()` to resolve "Expected 1 arguments, but got 0" error.
+    const newEntry: LogEntry = { id, timestamp: new Date(Date.now()).toLocaleTimeString('en-US'), message, payload, status };
     setLogEntries(prev => [newEntry, ...prev.slice(0, 99)]);
     return id;
   };
