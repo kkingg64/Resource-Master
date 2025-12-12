@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint } from './constants';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
@@ -8,7 +8,7 @@ import { Settings } from './components/Settings';
 import { Resources } from './components/Resources';
 import { VersionHistory } from './components/VersionHistory';
 import { DebugLog } from './components/DebugLog';
-import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, LogOut, Users } from 'lucide-react';
+import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
@@ -21,7 +21,7 @@ const structureProjectsData = (
   assignments: any[],
   allocations: any[]
 ): Project[] => {
-  const allocationsByAssignment = new Map<string, ResourceAllocation[]>();
+  const allocationsByAssignment = new Map<string, any[]>();
   allocations.forEach(a => {
     if (!allocationsByAssignment.has(a.assignment_id)) {
       allocationsByAssignment.set(a.assignment_id, []);
@@ -29,11 +29,11 @@ const structureProjectsData = (
     allocationsByAssignment.get(a.assignment_id)!.push({
       weekId: a.week_id,
       count: a.count,
-      days: a.days
+      days: a.days || {},
     });
   });
 
-  const assignmentsByTask = new Map<string, TaskAssignment[]>();
+  const assignmentsByTask = new Map<string, any[]>();
   assignments.forEach(a => {
     if (!assignmentsByTask.has(a.task_id)) {
       assignmentsByTask.set(a.task_id, []);
@@ -42,18 +42,16 @@ const structureProjectsData = (
       id: a.id,
       role: a.role,
       resourceName: a.resource_name,
-      allocations: allocationsByAssignment.get(a.id) || [],
-      startDate: a.start_date,
+      startDate: a.start_date, // New day-based field
+      startWeekId: a.start_week_id, // Keep for backward compatibility
       duration: a.duration,
       parentAssignmentId: a.parent_assignment_id,
-      sort_order: a.sort_order
+      sort_order: a.sort_order,
+      allocations: allocationsByAssignment.get(a.id) || [],
     });
   });
 
-  // Sort assignments
-  assignmentsByTask.forEach(list => list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
-
-  const tasksByModule = new Map<string, ProjectTask[]>();
+  const tasksByModule = new Map<string, any[]>();
   tasks.forEach(t => {
     if (!tasksByModule.has(t.module_id)) {
       tasksByModule.set(t.module_id, []);
@@ -61,574 +59,1025 @@ const structureProjectsData = (
     tasksByModule.get(t.module_id)!.push({
       id: t.id,
       name: t.name,
-      assignments: assignmentsByTask.get(t.id) || [],
-      sort_order: t.sort_order
+      sort_order: t.sort_order,
+      assignments: (assignmentsByTask.get(t.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
     });
   });
 
-  // Sort tasks
-  tasksByModule.forEach(list => list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
-
-  const modulesByProject = new Map<string, ProjectModule[]>();
+  const modulesByProject = new Map<string, any[]>();
   modules.forEach(m => {
     if (!modulesByProject.has(m.project_id)) {
       modulesByProject.set(m.project_id, []);
     }
+    const moduleTasks = (tasksByModule.get(m.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     modulesByProject.get(m.project_id)!.push({
       id: m.id,
       name: m.name,
-      legacyFunctionPoints: m.legacy_function_points || 0,
-      functionPoints: m.function_points || 0,
-      tasks: tasksByModule.get(m.id) || [],
-      sort_order: m.sort_order
+      legacyFunctionPoints: m.legacy_function_points,
+      functionPoints: m.function_points,
+      sort_order: m.sort_order,
+      tasks: moduleTasks,
     });
   });
-
-  // Sort modules
-  modulesByProject.forEach(list => list.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
 
   return projects.map(p => ({
     id: p.id,
     name: p.name,
-    modules: modulesByProject.get(p.id) || []
-  }));
+    modules: (modulesByProject.get(p.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+  })).sort((a,b) => a.name.localeCompare(b.name));
+};
+
+const deepClone = <T,>(obj: T): T => JSON.parse(JSON.stringify(obj));
+
+const shiftWeekId = (weekId: string, direction: 'left' | 'right'): string => {
+  const [yearStr, weekStr] = weekId.split('-');
+  if (!yearStr || !weekStr) return weekId;
+  const point = { year: parseInt(yearStr), week: parseInt(weekStr) };
+  if (isNaN(point.year) || isNaN(point.week)) return weekId;
+
+  const weeksToAdd = direction === 'left' ? -1 : 1;
+  const newPoint = addWeeksToPoint(point, weeksToAdd);
+  return `${newPoint.year}-${String(newPoint.week).padStart(2, '0')}`;
 };
 
 const App: React.FC = () => {
-    const [session, setSession] = useState<any>(null);
-    const [projects, setProjects] = useState<Project[]>([]);
-    const [holidays, setHolidays] = useState<Holiday[]>([]);
-    const [resources, setResources] = useState<Resource[]>([]);
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'planner' | 'estimator' | 'resources' | 'settings'>('planner');
-    const [timelineStart, setTimelineStart] = useState<WeekPoint>(DEFAULT_START);
-    const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
-    const [debugLogs, setDebugLogs] = useState<LogEntry[]>([]);
-    const [isDebugLogEnabled, setIsDebugLogEnabled] = useState(false);
-    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
-    const [isRefreshing, setIsRefreshing] = useState(false);
-    const [showHistory, setShowHistory] = useState(false);
+  const [session, setSession] = useState<any | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'planner' | 'estimator' | 'settings' | 'resources'>('planner');
+  const [showHistory, setShowHistory] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  
+  const [timelineStart, setTimelineStart] = useState<WeekPoint>(DEFAULT_START);
+  const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
+  
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const statusTimeoutRef = useRef<number | undefined>(undefined);
+  const allocationTimeouts = useRef<Record<string, number>>({});
+  const timelineInitialized = useRef(false);
 
-    useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-        });
+  useEffect(() => {
+    return () => window.clearTimeout(statusTimeoutRef.current);
+  }, []);
 
-        const {
-            data: { subscription },
-        } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
-            setSession(session);
-        });
+  // Debug Log State
+  const [isDebugLogEnabled, setIsDebugLogEnabled] = useState(false);
+  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+  const nextLogId = useRef(0);
+  
+  const log = (message: string, payload: any, status: LogEntry['status'] = 'pending'): number => {
+    if (!isDebugLogEnabled) return -1;
+    const id = nextLogId.current++;
+    const newEntry: LogEntry = { id, timestamp: new Date().toISOString(), message, payload, status };
+    setLogEntries(prev => [newEntry, ...prev.slice(0, 99)]);
+    return id;
+  };
 
-        return () => subscription.unsubscribe();
-    }, []);
-
-    const log = (message: string, payload?: any, status: 'pending' | 'success' | 'error' = 'pending') => {
-        if (!isDebugLogEnabled) return;
-        const entry: LogEntry = {
-            id: Date.now(),
-            timestamp: new Date().toISOString().split('T')[1].slice(0, 8),
-            message,
-            payload,
-            status
-        };
-        setDebugLogs(prev => [entry, ...prev].slice(0, 50));
-    };
-
-    const fetchData = async () => {
-        setIsRefreshing(true);
-        try {
-            log('Fetching all data...');
-            const [pRes, mRes, tRes, aRes, allocRes, hRes, rRes] = await Promise.all([
-                supabase.from('projects').select('*').order('created_at'),
-                supabase.from('modules').select('*').order('sort_order'),
-                supabase.from('tasks').select('*').order('sort_order'),
-                supabase.from('task_assignments').select('*').order('sort_order'),
-                supabase.from('task_allocations').select('*'),
-                supabase.from('holidays').select('*'),
-                supabase.from('resources').select('*, individual_holidays(*)')
-            ]);
-
-            if (pRes.error) throw pRes.error;
-            if (mRes.error) throw mRes.error;
-            if (tRes.error) throw tRes.error;
-            if (aRes.error) throw aRes.error;
-            if (allocRes.error) throw allocRes.error;
-            if (hRes.error) throw hRes.error;
-            if (rRes.error) throw rRes.error;
-
-            const structuredProjects = structureProjectsData(pRes.data, mRes.data, tRes.data, aRes.data, allocRes.data);
-            setProjects(structuredProjects);
-            setHolidays(hRes.data);
-            setResources(rRes.data);
-            log('Data fetched successfully', null, 'success');
-        } catch (error: any) {
-            console.error('Error fetching data:', error);
-            log('Error fetching data', error, 'error');
-        } finally {
-            setIsRefreshing(false);
-        }
-    };
-
-    useEffect(() => {
-        if (session) {
-            fetchData();
-        }
-    }, [session]);
-
-    // --- Actions ---
-
-    const handleExtendTimeline = (direction: 'start' | 'end') => {
-        if (direction === 'start') {
-            setTimelineStart(prev => addWeeksToPoint(prev, -4));
-        } else {
-            setTimelineEnd(prev => addWeeksToPoint(prev, 4));
-        }
-    };
+  const updateLog = (id: number, status: 'success' | 'error', payload?: any) => {
+    if (id === -1) return;
+    setLogEntries(prev => prev.map(entry =>
+      entry.id === id ? { ...entry, status, payload: payload || entry.payload } : entry
+    ));
+  };
+  
+  const callSupabase = async (
+    message: string,
+    payload: any,
+    supabasePromise: PromiseLike<{ data: any; error: any }>
+  ) => {
+    const logId = log(message, payload);
+    setSaveStatus('saving');
+    window.clearTimeout(statusTimeoutRef.current);
     
-    const handleUpdateAllocation = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number, dayDate?: string) => {
-       // Optimistic update
-       setProjects(prev => {
-           return prev.map(p => {
-               if(p.id !== projectId) return p;
-               return {
-                   ...p,
-                   modules: p.modules.map(m => {
-                       if(m.id !== moduleId) return m;
-                       return {
-                           ...m,
-                           tasks: m.tasks.map(t => {
-                               if(t.id !== taskId) return t;
-                               return {
-                                   ...t,
-                                   assignments: t.assignments.map(a => {
-                                       if(a.id !== assignmentId) return a;
-                                       let newAllocations = [...a.allocations];
-                                       const existingIndex = newAllocations.findIndex(al => al.weekId === weekId);
-                                       if(existingIndex >= 0) {
-                                           if (dayDate) {
-                                                const existing = newAllocations[existingIndex];
-                                                const newDays = { ...existing.days, [dayDate]: value };
-                                                const newCount = Object.values(newDays).reduce((sum, v) => sum + v, 0);
-                                                newAllocations[existingIndex] = { ...existing, count: newCount, days: newDays };
-                                           } else {
-                                                newAllocations[existingIndex] = { ...newAllocations[existingIndex], count: value };
-                                           }
-                                       } else {
-                                           if (dayDate) {
-                                               newAllocations.push({ weekId, count: value, days: { [dayDate]: value } });
-                                           } else {
-                                               newAllocations.push({ weekId, count: value });
-                                           }
-                                       }
-                                       return { ...a, allocations: newAllocations };
-                                   })
-                               }
-                           })
-                       }
-                   })
-               }
-           })
-       });
-
-       try {
-           setSaveStatus('saving');
-           
-           if (dayDate) {
-               const currentProject = projects.find(p => p.id === projectId);
-               const currentModule = currentProject?.modules.find(m => m.id === moduleId);
-               const currentTask = currentModule?.tasks.find(t => t.id === taskId);
-               const currentAssignment = currentTask?.assignments.find(a => a.id === assignmentId);
-               const currentAllocation = currentAssignment?.allocations.find(a => a.weekId === weekId);
-               
-               let newDays = currentAllocation?.days ? { ...currentAllocation.days } : {};
-               newDays[dayDate] = value;
-               const newCount = Object.values(newDays).reduce((s, v) => s + v, 0);
-               
-               const { error } = await supabase.from('task_allocations').upsert({
-                   assignment_id: assignmentId,
-                   week_id: weekId,
-                   count: newCount,
-                   days: newDays
-               }, { onConflict: 'assignment_id,week_id' });
-               if (error) throw error;
-           } else {
-                const { error } = await supabase.from('task_allocations').upsert({
-                   assignment_id: assignmentId,
-                   week_id: weekId,
-                   count: value
-               }, { onConflict: 'assignment_id,week_id' });
-               if (error) throw error;
-           }
-           setSaveStatus('success');
-       } catch (e) {
-           console.error(e);
-           setSaveStatus('error');
-       } finally {
-           setTimeout(() => setSaveStatus('idle'), 2000);
-       }
-    };
-
-    const handleUpdateAssignmentResourceName = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => {
-        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? { ...t, assignments: t.assignments.map(a => a.id === assignmentId ? { ...a, resourceName: name } : a) } : t) } : m) } : p));
-        await supabase.from('task_assignments').update({ resource_name: name }).eq('id', assignmentId);
-    };
-
-    const handleUpdateAssignmentDependency = async (assignmentId: string, parentAssignmentId: string | null) => {
-         setProjects(prev => prev.map(p => ({
-             ...p,
-             modules: p.modules.map(m => ({
-                 ...m,
-                 tasks: m.tasks.map(t => ({
-                     ...t,
-                     assignments: t.assignments.map(a => a.id === assignmentId ? { ...a, parentAssignmentId: parentAssignmentId || undefined } : a)
-                 }))
-             }))
-         })));
-         await supabase.from('task_assignments').update({ parent_assignment_id: parentAssignmentId }).eq('id', assignmentId);
-    };
-
-    const handleAddTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
-        const newTask: ProjectTask = { id: taskId, name: taskName, assignments: [] };
-        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: [...m.tasks, newTask] } : m) } : p));
-        await supabase.from('tasks').insert({ id: taskId, module_id: moduleId, name: taskName, sort_order: 999 });
-    };
-
-    const handleAddAssignment = async (projectId: string, moduleId: string, taskId: string, role: Role) => {
-        const newId = crypto.randomUUID();
-        const newAssignment: TaskAssignment = { id: newId, role, allocations: [] };
-        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? { ...t, assignments: [...t.assignments, newAssignment] } : t) } : m) } : p));
-        await supabase.from('task_assignments').insert({ id: newId, task_id: taskId, role, sort_order: 999 });
-    };
-
-    const handleCopyAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
-        const task = projects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
-        const original = task?.assignments.find(a => a.id === assignmentId);
-        if (!original) return;
-
-        const newId = crypto.randomUUID();
-        const copy: TaskAssignment = { ...original, id: newId, resourceName: undefined, allocations: [...original.allocations] };
-        
-        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? { ...t, assignments: [...t.assignments, copy] } : t) } : m) } : p));
-        
-        await supabase.from('task_assignments').insert({ id: newId, task_id: taskId, role: copy.role, start_date: copy.startDate, duration: copy.duration, sort_order: 999 });
-        if (copy.allocations.length > 0) {
-            const allocsToInsert = copy.allocations.map(a => ({ assignment_id: newId, week_id: a.weekId, count: a.count, days: a.days }));
-            await supabase.from('task_allocations').insert(allocsToInsert);
-        }
-    };
-
-    const handleReorderModules = async (projectId: string, startIndex: number, endIndex: number) => {
-        const project = projects.find(p => p.id === projectId);
-        if (!project) return;
-        const newModules = [...project.modules];
-        const [removed] = newModules.splice(startIndex, 1);
-        newModules.splice(endIndex, 0, removed);
-        
-        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: newModules } : p));
-        
-        const updates = newModules.map((m, idx) => ({ id: m.id, sort_order: idx }));
-        for (const update of updates) {
-             await supabase.from('modules').update({ sort_order: update.sort_order }).eq('id', update.id);
-        }
-    };
+    const result = await supabasePromise;
+    if (result.error) {
+      updateLog(logId, 'error', result.error);
+      setSaveStatus('error');
+    } else {
+      updateLog(logId, 'success', result.data);
+      setSaveStatus('success');
+    }
     
-    const handleReorderTasks = async (projectId: string, moduleId: string, startIndex: number, endIndex: number) => {
-         const project = projects.find(p => p.id === projectId);
-         const module = project?.modules.find(m => m.id === moduleId);
-         if (!module) return;
-         const newTasks = [...module.tasks];
-         const [removed] = newTasks.splice(startIndex, 1);
-         newTasks.splice(endIndex, 0, removed);
+    statusTimeoutRef.current = window.setTimeout(() => setSaveStatus('idle'), 3000);
 
-         setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: newTasks } : m) } : p));
+    return result;
+  };
 
-         const updates = newTasks.map((t, idx) => ({ id: t.id, sort_order: idx }));
-         for (const update of updates) {
-             await supabase.from('tasks').update({ sort_order: update.sort_order }).eq('id', update.id);
-         }
-    };
-
-    const handleReorderAssignments = async (projectId: string, moduleId: string, taskId: string, startIndex: number, endIndex: number) => {
-         const project = projects.find(p => p.id === projectId);
-         const module = project?.modules.find(m => m.id === moduleId);
-         const task = module?.tasks.find(t => t.id === taskId);
-         if (!task) return;
-         const newAssignments = [...task.assignments];
-         const [removed] = newAssignments.splice(startIndex, 1);
-         newAssignments.splice(endIndex, 0, removed);
-
-         setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? { ...t, assignments: newAssignments } : t) } : m) } : p));
-
-         const updates = newAssignments.map((a, idx) => ({ id: a.id, sort_order: idx }));
-         for (const update of updates) {
-             await supabase.from('task_assignments').update({ sort_order: update.sort_order }).eq('id', update.id);
-         }
-    };
-
-    const handleShiftTask = async (projectId: string, moduleId: string, taskId: string, direction: 'left' | 'right') => {
-        // Logic to shift all assignments start dates by 1 week
-    };
-
-    const handleUpdateAssignmentSchedule = async (assignmentId: string, startDate: string, duration: number) => {
-         setProjects(prev => prev.map(p => ({
-             ...p,
-             modules: p.modules.map(m => ({
-                 ...m,
-                 tasks: m.tasks.map(t => ({
-                     ...t,
-                     assignments: t.assignments.map(a => a.id === assignmentId ? { ...a, startDate, duration } : a)
-                 }))
-             }))
-         })));
-         await supabase.from('task_assignments').update({ start_date: startDate, duration }).eq('id', assignmentId);
-    };
-
-    const handleAddProject = async () => {
-        const id = crypto.randomUUID();
-        const name = "New Project";
-        setProjects(prev => [...prev, { id, name, modules: [] }]);
-        await supabase.from('projects').insert({ id, name });
-    };
-
-    const handleAddModule = async (projectId: string) => {
-        const id = crypto.randomUUID();
-        const name = "New Module";
-        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: [...p.modules, { id, name, tasks: [], functionPoints: 0, legacyFunctionPoints: 0 }] } : p));
-        await supabase.from('modules').insert({ id, project_id: projectId, name, sort_order: 999 });
-    };
-
-    const handleUpdateProjectName = async (projectId: string, name: string) => {
-        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, name } : p));
-        await supabase.from('projects').update({ name }).eq('id', projectId);
-    };
-
-    const handleUpdateModuleName = async (projectId: string, moduleId: string, name: string) => {
-        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, name } : m) } : p));
-        await supabase.from('modules').update({ name }).eq('id', moduleId);
-    };
-
-    const handleUpdateTaskName = async (projectId: string, moduleId: string, taskId: string, name: string) => {
-        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? { ...t, name } : t) } : m) } : p));
-        await supabase.from('tasks').update({ name }).eq('id', taskId);
-    };
-
-    const handleDeleteProject = async (projectId: string) => {
-        if(!confirm("Are you sure?")) return;
-        setProjects(prev => prev.filter(p => p.id !== projectId));
-        await supabase.from('projects').delete().eq('id', projectId);
-    };
-
-    const handleDeleteModule = async (projectId: string, moduleId: string) => {
-        if(!confirm("Are you sure?")) return;
-        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.filter(m => m.id !== moduleId) } : p));
-        await supabase.from('modules').delete().eq('id', moduleId);
-    };
-
-    const handleDeleteTask = async (projectId: string, moduleId: string, taskId: string) => {
-        if(!confirm("Are you sure?")) return;
-        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.filter(t => t.id !== taskId) } : m) } : p));
-        await supabase.from('tasks').delete().eq('id', taskId);
-    };
-
-    const handleDeleteAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
-        if(!confirm("Are you sure?")) return;
-        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? { ...t, assignments: t.assignments.filter(a => a.id !== assignmentId) } : t) } : m) } : p));
-        await supabase.from('task_assignments').delete().eq('id', assignmentId);
-    };
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
     
-    const handleAddResource = async (name: string, category: Role, region: string, type: 'Internal' | 'External') => {
-        const { data, error } = await supabase.from('resources').insert({ name, category, holiday_region: region, type }).select();
-        if(!error && data) setResources(prev => [...prev, data[0]]);
-    };
-    
-    const handleDeleteResource = async (id: string) => {
-        if(!confirm("Delete resource?")) return;
-        await supabase.from('resources').delete().eq('id', id);
-        setResources(prev => prev.filter(r => r.id !== id));
-    };
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+      }
+    );
 
-    const handleUpdateResourceCategory = async (id: string, category: Role) => {
-        setResources(prev => prev.map(r => r.id === id ? { ...r, category } : r));
-        await supabase.from('resources').update({ category }).eq('id', id);
+    return () => {
+      authListener?.subscription?.unsubscribe();
     };
+  }, []);
 
-    const handleUpdateResourceRegion = async (id: string, region: string | null) => {
-        setResources(prev => prev.map(r => r.id === id ? { ...r, holiday_region: region || undefined } : r));
-        await supabase.from('resources').update({ holiday_region: region }).eq('id', id);
-    };
-    
-    const handleUpdateResourceType = async (id: string, type: 'Internal' | 'External') => {
-        setResources(prev => prev.map(r => r.id === id ? { ...r, type } : r));
-        await supabase.from('resources').update({ type }).eq('id', id);
-    };
+  useEffect(() => {
+    if (session) {
+      fetchData(false);
+    }
+  }, [session]);
 
-    const handleAddIndividualHoliday = async (resourceId: string, date: string, name: string) => {
-        const { data, error } = await supabase.from('individual_holidays').insert({ resource_id: resourceId, date, name }).select();
-        if(data) {
-            setResources(prev => prev.map(r => r.id === resourceId ? { ...r, individual_holidays: [...(r.individual_holidays || []), data[0]] } : r));
-        }
-    };
-    
-    const handleDeleteIndividualHoliday = async (holidayId: string) => {
-        await supabase.from('individual_holidays').delete().eq('id', holidayId);
-        setResources(prev => prev.map(r => ({ ...r, individual_holidays: (r.individual_holidays || []).filter(h => h.id !== holidayId) })));
-    };
-
-    const handleUpdateFunctionPoints = async (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => {
-        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, legacyFunctionPoints: legacyFp, functionPoints: mvpFp } : m) } : p));
-        await supabase.from('modules').update({ legacy_function_points: legacyFp, function_points: mvpFp }).eq('id', moduleId);
-    };
-
-    const handleImportPlan = async (importedProjects: Project[], importedHolidays: Holiday[]) => {
-        alert("Import not fully implemented in this demo.");
-    };
-
-    const handleSaveVersion = async (name: string) => {
-        await supabase.from('versions').insert({ name, data: { projects, holidays, resources } });
-    };
-
-    const handleRestoreVersion = async (versionId: number) => {
-        const { data } = await supabase.from('versions').select('data').eq('id', versionId).single();
-        if (data && data.data) {
-            alert("Restore logic requires complex DB syncing.");
-        }
-    };
-
-    if (!session) {
-        return (
-            <div className="flex items-center justify-center min-h-screen bg-slate-100">
-                <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
-                    <h1 className="text-2xl font-bold mb-6 text-center text-slate-800">Resource Planner Login</h1>
-                    <Auth supabaseClient={supabase} appearance={{ theme: ThemeSupa }} providers={['google']} />
-                </div>
-            </div>
-        );
+  useEffect(() => {
+    if (projects.length === 0 || loading || timelineInitialized.current) {
+        return;
     }
 
-    return (
-        <div className="flex h-screen bg-slate-100 overflow-hidden font-sans text-slate-900">
-            <aside className="w-16 md:w-64 bg-slate-900 text-slate-300 flex flex-col flex-shrink-0 transition-all duration-300 shadow-xl z-50">
-                <div className="p-4 flex items-center gap-3 border-b border-slate-800">
-                    <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-900/50">
-                        <span className="font-bold text-white text-lg">P</span>
-                    </div>
-                    <span className="font-bold text-white text-lg hidden md:block tracking-tight">PlanMaster</span>
-                </div>
+    let minWeekId: string | null = null;
+    projects.forEach(project => {
+        project.modules.forEach(module => {
+            module.tasks.forEach(task => {
+                task.assignments.forEach(assignment => {
+                    assignment.allocations.forEach(alloc => {
+                        if (alloc.weekId && (!minWeekId || alloc.weekId < minWeekId)) {
+                            minWeekId = alloc.weekId;
+                        }
+                    });
+                });
+            });
+        });
+    });
 
-                <nav className="flex-1 py-6 space-y-2 px-2">
-                    <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`}>
-                        <LayoutDashboard size={20} className={activeTab === 'dashboard' ? 'text-white' : 'text-slate-400 group-hover:text-white'} />
-                        <span className="font-medium hidden md:block">Dashboard</span>
-                    </button>
-                    <button onClick={() => setActiveTab('planner')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group ${activeTab === 'planner' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`}>
-                        <Calendar size={20} className={activeTab === 'planner' ? 'text-white' : 'text-slate-400 group-hover:text-white'} />
-                        <span className="font-medium hidden md:block">Planner</span>
-                    </button>
-                    <button onClick={() => setActiveTab('estimator')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group ${activeTab === 'estimator' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`}>
-                        <Calculator size={20} className={activeTab === 'estimator' ? 'text-white' : 'text-slate-400 group-hover:text-white'} />
-                        <span className="font-medium hidden md:block">Estimator</span>
-                    </button>
-                    <button onClick={() => setActiveTab('resources')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group ${activeTab === 'resources' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`}>
-                        <Users size={20} className={activeTab === 'resources' ? 'text-white' : 'text-slate-400 group-hover:text-white'} />
-                        <span className="font-medium hidden md:block">Resources</span>
-                    </button>
-                    <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`}>
-                        <SettingsIcon size={20} className={activeTab === 'settings' ? 'text-white' : 'text-slate-400 group-hover:text-white'} />
-                        <span className="font-medium hidden md:block">Settings</span>
-                    </button>
-                </nav>
+    if (minWeekId) {
+        const [yearStr, weekStr] = minWeekId.split('-');
+        const year = parseInt(yearStr, 10);
+        const week = parseInt(weekStr, 10);
 
-                <div className="p-4 border-t border-slate-800">
-                    <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-all">
-                        <LogOut size={18} />
-                        <span className="font-medium hidden md:block text-sm">Sign Out</span>
-                    </button>
-                </div>
-            </aside>
+        if (!isNaN(year) && !isNaN(week)) {
+            setTimelineStart({ year, week });
+            timelineInitialized.current = true;
+        }
+    } else {
+        timelineInitialized.current = true;
+    }
+  }, [projects, loading]);
+  
+  const fetchData = async (isRefresh: boolean = false) => {
+    if (!session) return;
+    if (isRefresh) {
+      setIsRefreshing(true);
+      timelineInitialized.current = false;
+    } else {
+      setLoading(true);
+    }
 
-            {/* Main Content */}
-            <main className="flex-1 overflow-hidden flex flex-col relative">
-                <header className="bg-white border-b border-slate-200 h-14 flex items-center justify-between px-6 shadow-sm flex-shrink-0 z-40">
-                    <h1 className="text-lg font-bold text-slate-800 capitalize">{activeTab}</h1>
-                    <div className="flex items-center gap-4">
-                        <div className="text-sm text-slate-500">
-                             {session.user.email}
-                        </div>
-                    </div>
-                </header>
-                
-                <div className="flex-1 overflow-auto p-6 relative">
-                    {activeTab === 'dashboard' && <Dashboard projects={projects} />}
-                    {activeTab === 'planner' && (
-                        <PlannerGrid 
-                            projects={projects}
-                            holidays={holidays}
-                            resources={resources}
-                            timelineStart={timelineStart}
-                            timelineEnd={timelineEnd}
-                            onExtendTimeline={handleExtendTimeline}
-                            onUpdateAllocation={handleUpdateAllocation}
-                            onUpdateAssignmentResourceName={handleUpdateAssignmentResourceName}
-                            onUpdateAssignmentDependency={handleUpdateAssignmentDependency}
-                            onAddTask={handleAddTask}
-                            onAddAssignment={handleAddAssignment}
-                            onCopyAssignment={handleCopyAssignment}
-                            onReorderModules={handleReorderModules}
-                            onReorderTasks={handleReorderTasks}
-                            onReorderAssignments={handleReorderAssignments}
-                            onShiftTask={handleShiftTask}
-                            onUpdateAssignmentSchedule={handleUpdateAssignmentSchedule}
-                            onAddProject={handleAddProject}
-                            onAddModule={handleAddModule}
-                            onUpdateProjectName={handleUpdateProjectName}
-                            onUpdateModuleName={handleUpdateModuleName}
-                            onUpdateTaskName={handleUpdateTaskName}
-                            onDeleteProject={handleDeleteProject}
-                            onDeleteModule={handleDeleteModule}
-                            onDeleteTask={handleDeleteTask}
-                            onDeleteAssignment={handleDeleteAssignment}
-                            onImportPlan={handleImportPlan}
-                            onShowHistory={() => setShowHistory(true)}
-                            onRefresh={fetchData}
-                            saveStatus={saveStatus}
-                            isRefreshing={isRefreshing}
-                        />
-                    )}
-                    {activeTab === 'estimator' && (
-                        <Estimator 
-                            projects={projects} 
-                            onUpdateFunctionPoints={handleUpdateFunctionPoints}
-                            onReorderModules={handleReorderModules}
-                        />
-                    )}
-                    {activeTab === 'resources' && (
-                        <Resources 
-                            resources={resources} 
-                            onAddResource={handleAddResource}
-                            onDeleteResource={handleDeleteResource}
-                            onUpdateResourceCategory={handleUpdateResourceCategory}
-                            onUpdateResourceRegion={handleUpdateResourceRegion}
-                            onUpdateResourceType={handleUpdateResourceType}
-                            onAddIndividualHoliday={handleAddIndividualHoliday}
-                            onDeleteIndividualHoliday={handleDeleteIndividualHoliday}
-                        />
-                    )}
-                    {activeTab === 'settings' && (
-                        <Settings isDebugLogEnabled={isDebugLogEnabled} setIsDebugLogEnabled={setIsDebugLogEnabled} />
-                    )}
-                </div>
+    // Fetch projects
+    const { data: projectsData, error: projectsError } = await supabase.from('projects').select('*').eq('user_id', session.user.id);
+    if (projectsError) { console.error("Error fetching projects", projectsError); setLoading(false); return; }
 
-                {isDebugLogEnabled && <DebugLog entries={debugLogs} setEntries={setDebugLogs} />}
-                {showHistory && (
-                    <VersionHistory 
-                        onClose={() => setShowHistory(false)} 
-                        onRestore={handleRestoreVersion} 
-                        onSaveCurrent={handleSaveVersion} 
-                    />
-                )}
-            </main>
-        </div>
+    let finalProjectsData = projectsData;
+    if (projectsData && projectsData.length === 0) {
+      const { data: newProject, error: newProjectError } = await callSupabase(
+        'CREATE default project', { name: 'My First Project' },
+        supabase.from('projects').insert({ name: 'My First Project', user_id: session!.user.id }).select().single()
+      );
+      if (newProject && !newProjectError) { finalProjectsData = [newProject]; }
+    }
+    
+    const projectIds = finalProjectsData.map(p => p.id);
+    let modulesData = [], tasksData = [], assignmentsData = [], allocationsData = [];
+
+    if (projectIds.length > 0) {
+      const { data: modules, error: modulesError } = await supabase.from('modules').select('*').in('project_id', projectIds);
+      if (modulesError) console.error(modulesError); else modulesData = modules;
+      
+      const moduleIds = modulesData.map(m => m.id);
+      if (moduleIds.length > 0) {
+        const { data: tasks, error: tasksError } = await supabase.from('tasks').select('*').in('module_id', moduleIds);
+        if (tasksError) console.error(tasksError); else tasksData = tasks;
+
+        const taskIds = tasksData.map(t => t.id);
+        if (taskIds.length > 0) {
+          const { data: assignments, error: assignmentsError } = await supabase.from('task_assignments').select('*').in('task_id', taskIds);
+          if (assignmentsError) console.error(assignmentsError); else assignmentsData = assignments;
+          
+          const assignmentIds = assignmentsData.map(a => a.id);
+          if (assignmentIds.length > 0) {
+            const { data: allocations, error: allocationsError } = await supabase.from('resource_allocations').select('*').in('assignment_id', assignmentIds);
+            if (allocationsError) console.error(allocationsError); else allocationsData = allocations;
+          }
+        }
+      }
+    }
+    setProjects(structureProjectsData(finalProjectsData, modulesData, tasksData, assignmentsData, allocationsData));
+
+    // Fetch resources with their individual holidays
+    const { data: resourcesData, error: resourcesError } = await supabase
+      .from('resources')
+      .select('*, individual_holidays(*)')
+      .eq('user_id', session.user.id)
+      .order('name');
+    
+    if (resourcesError) console.error(resourcesError);
+    else if (resourcesData) setResources(resourcesData);
+
+    if (isRefresh) setIsRefreshing(false);
+    else setLoading(false);
+  };
+
+  const handleExtendTimeline = (direction: 'start' | 'end') => {
+    if (direction === 'start') setTimelineStart(prev => addWeeksToPoint(prev, -4));
+    else setTimelineEnd(prev => addWeeksToPoint(prev, 4));
+  };
+  
+  const updateAllocation = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number, dayDate?: string) => {
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+
+    const project = updatedProjects.find(p => p.id === projectId);
+    if (!project) return;
+    const module = project.modules.find(m => m.id === moduleId);
+    if (!module) return;
+    const task = module.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const assignment = task.assignments.find(a => a.id === assignmentId);
+    if (!assignment) return;
+
+    let allocationToUpdate: any = null;
+    const allocIndex = assignment.allocations.findIndex(al => al.weekId === weekId);
+    
+    if (allocIndex > -1) {
+        const alloc = assignment.allocations[allocIndex];
+        if (dayDate) {
+            alloc.days = alloc.days || {};
+            if (Object.keys(alloc.days).length === 0 && alloc.count > 0) {
+                const weekdays = getWeekdaysForWeekId(weekId);
+                weekdays.forEach(d => (alloc.days as {[key: string]: number})[d] = alloc.count / 5);
+            }
+            (alloc.days as {[key: string]: number})[dayDate] = value;
+            alloc.count = Object.values(alloc.days).reduce((sum: number, v: number) => sum + v, 0);
+        } else {
+            alloc.count = value;
+            alloc.days = {};
+        }
+        allocationToUpdate = alloc;
+    } else if (value > 0) {
+        const newAlloc: ResourceAllocation = { weekId, count: value, days: {} };
+        if (dayDate) {
+            const weekdays = getWeekdaysForWeekId(weekId);
+            const days = weekdays.reduce((acc, day) => ({...acc, [day]: 0}), {} as {[key: string]: number});
+            days[dayDate] = value;
+            newAlloc.days = days;
+            newAlloc.count = Object.values(days).reduce((sum, v) => sum + v, 0);
+        }
+        assignment.allocations.push(newAlloc);
+        allocationToUpdate = newAlloc;
+    } else {
+        const alloc = assignment.allocations[allocIndex];
+        if (alloc && dayDate && alloc.days && alloc.days[dayDate] !== undefined) {
+             delete alloc.days[dayDate];
+             alloc.count = Object.values(alloc.days).reduce((sum: number, v: number) => sum + v, 0);
+             allocationToUpdate = alloc;
+        }
+    }
+
+    setProjects(updatedProjects);
+
+    if (allocationToUpdate) {
+        const key = `${assignmentId}-${weekId}`;
+        
+        // Clear existing timeout for this specific cell to debounce
+        if (allocationTimeouts.current[key]) {
+            window.clearTimeout(allocationTimeouts.current[key]);
+        }
+
+        setSaveStatus('saving');
+
+        // Set new timeout for DB save
+        allocationTimeouts.current[key] = window.setTimeout(async () => {
+            const { data: existingAlloc } = await supabase.from('resource_allocations').select('id').eq('assignment_id', assignmentId).eq('week_id', weekId).maybeSingle();
+            
+            const upsertData = { 
+                id: existingAlloc?.id, 
+                assignment_id: assignmentId, 
+                user_id: session!.user.id, 
+                week_id: weekId, 
+                count: allocationToUpdate.count, 
+                days: allocationToUpdate.days 
+            };
+            
+            const { error } = await callSupabase('UPSERT allocation', upsertData, supabase.from('resource_allocations').upsert(upsertData));
+            
+            if (error) { 
+                console.error("Failed to save allocation", error);
+                // We typically don't revert state here to avoid jumping UI during fast typing, but we alert the user.
+                alert("Error: Could not save allocation. Please check connection."); 
+            }
+            
+            delete allocationTimeouts.current[key];
+        }, 1000); // 1 second debounce
+    }
+  };
+
+  const addProject = async () => {
+    const { data, error } = await callSupabase(
+        'CREATE project', { name: `New Project ${projects.length + 1}` },
+        supabase.from('projects').insert({ name: `New Project ${projects.length + 1}`, user_id: session!.user.id }).select().single()
     );
+    if (error) { alert("Could not create project."); }
+    else { setProjects(prev => [...prev, { id: data.id, name: data.name, modules: [] }]); }
+  };
+  
+  const deleteProject = async (projectId: string) => {
+    if (window.confirm('Are you sure you want to delete this project and all its contents?')) {
+        const previousState = deepClone(projects);
+        setProjects(prev => prev.filter(p => p.id !== projectId));
+        const { error } = await callSupabase('DELETE project', { id: projectId }, supabase.from('projects').delete().eq('id', projectId));
+        if (error) { setProjects(previousState); alert("Failed to delete project."); }
+    }
+  };
+  
+  const updateProjectName = async (projectId: string, name: string) => {
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const project = updatedProjects.find(p => p.id === projectId);
+    if (project) { project.name = name; setProjects(updatedProjects); }
+
+    const { error } = await callSupabase('UPDATE project name', { id: projectId, name }, supabase.from('projects').update({ name }).eq('id', projectId));
+    if (error) { setProjects(previousState); alert("Failed to update project name."); }
+  };
+  
+  const updateModuleName = async (projectId: string, moduleId: string, name: string) => {
+     const previousState = deepClone(projects);
+     const updatedProjects = deepClone(projects);
+     const project = updatedProjects.find(p => p.id === projectId);
+     const module = project?.modules.find(m => m.id === moduleId);
+     if (module) { module.name = name; setProjects(updatedProjects); }
+     
+     const { error } = await callSupabase('UPDATE module name', { id: moduleId, name }, supabase.from('modules').update({ name }).eq('id', moduleId));
+     if (error) { setProjects(previousState); alert("Failed to update module name."); }
+  };
+  
+  const updateTaskName = async (projectId: string, moduleId: string, taskId: string, name: string) => {
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const task = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
+    if (task) { task.name = name; setProjects(updatedProjects); }
+    
+    const { error } = await callSupabase('UPDATE task name', { id: taskId, name }, supabase.from('tasks').update({ name }).eq('id', taskId));
+    if (error) { setProjects(previousState); alert("Failed to update task name."); }
+  };
+  
+  const addModule = async (projectId: string) => {
+    const { data, error } = await callSupabase(
+        'CREATE module', { name: 'New Module', projectId },
+        supabase.from('modules').insert({ name: 'New Module', project_id: projectId, user_id: session!.user.id }).select().single()
+    );
+    if (error) { alert("Failed to add module."); }
+    else { setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: [...p.modules, { id: data.id, name: data.name, legacyFunctionPoints: 0, functionPoints: 0, tasks: [] }] } : p)); }
+  };
+  
+  const deleteModule = async (projectId: string, moduleId: string) => {
+    if (window.confirm('Are you sure you want to delete this module and all its tasks?')) {
+        const previousState = deepClone(projects);
+        const project = projects.find(p => p.id === projectId);
+        if (project) setProjects(projects.map(p => p.id === projectId ? {...p, modules: p.modules.filter(m => m.id !== moduleId)} : p));
+        
+        const { error } = await callSupabase('DELETE module', { id: moduleId }, supabase.from('modules').delete().eq('id', moduleId));
+        if (error) { setProjects(previousState); alert("Failed to delete module."); }
+    }
+  };
+  
+  const addTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
+    const { data: taskData, error: taskError } = await callSupabase('CREATE task', { taskId, taskName }, supabase.from('tasks').insert({ 
+      id: taskId, 
+      name: taskName, 
+      module_id: moduleId, 
+      user_id: session!.user.id
+    }).select().single());
+
+    if (taskError) { alert("Failed to add task."); return; }
+    
+    const { error: assignError } = await callSupabase('CREATE assignment', { taskId, role }, supabase.from('task_assignments').insert({ 
+      task_id: taskId, 
+      role, 
+      resource_name: 'Unassigned', 
+      user_id: session!.user.id,
+      start_date: formatDateForInput(new Date()),
+      duration: 5
+    }).select().single());
+
+    if (assignError) { return; }
+
+    fetchData(true);
+  };
+  
+  const deleteTask = async (projectId: string, moduleId: string, taskId: string) => {
+    if (window.confirm('Are you sure you want to delete this task?')) {
+        const previousState = deepClone(projects);
+        const project = projects.find(p => p.id === projectId);
+        const module = project?.modules.find(m => m.id === moduleId);
+        if (module) setProjects(projects.map(p => p.id === projectId ? {...p, modules: p.modules.map(m => m.id === moduleId ? {...m, tasks: m.tasks.filter(t => t.id !== taskId)}: m)} : p));
+        
+        const { error } = await callSupabase('DELETE task', { id: taskId }, supabase.from('tasks').delete().eq('id', taskId));
+        if (error) { setProjects(previousState); alert("Failed to delete task."); }
+    }
+  };
+  
+  const addAssignment = async (projectId: string, moduleId: string, taskId: string, role: Role) => {
+    const { error } = await callSupabase(
+        'CREATE assignment', { taskId, role },
+        supabase.from('task_assignments').insert({ 
+          task_id: taskId, 
+          role, 
+          resource_name: 'Unassigned', 
+          user_id: session!.user.id,
+          start_date: formatDateForInput(new Date()),
+          duration: 5
+        }).select().single()
+    );
+    if (!error) fetchData(true);
+  };
+
+  const onCopyAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
+    const originalAssignment = projects.find(p => p.id === projectId)
+        ?.modules.find(m => m.id === moduleId)
+        ?.tasks.find(t => t.id === taskId)
+        ?.assignments.find(a => a.id === assignmentId);
+
+    if (!originalAssignment) return;
+
+    // Create the new assignment in the DB
+    const { data: newAssignment, error: assignError } = await callSupabase(
+        'COPY assignment', { taskId: taskId, role: originalAssignment.role },
+        supabase.from('task_assignments').insert({
+            task_id: taskId,
+            role: originalAssignment.role,
+            resource_name: 'Unassigned',
+            user_id: session!.user.id,
+            start_date: originalAssignment.startDate || formatDateForInput(new Date()),
+            duration: originalAssignment.duration,
+            parent_assignment_id: originalAssignment.parentAssignmentId,
+        }).select().single()
+    );
+
+    if (assignError || !newAssignment) {
+        alert("Failed to copy assignment.");
+        return;
+    }
+
+    // Copy allocations if they exist
+    if (originalAssignment.allocations.length > 0) {
+        const newAllocations = originalAssignment.allocations.map(alloc => ({
+            assignment_id: newAssignment.id,
+            user_id: session!.user.id,
+            week_id: alloc.weekId,
+            count: alloc.count,
+            days: alloc.days || {},
+        }));
+        await callSupabase('COPY allocations', { count: newAllocations.length }, supabase.from('resource_allocations').insert(newAllocations));
+    }
+    
+    // Refresh data to show the new assignment
+    await fetchData(true);
+  };
+  
+  const deleteAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
+    if (window.confirm('Are you sure you want to delete this resource assignment?')) {
+        const previousState = deepClone(projects);
+        setProjects(prev => {
+            const updatedProjects = deepClone(prev);
+            const project = updatedProjects.find(p => p.id === projectId);
+            if (project) {
+            const module = project.modules.find(m => m.id === moduleId);
+            if (module) {
+                const task = module.tasks.find(t => t.id === taskId);
+                if (task) {
+                task.assignments = task.assignments.filter(a => a.id !== assignmentId);
+                }
+            }
+            }
+            return updatedProjects;
+        });
+        
+        const { error } = await callSupabase('DELETE assignment', { id: assignmentId }, supabase.from('task_assignments').delete().eq('id', assignmentId));
+        if (error) { setProjects(previousState); alert("Failed to delete assignment."); } else { fetchData(true); }
+    }
+  };
+
+  const updateAssignmentResourceName = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => {
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const assignment = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId)?.assignments.find(a => a.id === assignmentId);
+    
+    if (!assignment) return;
+
+    assignment.resourceName = name;
+    
+    // Find the resource and update the role
+    const selectedResource = resources.find(r => r.name === name);
+    let newRole = assignment.role; // Default to current role
+    if (selectedResource) {
+      newRole = selectedResource.category;
+      assignment.role = newRole;
+    }
+    
+    setProjects(updatedProjects);
+
+    // Update both name and role in Supabase
+    const updatePayload = { resource_name: name, role: newRole };
+    const { error } = await callSupabase('UPDATE assignment resource & role', { id: assignmentId, ...updatePayload }, supabase.from('task_assignments').update(updatePayload).eq('id', assignmentId));
+    
+    if (error) { 
+      setProjects(previousState); 
+      alert("Failed to update resource assignment."); 
+    }
+  };
+
+  const updateAssignmentDependency = async (assignmentId: string, parentAssignmentId: string | null) => {
+    const previousState = deepClone(projects);
+    
+    // First, update the dependency link in the database.
+    const { error: depError } = await callSupabase(
+        'UPDATE assignment dependency', 
+        { id: assignmentId, parent_assignment_id: parentAssignmentId }, 
+        supabase.from('task_assignments').update({ parent_assignment_id: parentAssignmentId }).eq('id', assignmentId)
+    );
+
+    if (depError) {
+        setProjects(previousState); // Revert on error
+        alert("Failed to update task dependency.");
+        return;
+    }
+
+    // If a parent was added, recalculate start date and allocations
+    if (parentAssignmentId) {
+        const allAssignmentsFlat = projects.flatMap(p => p.modules.flatMap(m => m.tasks.flatMap(t => t.assignments)));
+        const childAssignment = allAssignmentsFlat.find(a => a.id === assignmentId);
+        const parentAssignment = allAssignmentsFlat.find(a => a.id === parentAssignmentId);
+        
+        if (childAssignment && parentAssignment) {
+            // Get all holidays to calculate working days
+            const allHolidaysSet = new Set<string>();
+            Object.values(GOV_HOLIDAYS_DB).flat().forEach(h => allHolidaysSet.add(h.date));
+            
+            // Add individual holidays for the specific resource of the parent task
+            const parentResource = resources.find(r => r.name === parentAssignment.resourceName);
+            parentResource?.individual_holidays?.forEach(h => allHolidaysSet.add(h.date));
+
+            // Also consider holidays for the CHILD resource for its own schedule
+            const childResource = resources.find(r => r.name === childAssignment.resourceName);
+            childResource?.individual_holidays?.forEach(h => allHolidaysSet.add(h.date));
+
+            const parentStartDateStr = parentAssignment.startDate || formatDateForInput(new Date());
+            const parentDuration = parentAssignment.duration || 1;
+            
+            const parentEndDateStr = calculateEndDate(parentStartDateStr, parentDuration, allHolidaysSet);
+            const childNewStartDateStr = findNextWorkingDay(parentEndDateStr, allHolidaysSet);
+
+            // This will handle DB updates and state refresh
+            await updateAssignmentSchedule(assignmentId, childNewStartDateStr, childAssignment.duration || 1);
+        } else {
+            // Fallback if assignments aren't found in current state
+            await fetchData(true);
+        }
+    } else {
+        // Dependency was removed. Refresh data to reflect the change.
+        await fetchData(true);
+    }
+  };
+  
+  const updateAssignmentSchedule = async (assignmentId: string, startDate: string, duration: number) => {
+    const propagationQueue: { assignmentId: string; startDate: string; duration: number }[] = [
+      { assignmentId, startDate, duration },
+    ];
+    const processedIds = new Set<string>();
+    const allAssignmentsFlat = projects.flatMap(p => p.modules.flatMap(m => m.tasks.flatMap(t => t.assignments)));
+
+    while (propagationQueue.length > 0) {
+      const current = propagationQueue.shift()!;
+      if (processedIds.has(current.assignmentId)) {
+        console.warn(`Circular dependency or duplicate processing for ${current.assignmentId}`);
+        continue;
+      }
+
+      // --- Database Update for the current task ---
+      const { error: scheduleError } = await callSupabase(
+        'UPDATE assignment schedule',
+        { id: current.assignmentId, startDate: current.startDate, duration: current.duration },
+        supabase.from('task_assignments').update({ start_date: current.startDate, duration: current.duration }).eq('id', current.assignmentId)
+      );
+
+      if (scheduleError) {
+        alert(`Failed to update schedule for assignment ${current.assignmentId}. Stopping propagation.`);
+        break;
+      }
+      
+      const assignmentToUpdate = allAssignmentsFlat.find(a => a.id === current.assignmentId);
+      if (!assignmentToUpdate) continue;
+
+      // --- Recalculate and Update Allocations ---
+      const newAllocations: ResourceAllocation[] = [];
+      const resource = resources.find(r => r.name === assignmentToUpdate.resourceName);
+      let resourceHolidayDates = new Set<string>();
+      if (resource) {
+          const regionalHolidays = resource.holiday_region ? (GOV_HOLIDAYS_DB[resource.holiday_region] || []) : [];
+          const individualHolidays = resource.individual_holidays || [];
+          resourceHolidayDates = new Set([...regionalHolidays.map(h => h.date), ...individualHolidays.map(h => h.date)]);
+      }
+
+      if (current.startDate && current.duration > 0) {
+          const allocationStartDate = new Date(current.startDate.replace(/-/g, '/'));
+          const allocationsMap = new Map<string, { days: Record<string, number> }>();
+          let currentDate = new Date(allocationStartDate);
+          let workingDaysAllocated = 0;
+
+          while (workingDaysAllocated < current.duration) {
+              const dayOfWeek = currentDate.getDay();
+              const dateStr = formatDateForInput(currentDate);
+
+              if (dayOfWeek !== 0 && dayOfWeek !== 6 && !resourceHolidayDates.has(dateStr)) {
+                  const weekId = getWeekIdFromDate(currentDate);
+                  if (!allocationsMap.has(weekId)) allocationsMap.set(weekId, { days: {} });
+                  allocationsMap.get(weekId)!.days[dateStr] = 1;
+                  workingDaysAllocated++;
+              }
+              currentDate.setDate(currentDate.getDate() + 1);
+          }
+
+          for (const [weekId, allocData] of allocationsMap.entries()) {
+              const count = Object.values(allocData.days).reduce((s, dayCount) => s + dayCount, 0);
+              if (count > 0) newAllocations.push({ weekId, count, days: allocData.days });
+          }
+      }
+      
+      await callSupabase('DELETE old allocations', { assignmentId: current.assignmentId }, supabase.from('resource_allocations').delete().eq('assignment_id', current.assignmentId));
+      if (newAllocations.length > 0) {
+          const toInsert = newAllocations.map(a => ({
+              assignment_id: current.assignmentId, user_id: session!.user.id, week_id: a.weekId, count: a.count, days: a.days || {},
+          }));
+          await callSupabase('INSERT new allocations', { count: toInsert.length }, supabase.from('resource_allocations').insert(toInsert));
+      }
+      
+      processedIds.add(current.assignmentId);
+
+      // --- Find Children and Add to Queue ---
+      const children = allAssignmentsFlat.filter(a => a.parentAssignmentId === current.assignmentId);
+      if (children.length > 0) {
+        const parentEndDate = calculateEndDate(current.startDate, current.duration, resourceHolidayDates);
+        for (const child of children) {
+          const childResource = resources.find(r => r.name === child.resourceName);
+          let childHolidaysSet = new Set<string>();
+          if (childResource) {
+              const regional = childResource.holiday_region ? (GOV_HOLIDAYS_DB[childResource.holiday_region] || []) : [];
+              const individual = childResource.individual_holidays || [];
+              childHolidaysSet = new Set([...regional.map(h => h.date), ...individual.map(h => h.date)]);
+          }
+          const childNewStartDate = findNextWorkingDay(parentEndDate, childHolidaysSet);
+          propagationQueue.push({ assignmentId: child.id, startDate: childNewStartDate, duration: child.duration || 1 });
+        }
+      }
+    }
+
+    await fetchData(true);
+  };
+  
+
+  const updateFunctionPoints = async (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => {
+     const previousState = deepClone(projects);
+     const module = projects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId);
+     if (module) {
+        module.legacyFunctionPoints = legacyFp;
+        module.functionPoints = mvpFp;
+        setProjects(deepClone(projects));
+     }
+     
+     const { error } = await callSupabase('UPDATE function points', { id: moduleId, legacyFp, mvpFp }, supabase.from('modules').update({ legacy_function_points: legacyFp, function_points: mvpFp }).eq('id', moduleId));
+     if (error) { setProjects(previousState); alert("Failed to update function points."); }
+  };
+  
+  const reorderModules = async (projectId: string, startIndex: number, endIndex: number) => {
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const project = updatedProjects.find(p => p.id === projectId);
+    if (!project) return;
+    
+    const [removed] = project.modules.splice(startIndex, 1);
+    project.modules.splice(endIndex, 0, removed);
+    setProjects(updatedProjects);
+    
+    const updates = project.modules.map((module, index) => ({ 
+      id: module.id, 
+      name: module.name,
+      legacy_function_points: module.legacyFunctionPoints,
+      function_points: module.functionPoints,
+      sort_order: index, 
+      project_id: projectId,
+      user_id: session!.user.id 
+    }));
+    
+    const { error } = await callSupabase('REORDER modules', { updates }, supabase.from('modules').upsert(updates));
+    if (error) { setProjects(previousState); alert("Failed to reorder modules."); }
+  };
+
+  const reorderTasks = async (projectId: string, moduleId: string, startIndex: number, endIndex: number) => {
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const project = updatedProjects.find(p => p.id === projectId);
+    if (!project) return;
+    const module = project.modules.find(m => m.id === moduleId);
+    if (!module) return;
+
+    const [removed] = module.tasks.splice(startIndex, 1);
+    module.tasks.splice(endIndex, 0, removed);
+    setProjects(updatedProjects);
+
+    const updates = module.tasks.map((task, index) => ({
+      id: task.id,
+      name: task.name,
+      sort_order: index,
+      module_id: moduleId,
+      user_id: session!.user.id
+    }));
+    
+    const { error } = await callSupabase('REORDER tasks', { updates }, supabase.from('tasks').upsert(updates));
+    if (error) { 
+        setProjects(previousState); 
+        alert("Failed to reorder tasks."); 
+    }
+  };
+
+  const reorderAssignments = async (projectId: string, moduleId: string, taskId: string, startIndex: number, endIndex: number) => {
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const task = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const [removed] = task.assignments.splice(startIndex, 1);
+    task.assignments.splice(endIndex, 0, removed);
+    setProjects(updatedProjects);
+    
+    const updates = task.assignments.map((assignment, index) => ({
+      id: assignment.id,
+      task_id: taskId,
+      role: assignment.role,
+      resource_name: assignment.resourceName,
+      start_date: assignment.startDate,
+      duration: assignment.duration,
+      parent_assignment_id: assignment.parentAssignmentId,
+      sort_order: index,
+      user_id: session!.user.id,
+    }));
+    
+    const { error } = await callSupabase('REORDER assignments', { updates: updates.length }, supabase.from('task_assignments').upsert(updates));
+    if (error) { 
+        setProjects(previousState); 
+        alert("Failed to reorder assignments."); 
+    }
+  };
+  
+  const onShiftTask = async (projectId: string, moduleId: string, taskId: string, direction: 'left' | 'right') => {
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const task = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
+    if (!task) return;
+  
+    const allAssignmentIds = task.assignments.map(a => a.id);
+    if(allAssignmentIds.length === 0) return;
+  
+    const allNewAllocationsForDB: any[] = [];
+  
+    for (const assignment of task.assignments) {
+      const newAllocationsMap = new Map<string, ResourceAllocation>();
+      for (const alloc of assignment.allocations) {
+        const newWeekId = shiftWeekId(alloc.weekId, direction);
+        if (newAllocationsMap.has(newWeekId)) {
+          const existing = newAllocationsMap.get(newWeekId)!;
+          existing.count += alloc.count;
+          existing.days = {};
+        } else {
+          newAllocationsMap.set(newWeekId, { ...alloc, weekId: newWeekId });
+        }
+      }
+      assignment.allocations = Array.from(newAllocationsMap.values());
+      assignment.allocations.forEach(a => allNewAllocationsForDB.push({ assignment_id: assignment.id, user_id: session!.user.id, week_id: a.weekId, count: a.count, days: a.days || {} }));
+    }
+    
+    setProjects(updatedProjects);
+  
+    setSaveStatus('saving');
+    const { error: delErr } = await supabase.from('resource_allocations').delete().in('assignment_id', allAssignmentIds);
+    if (delErr) { setSaveStatus('error'); setProjects(previousState); return; }
+    
+    if (allNewAllocationsForDB.length > 0) {
+      const { error: insErr } = await supabase.from('resource_allocations').insert(allNewAllocationsForDB);
+      if (insErr) { setSaveStatus('error'); fetchData(true); return; }
+    }
+  
+    setSaveStatus('success');
+    statusTimeoutRef.current = window.setTimeout(() => setSaveStatus('idle'), 3000);
+  };
+
+  const onImportPlan = async (importedProjects: Project[], importedHolidays: Holiday[]) => {
+    log('Starting plan import', { projects: importedProjects.length, holidays: importedHolidays.length });
+    setLoading(true);
+  
+    await callSupabase('DELETE all projects for import', {}, supabase.from('projects').delete().eq('user_id', session!.user.id));
+    
+    for (const project of importedProjects) {
+      const { data: newProject } = await callSupabase('INSERT imported project', {name: project.name}, supabase.from('projects').insert({ name: project.name, user_id: session!.user.id }).select().single());
+      if (newProject) {
+        for (const [moduleIndex, module] of project.modules.entries()) {
+          const { data: newModule } = await callSupabase('INSERT imported module', {name: module.name}, supabase.from('modules').insert({ 
+            name: module.name, 
+            project_id: newProject.id, 
+            user_id: session!.user.id, 
+            function_points: module.functionPoints, 
+            legacy_function_points: module.legacyFunctionPoints,
+            sort_order: moduleIndex,
+          }).select().single());
+          if (newModule) {
+            for (const [taskIndex, task] of module.tasks.entries()) {
+              const { data: newTask } = await callSupabase('INSERT imported task', {name: task.name}, supabase.from('tasks').insert({ 
+                name: task.name, 
+                module_id: newModule.id, 
+                user_id: session!.user.id,
+                sort_order: taskIndex,
+              }).select().single());
+              if (newTask) {
+                for (const assignment of task.assignments) {
+                  const { data: newAssignment } = await callSupabase('INSERT imported assignment', {role: assignment.role}, supabase.from('task_assignments').insert({ task_id: newTask.id, role: assignment.role, resource_name: assignment.resourceName, user_id: session!.user.id, start_date: formatDateForInput(new Date()), duration: 1 }).select().single());
+                  if (newAssignment && assignment.allocations.length > 0) {
+                    const allocationsToInsert = assignment.allocations.map(alloc => ({ assignment_id: newAssignment.id, week_id: alloc.weekId, count: alloc.count, days: alloc.days || {}, user_id: session!.user.id, }));
+                    await callSupabase('INSERT imported allocations', {}, supabase.from('resource_allocations').insert(allocationsToInsert));
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  
+    await fetchData(true);
+    log('Finished plan import', {}, 'success');
+  };
+
+  const handleSaveVersion = async (name: string) => {
+    const { error } = await callSupabase('SAVE version', { name }, supabase.from('versions').insert({ name, user_id: session!.user.id, data: { projects, holidays, resources } }));
+    if (error) { alert("Error: Could not save version."); } 
+    else { alert(`Version '${name}' saved successfully!`); }
+  };
+
+  const handleRestoreVersion = async (id: number) => {
+    const { data: version, error } = await callSupabase('FETCH version for restore', { id }, supabase.from('versions').select('data').eq('id', id).single());
+    if (error || !version) { alert("Error: Version not found."); return; }
+    
+    log('Start restoring version', { id });
+    await supabase.from('projects').delete().eq('user_id', session!.user.id);
+    await supabase.from('resources').delete().eq('user_id', session!.user.id);
+    
+    setProjects(version.data.projects || []);
+    setResources(version.data.resources || []);
+    
+    alert(`Version restored. Any new changes will be saved to your current state.`);
+    setShowHistory(false);
+  };
+
+  // --- Resource Management ---
+  const addResource = async (name: string, category: Role, region: string, type: 'Internal' | 'External') => {
+    const { error } = await callSupabase(
+      'CREATE resource', { name, category, region, type },
+      supabase.from('resources').insert({ name, category, holiday_region: region, type, user_id: session!.user.id }).select().single()
+    );
+    if (error) { 
+      alert('Failed to add resource.'); 
+    } else {
+      fetchData(true);
+    }
+  };
+
+  const updateResourceCategory = async (id: string, category: Role) => {
+    const { error } = await callSupabase(
+      'UPDATE resource category', { id, category },
+      supabase.from('resources').update({ category }).eq('id', id)
+    );
+    if (error) { alert('Failed to update resource category.'); }
+    else { fetchData(true); }
+  };
+
+  const updateResourceRegion = async (id: string, region: string | null) => {
+    const { error } = await callSupabase(
+      'UPDATE resource region', { id, region },
+      supabase.from('resources').update({ holiday_region: region }).eq('id', id)
+    );
+    if (error) { alert('Failed to update resource region.'); }
+    else { fetchData(true); }
+  };
+  
+  const updateResourceType = async (id: string, type: 'Internal' | 'External') => {
+    const { error } = await callSupabase(
+      'UPDATE resource type', { id, type },
+      supabase.from('resources').update({ type }).eq('id', id)
+    );
+    if (error) { alert('Failed to update resource type.'); }
+    else { fetchData(true); }
+  };
+
+  const deleteResource = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this resource? This will unassign them from all tasks.')) {
+        const { error } = await callSupabase('DELETE resource', { id }, supabase.from('resources').delete().eq('id', id));
+        if (error) { alert('Failed to delete resource.'); }
+        else { fetchData(true); }
+    }
+  };
+
+  const addIndividualHoliday = async (resourceId: string, date: string, name: string) => {
+    const { error } = await callSupabase(
+      'CREATE individual holiday', { resourceId, date, name },
+      supabase.from('individual_holidays').insert({ resource_id: resourceId, date, name, user_id: session!.user.id })
+    );
+    if (error) { alert('Failed to add individual holiday.'); } 
+    else { fetchData(true); }
+  };
+
+  const deleteIndividualHoliday = async (holidayId: string) => {
+    if (window.confirm('Are you sure you want to delete this individual holiday?')) {
+      const { error } = await callSupabase('DELETE individual holiday', { holidayId }, supabase.from('individual_holidays').delete().eq('id', holidayId));
+      if (error) { alert('Failed to delete individual holiday.'); } 
+      else { fetchData(true); }
+    }
+  };
+
+  if (!session) {
+    return (
+      <div className="flex justify-center items-center h-screen bg-slate-100">
+        <div className="w-full max-w-md p-8 bg-white rounded-xl shadow-lg">
+          <Auth supabaseClient={supabase} appearance={{ theme: ThemeSupa }} providers={['google', 'github']} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {showHistory && <VersionHistory onClose={() => setShowHistory(false)} onRestore={handleRestoreVersion} onSaveCurrent={handleSaveVersion}/>}
+      {isDebugLogEnabled && <DebugLog entries={logEntries} setEntries={setLogEntries} />}
+      <div className="flex h-screen w-full bg-slate-100">
+        <aside className={`${isSidebarCollapsed ? 'w-20' : 'w-64'} bg-slate-900 text-slate-300 flex flex-col shadow-xl transition-all duration-300 ease-in-out`}>
+          <div className={`p-4 border-b border-slate-800 flex flex-col gap-4 ${isSidebarCollapsed ? 'items-center' : ''}`}>
+            <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center flex-col gap-4' : 'justify-between'}`}>
+              <div className="flex items-center gap-3 overflow-hidden">
+                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold flex-shrink-0">OM</div>
+                {!isSidebarCollapsed && <span className="font-bold text-lg text-white whitespace-nowrap">Resourcer</span>}
+              </div>
+              <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-800 hover:text-white" title={isSidebarCollapsed ? "Expand" : "Collapse"}>
+                {isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+              </button>
+            </div>
+          </div>
+          <nav className="flex-1 p-2 space-y-2 mt-2">
+            <button onClick={() => setActiveTab('dashboard')} title="Dashboard" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><LayoutDashboard size={20} />{!isSidebarCollapsed && <span className="font-medium">Dashboard</span>}</button>
+            <button onClick={() => setActiveTab('planner')} title="Planner" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'planner' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><Calendar size={20} />{!isSidebarCollapsed && <span className="font-medium">Planner</span>}</button>
+            <button onClick={() => setActiveTab('estimator')} title="Estimator" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'estimator' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><Calculator size={20} />{!isSidebarCollapsed && <span className="font-medium">Estimator</span>}</button>
+            <button onClick={() => setActiveTab('resources')} title="Resources" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'resources' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><Users size={20} />{!isSidebarCollapsed && <span className="font-medium">Resources</span>}</button>
+          </nav>
+          <div className="p-2 border-t border-slate-800">
+            <div className={`p-2 ${isSidebarCollapsed ? '' : 'mb-2'}`}>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-indigo-500 text-white flex items-center justify-center font-bold rounded-full flex-shrink-0">
+                  {session.user.email ? session.user.email[0].toUpperCase() : 'U'}
+                </div>
+                {!isSidebarCollapsed && (
+                  <div className="overflow-hidden">
+                    <p className="text-sm font-semibold text-white truncate" title={session.user.email}>{session.user.email}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <button onClick={() => setActiveTab('settings')} title="Settings" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-3 py-2 text-sm rounded-lg ${activeTab === 'settings' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><SettingsIcon size={16} />{!isSidebarCollapsed && <span>Settings</span>}</button>
+              <button onClick={() => supabase.auth.signOut()} title="Sign Out" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-3 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-800`}><LogOut size={16} />{!isSidebarCollapsed && <span>Sign Out</span>}</button>
+            </div>
+          </div>
+        </aside>
+        <main className="flex-1 flex flex-col overflow-hidden">
+          <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
+            <h1 className="text-xl font-bold text-slate-800">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</h1>
+          </header>
+          <div className="flex-1 overflow-auto p-6">
+            {loading ? <div className="text-center p-8 text-slate-500">Loading your data...</div> : (
+              <>
+                {activeTab === 'dashboard' && <Dashboard projects={projects} />}
+                {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentResourceName={updateAssignmentResourceName} onUpdateAssignmentDependency={updateAssignmentDependency} onAddTask={addTask} onAddAssignment={addAssignment} onCopyAssignment={onCopyAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onReorderAssignments={reorderAssignments} onShiftTask={onShiftTask} onUpdateAssignmentSchedule={updateAssignmentSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={onImportPlan} onShowHistory={() => setShowHistory(true)} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
+                {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
+                {activeTab === 'resources' && <Resources resources={resources} onAddResource={addResource} onDeleteResource={deleteResource} onUpdateResourceCategory={updateResourceCategory} onUpdateResourceRegion={updateResourceRegion} onAddIndividualHoliday={addIndividualHoliday} onDeleteIndividualHoliday={deleteIndividualHoliday} onUpdateResourceType={updateResourceType} />}
+                {activeTab === 'settings' && <Settings isDebugLogEnabled={isDebugLogEnabled} setIsDebugLogEnabled={setIsDebugLogEnabled} />}
+              </>
+            )}
+          </div>
+        </main>
+      </div>
+    </>
+  );
 };
 
 export default App;
