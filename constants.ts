@@ -1,4 +1,3 @@
-
 import { TimelineColumn, ViewMode, Holiday } from './types';
 
 // Mock "Government Database" - Expanded for 2024-2027

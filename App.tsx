@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput } from './constants';
+import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
@@ -567,41 +567,53 @@ const App: React.FC = () => {
 
   const updateAssignmentDependency = async (assignmentId: string, parentAssignmentId: string | null) => {
     const previousState = deepClone(projects);
-    const updatedProjects = deepClone(projects);
     
-    let assignment: TaskAssignment | undefined;
-    for (const project of updatedProjects) {
-        for (const module of project.modules) {
-            for (const task of module.tasks) {
-                const found = task.assignments.find(a => a.id === assignmentId);
-                if (found) {
-                    assignment = found;
-                    break;
-                }
-            }
-            if (assignment) break;
-        }
-        if (assignment) break;
-    }
-
-    if (assignment) {
-        assignment.parentAssignmentId = parentAssignmentId || undefined;
-        setProjects(updatedProjects);
-    } else {
-        return; // Assignment not found
-    }
-
-    const { error } = await callSupabase(
+    // First, update the dependency link in the database.
+    const { error: depError } = await callSupabase(
         'UPDATE assignment dependency', 
         { id: assignmentId, parent_assignment_id: parentAssignmentId }, 
         supabase.from('task_assignments').update({ parent_assignment_id: parentAssignmentId }).eq('id', assignmentId)
     );
 
-    if (error) {
-        setProjects(previousState);
+    if (depError) {
+        setProjects(previousState); // Revert on error
         alert("Failed to update task dependency.");
+        return;
+    }
+
+    // If a parent was added, recalculate start date and allocations
+    if (parentAssignmentId) {
+        const allAssignmentsFlat = projects.flatMap(p => p.modules.flatMap(m => m.tasks.flatMap(t => t.assignments)));
+        const childAssignment = allAssignmentsFlat.find(a => a.id === assignmentId);
+        const parentAssignment = allAssignmentsFlat.find(a => a.id === parentAssignmentId);
+        
+        if (childAssignment && parentAssignment) {
+            // Get all holidays to calculate working days
+            const allHolidaysSet = new Set<string>();
+            Object.values(GOV_HOLIDAYS_DB).flat().forEach(h => allHolidaysSet.add(h.date));
+            
+            // Add individual holidays for the specific resource of the parent task
+            const parentResource = resources.find(r => r.name === parentAssignment.resourceName);
+            parentResource?.individual_holidays?.forEach(h => allHolidaysSet.add(h.date));
+
+            // Also consider holidays for the CHILD resource for its own schedule
+            const childResource = resources.find(r => r.name === childAssignment.resourceName);
+            childResource?.individual_holidays?.forEach(h => allHolidaysSet.add(h.date));
+
+            const parentStartDateStr = parentAssignment.startDate || formatDateForInput(new Date());
+            const parentDuration = parentAssignment.duration || 1;
+            
+            const parentEndDateStr = calculateEndDate(parentStartDateStr, parentDuration, allHolidaysSet);
+            const childNewStartDateStr = findNextWorkingDay(parentEndDateStr, allHolidaysSet);
+
+            // This will handle DB updates and state refresh
+            await updateAssignmentSchedule(assignmentId, childNewStartDateStr, childAssignment.duration || 1);
+        } else {
+            // Fallback if assignments aren't found in current state
+            await fetchData(true);
+        }
     } else {
-        // Dependencies can affect calculated start dates, so refresh data.
+        // Dependency was removed. Refresh data to reflect the change.
         await fetchData(true);
     }
   };

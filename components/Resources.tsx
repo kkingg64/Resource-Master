@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Resource, Role, IndividualHoliday } from '../types';
 import { Users, Plus, Trash2, Calendar, ChevronDown } from 'lucide-react';
 import { GOV_HOLIDAYS_DB } from '../constants';
@@ -41,7 +41,7 @@ const IndividualHolidayManager: React.FC<{
 
 
   return (
-    <div className="bg-slate-100 p-4 mt-2 rounded-b-lg border-t border-slate-200">
+    <div className="bg-slate-100 p-4 rounded-b-lg border-t border-slate-200">
        <h4 className="text-xs font-bold text-slate-600 mb-3">Manage Individual Holidays</h4>
       <form onSubmit={handleAddHoliday} className="flex gap-2 mb-4">
         <input type="date" value={date} onChange={e => setDate(e.target.value)} required className="p-2 border border-slate-300 rounded-lg text-sm w-40"/>
@@ -103,6 +103,33 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
 
   const countries = Object.keys(GOV_HOLIDAYS_DB);
 
+  const groupedAndSortedResources = useMemo(() => {
+    const groups: Record<string, Record<string, Resource[]>> = {};
+
+    resources.forEach(resource => {
+        const department = resource.category || 'Uncategorized';
+        const country = resource.holiday_region || 'No Region';
+
+        if (!groups[department]) {
+            groups[department] = {};
+        }
+        if (!groups[department][country]) {
+            groups[department][country] = [];
+        }
+        groups[department][country].push(resource);
+    });
+
+    const sortedDepartments = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+    
+    return sortedDepartments.map(department => ({
+        department,
+        countries: Object.keys(groups[department]).sort((a, b) => a.localeCompare(b)).map(country => ({
+            country,
+            resources: groups[department][country] // Already sorted by name from App.tsx
+        }))
+    }));
+  }, [resources]);
+
   return (
     <div className="max-w-5xl mx-auto">
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
@@ -134,45 +161,59 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
           {resources.length === 0 ? (
             <div className="text-center p-4 text-slate-400 border border-dashed rounded-lg">No resources added yet.</div>
           ) : (
-            <ul className="border border-slate-200 rounded-lg">
-              {resources.map(resource => (
-                <li key={resource.id} className="border-b border-slate-100 last:border-b-0">
-                  <div className="p-3 grid grid-cols-3 items-center gap-4 hover:bg-slate-50/50">
-                    <div className="flex items-center gap-3">
-                      <span className="font-medium text-slate-700 w-32 truncate">{resource.name}</span>
-                      <select value={resource.category} onChange={(e) => onUpdateResourceCategory(resource.id, e.target.value as Role)} className={`text-xs font-semibold rounded-full appearance-none bg-transparent border px-2 py-0.5 focus:ring-2 cursor-pointer ${categoryColors[resource.category] || 'bg-slate-100 text-slate-600 border-slate-200 focus:ring-slate-500'}`}>
-                          {Object.values(Role).map(cat => (<option key={cat} value={cat}>{cat}</option>))}
-                      </select>
-                    </div>
-                     <div className="flex items-center gap-2">
-                       <select value={resource.type || 'Internal'} onChange={(e) => onUpdateResourceType(resource.id, e.target.value as 'Internal' | 'External')} className="text-xs font-medium rounded-md appearance-none bg-white border border-slate-200 px-2 py-1 focus:ring-2 focus:ring-indigo-500 cursor-pointer">
-                          <option value="Internal">Internal</option>
-                          <option value="External">External</option>
-                        </select>
-                       <select value={resource.holiday_region || ''} onChange={(e) => onUpdateResourceRegion(resource.id, e.target.value || null)} className="text-xs font-medium rounded-md appearance-none bg-white border border-slate-200 px-2 py-1 focus:ring-2 focus:ring-indigo-500 cursor-pointer">
-                          <option value="">No Region</option>
-                          {countries.map(code => (<option key={code} value={code}>{code} Holidays</option>))}
-                      </select>
-                     </div>
-                    <div className="flex items-center gap-3 justify-end">
-                      <button onClick={() => setExpandedResourceId(prev => prev === resource.id ? null : resource.id)} className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md ${expandedResourceId === resource.id ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100'}`}>
-                        <Calendar size={12} /> Holidays <ChevronDown size={14} className={`transition-transform ${expandedResourceId === resource.id ? 'rotate-180' : ''}`} />
-                      </button>
-                      <button onClick={() => onDeleteResource(resource.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors" title={`Delete ${resource.name}`}>
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+             <div className="border border-slate-200 rounded-lg overflow-hidden">
+                {/* FIX: Renamed destructured `countries` to `countryGroups` to avoid shadowing the `countries` variable from the outer scope. */}
+                {groupedAndSortedResources.map(({ department, countries: countryGroups }) => (
+                  <div key={department} className="border-b border-slate-200 last:border-b-0">
+                    <h3 className="bg-slate-100 p-3 text-sm font-bold text-slate-700 tracking-wider uppercase">{department}</h3>
+                    {/* FIX: Use the renamed `countryGroups` variable for mapping. */}
+                    {countryGroups.map(({ country, resources: countryResources }) => (
+                      <div key={country}>
+                        <h4 className="bg-slate-50 px-6 py-2 text-xs font-semibold text-slate-500 uppercase border-y border-slate-100">{country}</h4>
+                        <ul>
+                          {countryResources.map(resource => (
+                            <li key={resource.id} className="border-b border-slate-100 last:border-b-0">
+                              <div className="p-3 pl-6 grid grid-cols-3 items-center gap-4 hover:bg-slate-50/50">
+                                <div className="flex items-center gap-3">
+                                  <span className="font-medium text-slate-700 w-32 truncate">{resource.name}</span>
+                                  <select value={resource.category} onChange={(e) => onUpdateResourceCategory(resource.id, e.target.value as Role)} className={`text-xs font-semibold rounded-full appearance-none bg-transparent border px-2 py-0.5 focus:ring-2 cursor-pointer ${categoryColors[resource.category] || 'bg-slate-100 text-slate-600 border-slate-200 focus:ring-slate-500'}`}>
+                                    {Object.values(Role).map(cat => (<option key={cat} value={cat}>{cat}</option>))}
+                                  </select>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <select value={resource.type || 'Internal'} onChange={(e) => onUpdateResourceType(resource.id, e.target.value as 'Internal' | 'External')} className="text-xs font-medium rounded-md appearance-none bg-white border border-slate-200 px-2 py-1 focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                                    <option value="Internal">Internal</option>
+                                    <option value="External">External</option>
+                                  </select>
+                                  <select value={resource.holiday_region || ''} onChange={(e) => onUpdateResourceRegion(resource.id, e.target.value || null)} className="text-xs font-medium rounded-md appearance-none bg-white border border-slate-200 px-2 py-1 focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                                    <option value="">No Region</option>
+                                    {countries.map(code => (<option key={code} value={code}>{code} Holidays</option>))}
+                                  </select>
+                                </div>
+                                <div className="flex items-center gap-3 justify-end">
+                                  <button onClick={() => setExpandedResourceId(prev => prev === resource.id ? null : resource.id)} className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md ${expandedResourceId === resource.id ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100'}`}>
+                                    <Calendar size={12} /> Holidays <ChevronDown size={14} className={`transition-transform ${expandedResourceId === resource.id ? 'rotate-180' : ''}`} />
+                                  </button>
+                                  <button onClick={() => onDeleteResource(resource.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors" title={`Delete ${resource.name}`}>
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                              </div>
+                              {expandedResourceId === resource.id && (
+                                <IndividualHolidayManager
+                                  resource={resource}
+                                  onAdd={(date, name) => onAddIndividualHoliday(resource.id, date, name)}
+                                  onDelete={onDeleteIndividualHoliday}
+                                />
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
                   </div>
-                  {expandedResourceId === resource.id && (
-                     <IndividualHolidayManager 
-                       resource={resource}
-                       onAdd={(date, name) => onAddIndividualHoliday(resource.id, date, name)}
-                       onDelete={onDeleteIndividualHoliday}
-                     />
-                  )}
-                </li>
-              ))}
-            </ul>
+                ))}
+              </div>
           )}
         </div>
       </div>
