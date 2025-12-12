@@ -142,8 +142,8 @@ const App: React.FC = () => {
                 supabase.from('projects').select('*').order('created_at'),
                 supabase.from('modules').select('*').order('sort_order'),
                 supabase.from('tasks').select('*').order('sort_order'),
-                supabase.from('assignments').select('*').order('sort_order'),
-                supabase.from('allocations').select('*'),
+                supabase.from('task_assignments').select('*').order('sort_order'),
+                supabase.from('task_allocations').select('*'),
                 supabase.from('holidays').select('*'),
                 supabase.from('resources').select('*, individual_holidays(*)')
             ]);
@@ -244,7 +244,7 @@ const App: React.FC = () => {
                newDays[dayDate] = value;
                const newCount = Object.values(newDays).reduce((s, v) => s + v, 0);
                
-               const { error } = await supabase.from('allocations').upsert({
+               const { error } = await supabase.from('task_allocations').upsert({
                    assignment_id: assignmentId,
                    week_id: weekId,
                    count: newCount,
@@ -252,7 +252,7 @@ const App: React.FC = () => {
                }, { onConflict: 'assignment_id,week_id' });
                if (error) throw error;
            } else {
-                const { error } = await supabase.from('allocations').upsert({
+                const { error } = await supabase.from('task_allocations').upsert({
                    assignment_id: assignmentId,
                    week_id: weekId,
                    count: value
@@ -270,7 +270,7 @@ const App: React.FC = () => {
 
     const handleUpdateAssignmentResourceName = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => {
         setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? { ...t, assignments: t.assignments.map(a => a.id === assignmentId ? { ...a, resourceName: name } : a) } : t) } : m) } : p));
-        await supabase.from('assignments').update({ resource_name: name }).eq('id', assignmentId);
+        await supabase.from('task_assignments').update({ resource_name: name }).eq('id', assignmentId);
     };
 
     const handleUpdateAssignmentDependency = async (assignmentId: string, parentAssignmentId: string | null) => {
@@ -284,7 +284,7 @@ const App: React.FC = () => {
                  }))
              }))
          })));
-         await supabase.from('assignments').update({ parent_assignment_id: parentAssignmentId }).eq('id', assignmentId);
+         await supabase.from('task_assignments').update({ parent_assignment_id: parentAssignmentId }).eq('id', assignmentId);
     };
 
     const handleAddTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
@@ -297,7 +297,7 @@ const App: React.FC = () => {
         const newId = crypto.randomUUID();
         const newAssignment: TaskAssignment = { id: newId, role, allocations: [] };
         setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? { ...t, assignments: [...t.assignments, newAssignment] } : t) } : m) } : p));
-        await supabase.from('assignments').insert({ id: newId, task_id: taskId, role, sort_order: 999 });
+        await supabase.from('task_assignments').insert({ id: newId, task_id: taskId, role, sort_order: 999 });
     };
 
     const handleCopyAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
@@ -310,10 +310,10 @@ const App: React.FC = () => {
         
         setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? { ...t, assignments: [...t.assignments, copy] } : t) } : m) } : p));
         
-        await supabase.from('assignments').insert({ id: newId, task_id: taskId, role: copy.role, start_date: copy.startDate, duration: copy.duration, sort_order: 999 });
+        await supabase.from('task_assignments').insert({ id: newId, task_id: taskId, role: copy.role, start_date: copy.startDate, duration: copy.duration, sort_order: 999 });
         if (copy.allocations.length > 0) {
             const allocsToInsert = copy.allocations.map(a => ({ assignment_id: newId, week_id: a.weekId, count: a.count, days: a.days }));
-            await supabase.from('allocations').insert(allocsToInsert);
+            await supabase.from('task_allocations').insert(allocsToInsert);
         }
     };
 
@@ -361,7 +361,7 @@ const App: React.FC = () => {
 
          const updates = newAssignments.map((a, idx) => ({ id: a.id, sort_order: idx }));
          for (const update of updates) {
-             await supabase.from('assignments').update({ sort_order: update.sort_order }).eq('id', update.id);
+             await supabase.from('task_assignments').update({ sort_order: update.sort_order }).eq('id', update.id);
          }
     };
 
@@ -380,7 +380,7 @@ const App: React.FC = () => {
                  }))
              }))
          })));
-         await supabase.from('assignments').update({ start_date: startDate, duration }).eq('id', assignmentId);
+         await supabase.from('task_assignments').update({ start_date: startDate, duration }).eq('id', assignmentId);
     };
 
     const handleAddProject = async () => {
@@ -433,7 +433,7 @@ const App: React.FC = () => {
     const handleDeleteAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
         if(!confirm("Are you sure?")) return;
         setProjects(prev => prev.map(p => p.id === projectId ? { ...p, modules: p.modules.map(m => m.id === moduleId ? { ...m, tasks: m.tasks.map(t => t.id === taskId ? { ...t, assignments: t.assignments.filter(a => a.id !== assignmentId) } : t) } : m) } : p));
-        await supabase.from('assignments').delete().eq('id', assignmentId);
+        await supabase.from('task_assignments').delete().eq('id', assignmentId);
     };
     
     const handleAddResource = async (name: string, category: Role, region: string, type: 'Internal' | 'External') => {
