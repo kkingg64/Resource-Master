@@ -618,116 +618,99 @@ const App: React.FC = () => {
     }
   };
   
-  // FIX: Refactored function to accept only the required arguments from PlannerGrid, resolving the type mismatch.
   const updateAssignmentSchedule = async (assignmentId: string, startDate: string, duration: number) => {
-    const previousState = deepClone(projects);
-    const updatedProjects = deepClone(projects);
+    const propagationQueue: { assignmentId: string; startDate: string; duration: number }[] = [
+      { assignmentId, startDate, duration },
+    ];
+    const processedIds = new Set<string>();
+    const allAssignmentsFlat = projects.flatMap(p => p.modules.flatMap(m => m.tasks.flatMap(t => t.assignments)));
 
-    let assignment: TaskAssignment | undefined;
-    
-    // Find the assignment by its ID
-    for (const p of updatedProjects) {
-      for (const m of p.modules) {
-        for (const t of m.tasks) {
-          const foundAssignment = t.assignments.find(a => a.id === assignmentId);
-          if (foundAssignment) {
-            assignment = foundAssignment;
-            break;
-          }
-        }
-        if (assignment) break;
+    while (propagationQueue.length > 0) {
+      const current = propagationQueue.shift()!;
+      if (processedIds.has(current.assignmentId)) {
+        console.warn(`Circular dependency or duplicate processing for ${current.assignmentId}`);
+        continue;
       }
-      if (assignment) break;
-    }
-  
-    if (!assignment) return;
-  
-    assignment.startDate = startDate;
-    assignment.duration = duration;
-  
-    const newAllocations: ResourceAllocation[] = [];
-    if (startDate && duration > 0) {
-      // Use replace to avoid timezone issues with `new Date()`
-      const allocationStartDate = new Date(startDate.replace(/-/g, '/'));
+
+      // --- Database Update for the current task ---
+      const { error: scheduleError } = await callSupabase(
+        'UPDATE assignment schedule',
+        { id: current.assignmentId, startDate: current.startDate, duration: current.duration },
+        supabase.from('task_assignments').update({ start_date: current.startDate, duration: current.duration }).eq('id', current.assignmentId)
+      );
+
+      if (scheduleError) {
+        alert(`Failed to update schedule for assignment ${current.assignmentId}. Stopping propagation.`);
+        break;
+      }
       
-      const allocationsMap = new Map<string, { days: Record<string, number> }>();
-      
-      // Get holidays for the specific resource
-      const resource = resources.find(r => r.name === assignment.resourceName);
+      const assignmentToUpdate = allAssignmentsFlat.find(a => a.id === current.assignmentId);
+      if (!assignmentToUpdate) continue;
+
+      // --- Recalculate and Update Allocations ---
+      const newAllocations: ResourceAllocation[] = [];
+      const resource = resources.find(r => r.name === assignmentToUpdate.resourceName);
       let resourceHolidayDates = new Set<string>();
       if (resource) {
-        const regionalHolidays = resource.holiday_region ? (GOV_HOLIDAYS_DB[resource.holiday_region] || []) : [];
-        const individualHolidays = resource.individual_holidays || [];
-        resourceHolidayDates = new Set([
-            ...regionalHolidays.map(h => h.date),
-            ...individualHolidays.map(h => h.date)
-        ]);
+          const regionalHolidays = resource.holiday_region ? (GOV_HOLIDAYS_DB[resource.holiday_region] || []) : [];
+          const individualHolidays = resource.individual_holidays || [];
+          resourceHolidayDates = new Set([...regionalHolidays.map(h => h.date), ...individualHolidays.map(h => h.date)]);
       }
 
-      let currentDate = new Date(allocationStartDate);
-      let workingDaysAllocated = 0;
+      if (current.startDate && current.duration > 0) {
+          const allocationStartDate = new Date(current.startDate.replace(/-/g, '/'));
+          const allocationsMap = new Map<string, { days: Record<string, number> }>();
+          let currentDate = new Date(allocationStartDate);
+          let workingDaysAllocated = 0;
 
-      while (workingDaysAllocated < duration) {
-        const dayOfWeek = currentDate.getDay();
-        const dateStr = formatDateForInput(currentDate);
+          while (workingDaysAllocated < current.duration) {
+              const dayOfWeek = currentDate.getDay();
+              const dateStr = formatDateForInput(currentDate);
 
-        if (dayOfWeek !== 0 && dayOfWeek !== 6 && !resourceHolidayDates.has(dateStr)) {
-          const weekId = getWeekIdFromDate(currentDate);
-          if (!allocationsMap.has(weekId)) {
-            allocationsMap.set(weekId, { days: {} });
+              if (dayOfWeek !== 0 && dayOfWeek !== 6 && !resourceHolidayDates.has(dateStr)) {
+                  const weekId = getWeekIdFromDate(currentDate);
+                  if (!allocationsMap.has(weekId)) allocationsMap.set(weekId, { days: {} });
+                  allocationsMap.get(weekId)!.days[dateStr] = 1;
+                  workingDaysAllocated++;
+              }
+              currentDate.setDate(currentDate.getDate() + 1);
           }
-          const weekData = allocationsMap.get(weekId)!;
-          weekData.days[dateStr] = 1; // Allocate 1 manday
-          workingDaysAllocated++;
-        }
-        
-        currentDate.setDate(currentDate.getDate() + 1);
+
+          for (const [weekId, allocData] of allocationsMap.entries()) {
+              const count = Object.values(allocData.days).reduce((s, dayCount) => s + dayCount, 0);
+              if (count > 0) newAllocations.push({ weekId, count, days: allocData.days });
+          }
       }
-  
-      for (const [weekId, allocData] of allocationsMap.entries()) {
-        const count = Object.values(allocData.days).reduce((s, dayCount) => s + dayCount, 0);
-        if (count > 0) {
-          newAllocations.push({ weekId, count, days: allocData.days });
+      
+      await callSupabase('DELETE old allocations', { assignmentId: current.assignmentId }, supabase.from('resource_allocations').delete().eq('assignment_id', current.assignmentId));
+      if (newAllocations.length > 0) {
+          const toInsert = newAllocations.map(a => ({
+              assignment_id: current.assignmentId, user_id: session!.user.id, week_id: a.weekId, count: a.count, days: a.days || {},
+          }));
+          await callSupabase('INSERT new allocations', { count: toInsert.length }, supabase.from('resource_allocations').insert(toInsert));
+      }
+      
+      processedIds.add(current.assignmentId);
+
+      // --- Find Children and Add to Queue ---
+      const children = allAssignmentsFlat.filter(a => a.parentAssignmentId === current.assignmentId);
+      if (children.length > 0) {
+        const parentEndDate = calculateEndDate(current.startDate, current.duration, resourceHolidayDates);
+        for (const child of children) {
+          const childResource = resources.find(r => r.name === child.resourceName);
+          let childHolidaysSet = new Set<string>();
+          if (childResource) {
+              const regional = childResource.holiday_region ? (GOV_HOLIDAYS_DB[childResource.holiday_region] || []) : [];
+              const individual = childResource.individual_holidays || [];
+              childHolidaysSet = new Set([...regional.map(h => h.date), ...individual.map(h => h.date)]);
+          }
+          const childNewStartDate = findNextWorkingDay(parentEndDate, childHolidaysSet);
+          propagationQueue.push({ assignmentId: child.id, startDate: childNewStartDate, duration: child.duration || 1 });
         }
       }
     }
-    assignment.allocations = newAllocations;
-  
-    setProjects(updatedProjects);
-  
-    const { error: scheduleError } = await callSupabase(
-      'UPDATE assignment schedule', 
-      { id: assignmentId, startDate, duration }, 
-      supabase.from('task_assignments').update({ start_date: startDate, duration }).eq('id', assignmentId)
-    );
-  
-    if (scheduleError) {
-      setProjects(previousState);
-      alert("Failed to update task schedule.");
-      return;
-    }
-  
-    await callSupabase(
-      'DELETE old allocations', 
-      { assignmentId }, 
-      supabase.from('resource_allocations').delete().eq('assignment_id', assignmentId)
-    );
-  
-    if (newAllocations.length > 0) {
-      const toInsert = newAllocations.map(a => ({
-        assignment_id: assignmentId,
-        user_id: session!.user.id,
-        week_id: a.weekId,
-        count: a.count,
-        days: a.days || {}
-      }));
-      await callSupabase(
-        'INSERT new allocations', 
-        { count: toInsert.length }, 
-        supabase.from('resource_allocations').insert(toInsert)
-      );
-    }
-    fetchData(true);
+
+    await fetchData(true);
   };
   
 
