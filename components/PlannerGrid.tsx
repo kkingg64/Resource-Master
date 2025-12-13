@@ -827,6 +827,25 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     const moduleEditId = `module::${project.id}::${module.id}`;
                     const isEditingModule = editingId === moduleEditId;
 
+                    let moduleEarliestStartDate: string | null = null;
+                    let moduleTotalDuration = 0;
+
+                    if (isModuleCollapsed) {
+                        const allAssignments = module.tasks.flatMap(t => t.assignments);
+                        if (allAssignments.length > 0) {
+                            moduleTotalDuration = allAssignments.reduce((sum, a) => sum + (a.duration || 0), 0);
+                            
+                            const startDates = allAssignments
+                                .map(a => a.startDate ? new Date(a.startDate.replace(/-/g, '/')) : null)
+                                .filter((d): d is Date => d !== null);
+
+                            if (startDates.length > 0) {
+                                const earliestDate = new Date(Math.min(...startDates.map(d => d.getTime())));
+                                moduleEarliestStartDate = formatDateForInput(earliestDate);
+                            }
+                        }
+                    }
+
                     return (
                       <div 
                         key={module.id}
@@ -885,9 +904,16 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               </button>
                           </div>
                           <div 
-                            className={`flex-shrink-0 text-center text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center justify-center bg-indigo-50/80 ${isDetailsFrozen ? 'sticky' : ''}`}
+                            className={`flex-shrink-0 text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center bg-indigo-50/80 ${isDetailsFrozen ? 'sticky' : ''}`}
                             style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 29 } : detailsColStyle}
                           >
+                            {isModuleCollapsed && (
+                                <div className="flex-1 grid grid-cols-[1fr_60px_30px] gap-2 text-xs text-indigo-800/80 font-medium text-center items-center px-2">
+                                    <span title="Earliest Start Date" className="bg-indigo-200/50 rounded p-1 text-left">{moduleEarliestStartDate ? moduleEarliestStartDate.substring(5) : '-'}</span>
+                                    <span title="Total Duration (days)" className="bg-indigo-200/50 rounded p-1">{moduleTotalDuration > 0 ? `${moduleTotalDuration}d` : '-'}</span>
+                                    <div></div>
+                                </div>
+                            )}
                           </div>
                           
                           {timeline.map(col => {
