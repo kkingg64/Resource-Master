@@ -605,20 +605,34 @@ const App: React.FC = () => {
 
   const getHolidaysForResource = (resourceName: string | undefined): Set<string> => {
     const holidaySet = new Set<string>();
-    if (!resourceName) return holidaySet;
+    
+    // Determine default region similar to PlannerGrid logic
+    const availableRegions = Array.from(new Set(holidays.map(h => h.country)));
+    const defaultRegion = availableRegions.includes('HK') ? 'HK' : availableRegions[0];
 
-    const resource = resources.find(r => r.name === resourceName);
-    if (!resource) return holidaySet;
+    let targetRegion: string | null = null;
+    let individualHolidays: any[] = [];
 
-    // Add regional holidays
-    if (resource.holiday_region) {
+    // If Unassigned or resource not found, use default region
+    if (!resourceName || resourceName === 'Unassigned') {
+        targetRegion = defaultRegion || null;
+    } else {
+        const resource = resources.find(r => r.name === resourceName);
+        if (resource) {
+            targetRegion = resource.holiday_region || null;
+            individualHolidays = resource.individual_holidays || [];
+        } else {
+            // Resource name exists but not in list (fallback)
+            targetRegion = defaultRegion || null;
+        }
+    }
+
+    if (targetRegion) {
         holidays
-            .filter(h => h.country === resource.holiday_region)
+            .filter(h => h.country === targetRegion)
             .forEach(h => holidaySet.add(h.date));
     }
 
-    // Add individual holidays
-    const individualHolidays = resource.individual_holidays || [];
     individualHolidays.forEach(h => holidaySet.add(h.date));
 
     return holidaySet;
@@ -673,6 +687,10 @@ const App: React.FC = () => {
     ];
     const processedIds = new Set<string>();
     const allAssignmentsFlat = projects.flatMap(p => p.modules.flatMap(m => m.tasks.flatMap(t => t.assignments)));
+    
+    // Track max end date to auto-extend timeline
+    let maxEndVal = 0;
+    let maxEndPoint: WeekPoint | null = null;
 
     while (propagationQueue.length > 0) {
       const current = propagationQueue.shift()!;
@@ -700,7 +718,19 @@ const App: React.FC = () => {
       const newAllocations: ResourceAllocation[] = [];
       const resourceHolidayDates = getHolidaysForResource(assignmentToUpdate.resourceName);
 
+      // Calculate end date for timeline check
       if (current.startDate && current.duration > 0) {
+          const endDateStr = calculateEndDate(current.startDate, current.duration, resourceHolidayDates);
+          const endDate = new Date(endDateStr.replace(/-/g, '/'));
+          const endWeekId = getWeekIdFromDate(endDate);
+          const [y, w] = endWeekId.split('-').map(Number);
+          const val = y * 100 + w;
+          
+          if (val > maxEndVal) {
+              maxEndVal = val;
+              maxEndPoint = { year: y, week: w };
+          }
+
           const allocationStartDate = new Date(current.startDate.replace(/-/g, '/'));
           const allocationsMap = new Map<string, { days: Record<string, number> }>();
           let currentDate = new Date(allocationStartDate);
@@ -745,6 +775,15 @@ const App: React.FC = () => {
           propagationQueue.push({ assignmentId: child.id, startDate: childNewStartDate, duration: child.duration || 1 });
         }
       }
+    }
+
+    // Auto-extend timeline if needed
+    if (maxEndPoint) {
+        const currentEndVal = timelineEnd.year * 100 + timelineEnd.week;
+        if (maxEndVal >= currentEndVal) {
+             // Add 8 weeks (approx 2 months) beyond the task end date
+             setTimelineEnd(addWeeksToPoint(maxEndPoint, 8));
+        }
     }
 
     await fetchData(true);
