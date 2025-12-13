@@ -625,6 +625,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const stickyStyle = { width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth };
   const detailsColStyle = { width: detailsWidth, minWidth: detailsWidth, maxWidth: detailsWidth };
+  
+  // Use Year -> Month -> Col hierarchy for Day and Week views
+  const showYearRow = viewMode === 'day' || viewMode === 'week' || viewMode === 'month';
+  const showMonthRow = viewMode === 'day' || viewMode === 'week';
 
   return (
     <>
@@ -728,6 +732,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         <div className="overflow-x-auto custom-scrollbar flex-1 relative">
           <div className="min-w-max">
               <>
+                {/* Header Row 1: Years */}
                 <div className="flex bg-slate-200/50 border-b border-slate-200 sticky top-0 z-40 h-8 items-center">
                   <div className="flex-shrink-0 px-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group h-full flex items-center" style={stickyStyle}>
                     Project Structure
@@ -746,10 +751,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     </div>
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
                   </div>
-                  {Object.values(viewMode === 'day' ? yearHeaders : (viewMode === 'week' ? monthHeaders : yearHeaders)).map((group, idx) => (<div key={idx} className="text-center text-xs font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+                  {/* Always show year headers in top row now, consistent for Day and Week view */}
+                  {Object.values(yearHeaders).map((group, idx) => (<div key={idx} className="text-center text-xs font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                 </div>
 
-                {viewMode === 'day' && (
+                {/* Header Row 2: Months (Only for Day and Week views) */}
+                {showMonthRow && (
                   <div className="flex bg-slate-100/70 border-b border-slate-200 sticky top-8 z-40 h-8 items-center">
                     <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100/70 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}></div>
@@ -757,7 +764,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   </div>
                 )}
                 
-                <div className={`flex bg-slate-50 border-b border-slate-200 sticky z-40 shadow-sm h-8 items-center ${viewMode === 'day' ? 'top-16' : 'top-8'}`}>
+                {/* Header Row 3: Columns (Weeks or Days or Months) */}
+                <div className={`flex bg-slate-50 border-b border-slate-200 sticky z-40 shadow-sm h-8 items-center ${showMonthRow ? 'top-16' : 'top-8'}`}>
                   <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
                   <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}></div>
                   {timeline.map(col => {

@@ -57,7 +57,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
       const listProjectsTool: FunctionDeclaration = {
         name: 'listProjects',
         description: 'Get a list of all projects with their IDs and module counts.',
-        parameters: { type: Type.OBJECT, properties: {} }
+        // Removed empty parameters object to avoid validation errors
       };
 
       const getProjectDetailsTool: FunctionDeclaration = {
@@ -187,7 +187,8 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
         }
 
         // Send function results back to model
-        response = await chat.sendMessage(functionResponses);
+        // IMPORTANT: Must wrap the parts in a `message` object key
+        response = await chat.sendMessage({ message: functionResponses });
       }
 
       const modelText = response.text || "I processed that request.";
@@ -195,7 +196,8 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
 
     } catch (error: any) {
       console.error("AI Error:", error);
-      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: "Sorry, I encountered an error connecting to the AI service." }]);
+      const errorMessage = error.message || "Unknown error";
+      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: `Sorry, I encountered an error: ${errorMessage}` }]);
     } finally {
       setIsLoading(false);
     }
