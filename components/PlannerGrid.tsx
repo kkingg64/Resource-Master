@@ -181,6 +181,18 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const resourceHolidaysMap = useMemo(() => {
     const map = new Map<string, { holidays: (Omit<Holiday, 'id'> | IndividualHoliday)[], dateSet: Set<string> }>();
+    
+    // Determine default holidays for "Unassigned" (use 'HK' or first available)
+    const availableRegions = Array.from(new Set(holidays.map(h => h.country)));
+    const defaultRegion = availableRegions.includes('HK') ? 'HK' : availableRegions[0];
+    const defaultHolidays = defaultRegion ? holidays.filter(h => h.country === defaultRegion) : [];
+    
+    // Add "Unassigned" entry
+    map.set('Unassigned', {
+        holidays: defaultHolidays,
+        dateSet: new Set(defaultHolidays.map(h => h.date))
+    });
+
     resources.forEach(resource => {
         // Use dynamic holidays prop instead of hardcoded GOV_HOLIDAYS_DB
         // This allows regional holidays to be managed by the user
@@ -440,7 +452,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
 
   const getRawCellValue = (assignment: TaskAssignment, col: TimelineColumn): number => {
-    const resourceHolidayData = resourceHolidaysMap.get(assignment.resourceName || '');
+    // Default to 'Unassigned' holidays if resourceName is not set or not in map
+    const resourceName = assignment.resourceName || 'Unassigned';
+    const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned');
 
     if (viewMode === 'day') {
         if (!col.date) return 0;
@@ -838,7 +852,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                           const moduleHolidays = new Set<string>();
                           allAssignments.forEach(a => {
-                              const resourceHolidayData = resourceHolidaysMap.get(a.resourceName || '');
+                              const resourceName = a.resourceName || 'Unassigned';
+                              const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned');
                               if (resourceHolidayData) {
                                   resourceHolidayData.dateSet.forEach(d => moduleHolidays.add(d));
                               }
@@ -852,7 +867,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   earliestDate = startDate;
                               }
                               
-                              const assignmentHolidays = resourceHolidaysMap.get(assignment.resourceName || '')?.dateSet || new Set<string>();
+                              const resourceName = assignment.resourceName || 'Unassigned';
+                              const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>();
                               const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidays);
                               const endDate = new Date(endDateStr.replace(/-/g, '/'));
                               
@@ -965,7 +981,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               
                               const taskHolidays = new Set<string>();
                               task.assignments.forEach(a => {
-                                  const resourceHolidayData = resourceHolidaysMap.get(a.resourceName || '');
+                                  const resourceName = a.resourceName || 'Unassigned';
+                                  const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned');
                                   if (resourceHolidayData) {
                                       resourceHolidayData.dateSet.forEach(d => taskHolidays.add(d));
                                   }
@@ -979,7 +996,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                       earliestDate = startDate;
                                   }
                                   
-                                  const assignmentHolidays = resourceHolidaysMap.get(assignment.resourceName || '')?.dateSet || new Set<string>();
+                                  const resourceName = assignment.resourceName || 'Unassigned';
+                                  const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>();
                                   const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidays);
                                   const endDate = new Date(endDateStr.replace(/-/g, '/'));
                                   
@@ -1088,7 +1106,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     assignmentStartDate = new Date();
                                 }
 
-                                const resourceHolidayData = resourceHolidaysMap.get(assignment.resourceName || '');
+                                const resourceName = assignment.resourceName || 'Unassigned';
+                                const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned');
                                 
                                 const possibleParents = allAssignmentsForDependencies.filter(
                                   parent => parent.id !== assignment.id && !isCircularDependency(assignment.id, parent.id)
