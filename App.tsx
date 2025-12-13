@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
-import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource } from './types';
+import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
 import { Estimator } from './components/Estimator';
@@ -77,6 +77,7 @@ const structureProjectsData = (
       name: m.name,
       legacyFunctionPoints: m.legacy_function_points,
       functionPoints: m.function_points,
+      complexity: m.complexity || 'Medium', // Default to Medium if undefined
       sort_order: m.sort_order,
       tasks: moduleTasks,
     });
@@ -841,6 +842,18 @@ const App: React.FC = () => {
      if (error) { setProjects(previousState); alert("Failed to update function points."); }
   };
   
+  const updateModuleComplexity = async (projectId: string, moduleId: string, complexity: ComplexityLevel) => {
+    const previousState = deepClone(projects);
+    const module = projects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId);
+    if (module) {
+        module.complexity = complexity;
+        setProjects(deepClone(projects));
+    }
+
+    const { error } = await callSupabase('UPDATE complexity', { id: moduleId, complexity }, supabase.from('modules').update({ complexity }).eq('id', moduleId));
+    if (error) { setProjects(previousState); alert("Failed to update module complexity."); }
+  };
+
   const reorderModules = async (projectId: string, startIndex: number, endIndex: number) => {
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
@@ -1061,7 +1074,7 @@ const App: React.FC = () => {
             supabaseClient={supabase}
             appearance={{ theme: ThemeSupa }}
             theme="default"
-            providers={[]}
+            providers={['google']}
           />
         </div>
       </div>
@@ -1158,6 +1171,7 @@ const App: React.FC = () => {
                                 projects={projects} 
                                 onUpdateFunctionPoints={updateFunctionPoints}
                                 onReorderModules={reorderModules}
+                                onUpdateModuleComplexity={updateModuleComplexity}
                             />
                         </div>
                     )}

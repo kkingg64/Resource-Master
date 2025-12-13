@@ -1,8 +1,3 @@
-
-
-
-
-
 export enum Role {
   CNF = 'CNF',
   BRAND_SOLUTIONS = 'Brand Solutions',
@@ -47,11 +42,14 @@ export interface ProjectTask {
   sort_order?: number;
 }
 
+export type ComplexityLevel = 'Low' | 'Medium' | 'High' | 'Complex';
+
 export interface ProjectModule {
   id: string;
   name: string;
   legacyFunctionPoints: number; // Total legacy system size (for Fact Findings)
   functionPoints: number; // Target MVP size (for Build)
+  complexity?: ComplexityLevel; // Multiplier for effort
   tasks: ProjectTask[];
   sort_order?: number;
 }

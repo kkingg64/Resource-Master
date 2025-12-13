@@ -1,21 +1,34 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Project, ProjectModule } from '../types';
-import { Calculator, ArrowRight, Save, GripVertical, CheckCircle, AlertCircle, Folder, Users, Clock, CalendarDays, BarChart3, HelpCircle } from 'lucide-react';
+import { Project, ProjectModule, ComplexityLevel } from '../types';
+import { Calculator, GripVertical, BarChart3, Users, HelpCircle, ArrowRight, Gauge } from 'lucide-react';
 
 interface EstimatorProps {
   projects: Project[];
   onUpdateFunctionPoints: (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => void;
+  onUpdateModuleComplexity: (projectId: string, moduleId: string, complexity: ComplexityLevel) => void;
   onReorderModules: (projectId: string, startIndex: number, endIndex: number) => void;
 }
 
-export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunctionPoints, onReorderModules }) => {
-  const [velocity, setVelocity] = useState<number>(5); // FP per person-day
-  const [teamSize, setTeamSize] = useState<number>(2); // Number of resources
+const COMPLEXITY_MULTIPLIERS: Record<ComplexityLevel, number> = {
+  'Low': 1.0,
+  'Medium': 1.2,
+  'High': 1.5,
+  'Complex': 2.0
+};
+
+export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunctionPoints, onUpdateModuleComplexity, onReorderModules }) => {
+  // Phase 1: Preparation (Fact Finding / Legacy Analysis)
+  const [prepVelocity, setPrepVelocity] = useState<number>(10); // FP per person-day
+  const [prepTeamSize, setPrepTeamSize] = useState<number>(2);
+
+  // Phase 2: Development (MVP Build)
+  const [devVelocity, setDevVelocity] = useState<number>(5); // FP per person-day
+  const [devTeamSize, setDevTeamSize] = useState<number>(4);
+
   const [selectedProjectId, setSelectedProjectId] = useState<string>(projects[0]?.id || '');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-
+  
   useEffect(() => {
-    // If the selected project is deleted or no longer exists, reset to the first available project.
     let currentProject = projects.find(p => p.id === selectedProjectId);
     if (!currentProject && projects.length > 0) {
         setSelectedProjectId(projects[0].id);
@@ -27,26 +40,46 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
 
   // Calculations
   const totals = useMemo(() => {
-    const totalLegacyFP = modules.reduce((sum, m) => sum + (m.legacyFunctionPoints || 0), 0);
-    const totalMvpFP = modules.reduce((sum, m) => sum + (m.functionPoints || 0), 0);
+    let totalLegacyFP = 0;
+    let totalMvpFP = 0;
     
-    // Effort in Man-Days
-    const effortLegacyDays = Math.ceil(totalLegacyFP / velocity);
-    const effortMvpDays = Math.ceil(totalMvpFP / velocity);
-    
-    // Duration in Calendar Days (assuming parallel work if team size > 1)
-    const durationLegacyDays = Math.ceil(effortLegacyDays / teamSize);
-    const durationMvpDays = Math.ceil(effortMvpDays / teamSize);
+    let totalPrepEffort = 0;
+    let totalDevEffort = 0;
+
+    let totalPrepDuration = 0;
+    let totalDevDuration = 0;
+
+    modules.forEach(m => {
+        const complexity = m.complexity || 'Medium';
+        const multiplier = COMPLEXITY_MULTIPLIERS[complexity];
+
+        totalLegacyFP += (m.legacyFunctionPoints || 0);
+        totalMvpFP += (m.functionPoints || 0);
+
+        // Prep Effort (No multiplier typically for analysis, or can be added if needed)
+        const prepEffort = Math.ceil((m.legacyFunctionPoints || 0) / prepVelocity);
+        
+        // Dev Effort (Apply Multiplier here)
+        const rawDevEffort = (m.functionPoints || 0) / devVelocity;
+        const devEffort = Math.ceil(rawDevEffort * multiplier);
+
+        totalPrepEffort += prepEffort;
+        totalDevEffort += devEffort;
+
+        totalPrepDuration += Math.ceil(prepEffort / prepTeamSize);
+        totalDevDuration += Math.ceil(devEffort / devTeamSize);
+    });
 
     return {
         legacyFP: totalLegacyFP,
         mvpFP: totalMvpFP,
-        effortLegacy: effortLegacyDays,
-        effortMvp: effortMvpDays,
-        durationLegacy: durationLegacyDays,
-        durationMvp: durationMvpDays
+        prepEffort: totalPrepEffort,
+        devEffort: totalDevEffort,
+        prepDuration: totalPrepDuration,
+        devDuration: totalDevDuration,
+        totalDuration: totalPrepDuration + totalDevDuration
     };
-  }, [modules, velocity, teamSize]);
+  }, [modules, prepVelocity, prepTeamSize, devVelocity, devTeamSize]);
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.setData("text/plain", index.toString());
@@ -75,23 +108,16 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
     <div className="flex flex-col h-full bg-slate-50">
       
       {/* Header / Settings Bar */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 flex-shrink-0">
+      <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col xl:flex-row xl:items-center justify-between gap-6 flex-shrink-0">
         <div>
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <Calculator className="w-5 h-5 text-indigo-600" />
                 Effort Estimator
             </h2>
-            <p className="text-xs text-slate-500 mt-1">Calculate effort based on complexity (FP) and team capacity.</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-4 bg-slate-50 p-2 rounded-xl border border-slate-200">
-            {/* Project Selector */}
-            <div className="relative min-w-[200px]">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Folder className="h-4 w-4 text-slate-400" />
-                </div>
+            <div className="flex items-center gap-2 mt-2">
+                <span className="text-xs text-slate-500">Project:</span>
                 <select 
-                    className="block w-full pl-9 pr-3 py-1.5 text-sm border-slate-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white border shadow-sm"
+                    className="text-sm border-slate-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 border py-1 pl-2 pr-8"
                     value={selectedProjectId}
                     onChange={(e) => setSelectedProjectId(e.target.value)}
                 >
@@ -100,71 +126,147 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
                     ))}
                 </select>
             </div>
+        </div>
 
-            <div className="h-8 w-px bg-slate-300 mx-2 hidden md:block"></div>
-
-            {/* Global Settings */}
-            <div className="flex items-center gap-3">
+        {/* Global Settings Grouped by Phase */}
+        <div className="flex flex-col md:flex-row gap-4">
+            
+            {/* Prep Settings */}
+            <div className="flex items-center gap-3 bg-amber-50/50 p-2 rounded-lg border border-amber-100">
+                <div className="px-2 border-r border-amber-200">
+                    <span className="text-xs font-bold text-amber-700 uppercase tracking-wider block">Phase 1</span>
+                    <span className="text-[10px] text-amber-600 font-medium">Preparation</span>
+                </div>
                 <div className="flex flex-col">
-                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                        Velocity <span title="Function Points per Person-Day" className="cursor-help"><HelpCircle size={10} /></span>
+                    <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
+                        Velocity <span title="Legacy FP per Person-Day" className="cursor-help"><HelpCircle size={10} /></span>
                     </label>
                     <div className="flex items-center gap-1">
-                        <BarChart3 size={14} className="text-slate-400" />
+                        <BarChart3 size={14} className="text-amber-400" />
                         <input 
                             type="number" 
                             min="1"
-                            value={velocity}
-                            onChange={(e) => setVelocity(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-16 p-1 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500"
+                            value={prepVelocity}
+                            onChange={(e) => setPrepVelocity(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-14 p-1 text-xs border border-amber-200 rounded focus:ring-1 focus:ring-amber-500"
                         />
-                        <span className="text-xs text-slate-400">FP/day</span>
                     </div>
                 </div>
-
                 <div className="flex flex-col">
-                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Avg Team Size</label>
+                    <label className="text-[10px] text-slate-500 uppercase">Team Size</label>
                     <div className="flex items-center gap-1">
-                        <Users size={14} className="text-slate-400" />
+                        <Users size={14} className="text-amber-400" />
                         <input 
                             type="number" 
                             min="1"
-                            value={teamSize}
-                            onChange={(e) => setTeamSize(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-16 p-1 text-sm border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500"
+                            value={prepTeamSize}
+                            onChange={(e) => setPrepTeamSize(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-14 p-1 text-xs border border-amber-200 rounded focus:ring-1 focus:ring-amber-500"
                         />
-                        <span className="text-xs text-slate-400">ppl</span>
                     </div>
                 </div>
             </div>
+
+            <ArrowRight className="text-slate-300 hidden md:block self-center" size={20} />
+
+            {/* Dev Settings */}
+            <div className="flex items-center gap-3 bg-indigo-50/50 p-2 rounded-lg border border-indigo-100">
+                <div className="px-2 border-r border-indigo-200">
+                    <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider block">Phase 2</span>
+                    <span className="text-[10px] text-indigo-600 font-medium">Development</span>
+                </div>
+                <div className="flex flex-col">
+                    <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
+                        Velocity <span title="MVP FP per Person-Day" className="cursor-help"><HelpCircle size={10} /></span>
+                    </label>
+                    <div className="flex items-center gap-1">
+                        <BarChart3 size={14} className="text-indigo-400" />
+                        <input 
+                            type="number" 
+                            min="1"
+                            value={devVelocity}
+                            onChange={(e) => setDevVelocity(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-14 p-1 text-xs border border-indigo-200 rounded focus:ring-1 focus:ring-indigo-500"
+                        />
+                    </div>
+                </div>
+                <div className="flex flex-col">
+                    <label className="text-[10px] text-slate-500 uppercase">Team Size</label>
+                    <div className="flex items-center gap-1">
+                        <Users size={14} className="text-indigo-400" />
+                        <input 
+                            type="number" 
+                            min="1"
+                            value={devTeamSize}
+                            onChange={(e) => setDevTeamSize(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-14 p-1 text-xs border border-indigo-200 rounded focus:ring-1 focus:ring-indigo-500"
+                        />
+                    </div>
+                </div>
+            </div>
+
         </div>
       </div>
 
       {/* Main Content: Spreadsheet View */}
       <div className="flex-1 overflow-auto p-6">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <table className="w-full text-sm text-left">
-                <thead className="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200">
+            <table className="w-full text-sm text-left border-collapse">
+                <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase tracking-wider">
                     <tr>
-                        <th className="w-10 py-3 text-center">#</th>
-                        <th className="py-3 px-4">Module Name</th>
-                        <th className="py-3 px-4 w-32 text-right bg-slate-200/50 border-l border-slate-200">Legacy FP</th>
-                        <th className="py-3 px-4 w-32 text-right bg-indigo-50 border-l border-slate-200 text-indigo-700">MVP FP</th>
-                        <th className="py-3 px-4 w-32 text-right border-l border-slate-200">Effort (Days)</th>
-                        <th className="py-3 px-4 w-32 text-right border-l border-slate-200">Duration</th>
+                        <th className="w-10 py-3 border-b border-slate-200"></th>
+                        <th className="py-3 px-4 border-b border-slate-200 border-r text-left">Module</th>
+                        
+                        {/* Phase 1 Header */}
+                        <th colSpan={3} className="py-2 px-4 text-center bg-amber-50 border-b border-amber-100 border-r border-slate-200 text-amber-800">
+                            Phase 1: Preparation
+                        </th>
+                        
+                        {/* Phase 2 Header */}
+                        <th colSpan={4} className="py-2 px-4 text-center bg-indigo-50 border-b border-indigo-100 border-r border-slate-200 text-indigo-800">
+                            Phase 2: Development
+                        </th>
+
+                        <th className="py-3 px-4 text-center border-b border-slate-200 bg-slate-100">Total</th>
+                    </tr>
+                    <tr className="text-[10px] text-slate-500">
+                        <th className="border-b border-slate-200 bg-slate-50"></th>
+                        <th className="border-b border-slate-200 border-r bg-slate-50"></th>
+                        
+                        {/* Phase 1 Subheaders */}
+                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-amber-50/30 w-24">Legacy FP</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-amber-50/30 w-20" title="Man-Days">Effort</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-amber-50/30 w-20" title="Calendar Time">Duration</th>
+
+                        {/* Phase 2 Subheaders */}
+                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-indigo-50/30 w-24">MVP FP</th>
+                        <th className="py-2 px-2 text-center border-b border-slate-200 bg-indigo-50/30 w-24">Difficulty</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-indigo-50/30 w-20" title="Man-Days (Calculated with Difficulty)">Effort</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-indigo-50/30 w-20" title="Calendar Time">Duration</th>
+
+                        <th className="py-2 px-4 text-right border-b border-slate-200 bg-slate-100 w-28 font-bold">Est. Delivery</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                     {modules.length === 0 && (
                         <tr>
-                            <td colSpan={6} className="p-8 text-center text-slate-400 italic">
-                                No modules found in this project. Go to Planner to add modules.
+                            <td colSpan={10} className="p-8 text-center text-slate-400 italic">
+                                No modules found. Go to Planner to add modules.
                             </td>
                         </tr>
                     )}
                     {modules.map((m, index) => {
-                        const effortDays = Math.ceil((m.functionPoints || 0) / velocity);
-                        const duration = Math.ceil(effortDays / teamSize);
+                        // Phase 1 Calculations
+                        const prepEffort = Math.ceil((m.legacyFunctionPoints || 0) / prepVelocity);
+                        const prepDuration = Math.ceil(prepEffort / prepTeamSize);
+
+                        // Phase 2 Calculations
+                        const complexity = m.complexity || 'Medium';
+                        const multiplier = COMPLEXITY_MULTIPLIERS[complexity];
+                        const devEffort = Math.ceil(((m.functionPoints || 0) / devVelocity) * multiplier);
+                        const devDuration = Math.ceil(devEffort / devTeamSize);
+
+                        const totalDuration = prepDuration + devDuration;
 
                         return (
                             <tr 
@@ -175,104 +277,103 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
                                 onDrop={(e) => handleDrop(e, index)}
                                 className={`hover:bg-slate-50 transition-colors group ${draggedIndex === index ? 'opacity-40 bg-slate-100' : ''}`}
                             >
-                                <td className="text-center text-slate-400 cursor-grab active:cursor-grabbing">
-                                    <div className="flex justify-center group-hover:text-slate-600">
-                                        <GripVertical size={16} />
+                                <td className="text-center text-slate-300 cursor-grab active:cursor-grabbing border-b border-slate-100">
+                                    <div className="flex justify-center group-hover:text-slate-500">
+                                        <GripVertical size={14} />
                                     </div>
                                 </td>
-                                <td className="px-4 py-2 font-medium text-slate-700">{m.name}</td>
+                                <td className="px-4 py-2 border-b border-slate-100 border-r border-slate-200">
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-medium text-slate-700">{m.name}</span>
+                                    </div>
+                                </td>
                                 
-                                {/* Legacy FP Input */}
-                                <td className="px-2 py-1 border-l border-slate-100 bg-slate-50/30">
+                                {/* Phase 1: Inputs & Outputs */}
+                                <td className="px-2 py-1 border-b border-slate-100 bg-amber-50/10">
                                     <input 
                                         type="number" 
                                         min="0"
-                                        className="w-full text-right p-1.5 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded transition-all focus:ring-0 font-mono text-slate-600"
+                                        className="w-full text-right p-1 bg-transparent border border-transparent hover:border-amber-200 focus:border-amber-500 focus:bg-white rounded transition-all focus:ring-0 font-mono text-slate-600 text-xs"
                                         value={m.legacyFunctionPoints || 0}
                                         onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, parseInt(e.target.value) || 0, m.functionPoints)}
                                         placeholder="0"
                                     />
                                 </td>
+                                <td className="px-2 py-1 text-right border-b border-slate-100 font-mono text-xs text-slate-500 bg-amber-50/10">
+                                    {prepEffort > 0 ? prepEffort : '-'}
+                                </td>
+                                <td className="px-2 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-xs font-medium text-amber-700 bg-amber-50/10">
+                                    {prepDuration > 0 ? `${prepDuration}d` : '-'}
+                                </td>
 
-                                {/* MVP FP Input */}
-                                <td className="px-2 py-1 border-l border-slate-100 bg-indigo-50/10">
+                                {/* Phase 2: Inputs & Outputs */}
+                                <td className="px-2 py-1 border-b border-slate-100 bg-indigo-50/10">
                                     <input 
                                         type="number" 
                                         min="0"
-                                        className="w-full text-right p-1.5 bg-transparent border border-transparent hover:border-indigo-300 focus:border-indigo-500 focus:bg-white rounded transition-all focus:ring-0 font-mono font-bold text-indigo-700"
+                                        className="w-full text-right p-1 bg-transparent border border-transparent hover:border-indigo-200 focus:border-indigo-500 focus:bg-white rounded transition-all focus:ring-0 font-mono text-slate-600 text-xs"
                                         value={m.functionPoints || 0}
                                         onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints, parseInt(e.target.value) || 0)}
                                         placeholder="0"
                                     />
                                 </td>
-
-                                {/* Calculated Effort */}
-                                <td className="px-4 py-2 text-right border-l border-slate-100 font-mono text-slate-600">
-                                    {effortDays > 0 ? effortDays : '-'}
+                                <td className="px-2 py-1 border-b border-slate-100 bg-indigo-50/10">
+                                    <div className="relative">
+                                        <select
+                                            value={complexity}
+                                            onChange={(e) => onUpdateModuleComplexity(selectedProjectId, m.id, e.target.value as ComplexityLevel)}
+                                            className="w-full text-xs p-1 bg-transparent border-none focus:ring-0 cursor-pointer text-center font-medium text-slate-600 appearance-none hover:text-indigo-600"
+                                        >
+                                            <option value="Low">Low (1x)</option>
+                                            <option value="Medium">Medium (1.2x)</option>
+                                            <option value="High">High (1.5x)</option>
+                                            <option value="Complex">Complex (2x)</option>
+                                        </select>
+                                        <Gauge size={10} className="absolute right-0 top-1.5 text-slate-300 pointer-events-none" />
+                                    </div>
+                                </td>
+                                <td className="px-2 py-1 text-right border-b border-slate-100 font-mono text-xs text-slate-500 bg-indigo-50/10">
+                                    {devEffort > 0 ? devEffort : '-'}
+                                </td>
+                                <td className="px-2 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-xs font-medium text-indigo-700 bg-indigo-50/10">
+                                    {devDuration > 0 ? `${devDuration}d` : '-'}
                                 </td>
 
-                                {/* Calculated Duration */}
-                                <td className="px-4 py-2 text-right border-l border-slate-100 font-mono text-slate-500 text-xs">
-                                    {duration > 0 ? (
-                                        <span title={`${duration} calendar days`}>~{formatWeeks(duration)}</span>
-                                    ) : '-'}
+                                {/* Total */}
+                                <td className="px-4 py-2 text-right border-b border-slate-100 bg-slate-50 font-mono text-xs font-bold text-slate-800">
+                                    {totalDuration > 0 ? formatWeeks(totalDuration) : '-'}
                                 </td>
                             </tr>
                         );
                     })}
                 </tbody>
+                <tfoot className="bg-slate-50 font-semibold text-xs border-t-2 border-slate-200">
+                    <tr>
+                        <td colSpan={2} className="px-4 py-3 text-right text-slate-500 uppercase">Project Totals</td>
+                        
+                        {/* Prep Totals */}
+                        <td className="px-2 py-3 text-right text-slate-700">{totals.legacyFP}</td>
+                        <td className="px-2 py-3 text-right text-slate-700">{totals.prepEffort}</td>
+                        <td className="px-2 py-3 text-right text-amber-700 border-r border-slate-300">{formatWeeks(totals.prepDuration)}</td>
+
+                        {/* Dev Totals */}
+                        <td className="px-2 py-3 text-right text-slate-700">{totals.mvpFP}</td>
+                        <td className="px-2 py-3 text-center text-slate-400">-</td>
+                        <td className="px-2 py-3 text-right text-slate-700">{totals.devEffort}</td>
+                        <td className="px-2 py-3 text-right text-indigo-700 border-r border-slate-300">{formatWeeks(totals.devDuration)}</td>
+
+                        {/* Grand Total */}
+                        <td className="px-4 py-3 text-right text-slate-900 text-sm">
+                            {formatWeeks(totals.totalDuration)}
+                        </td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
-      </div>
-
-      {/* Footer / Summary Cards */}
-      <div className="bg-white border-t border-slate-200 p-6 grid grid-cols-1 md:grid-cols-3 gap-6 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
-        
-        {/* Total Scope */}
-        <div className="flex items-center gap-4">
-            <div className="p-3 bg-indigo-50 rounded-lg text-indigo-600">
-                <BarChart3 size={24} />
-            </div>
-            <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase">Total MVP Scope</p>
-                <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-slate-800">{totals.mvpFP}</span>
-                    <span className="text-sm text-slate-500">FP</span>
-                </div>
-                <p className="text-[10px] text-slate-400 mt-0.5">Legacy Analysis: {totals.legacyFP} FP</p>
-            </div>
+        <div className="mt-4 text-[10px] text-slate-400 text-right">
+            * Duration estimates assume Phase 1 and Phase 2 run sequentially (Prep → Dev) per module, but parallel across the team. <br/>
+            * Development Effort includes difficulty multiplier.
         </div>
-
-        {/* Total Effort */}
-        <div className="flex items-center gap-4">
-            <div className="p-3 bg-amber-50 rounded-lg text-amber-600">
-                <Clock size={24} />
-            </div>
-            <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase">Required Effort</p>
-                <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-slate-800">{totals.effortMvp}</span>
-                    <span className="text-sm text-slate-500">Man-Days</span>
-                </div>
-                <p className="text-[10px] text-slate-400 mt-0.5">@ {velocity} FP/day velocity</p>
-            </div>
-        </div>
-
-        {/* Estimated Duration */}
-        <div className="flex items-center gap-4">
-            <div className="p-3 bg-emerald-50 rounded-lg text-emerald-600">
-                <CalendarDays size={24} />
-            </div>
-            <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase">Est. Duration</p>
-                <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-slate-800">{formatWeeks(totals.durationMvp)}</span>
-                    <span className="text-sm text-slate-500">Calendar Time</span>
-                </div>
-                <p className="text-[10px] text-slate-400 mt-0.5">With team of {teamSize}</p>
-            </div>
-        </div>
-
       </div>
     </div>
   );
