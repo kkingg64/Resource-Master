@@ -182,7 +182,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const resourceHolidaysMap = useMemo(() => {
     const map = new Map<string, { holidays: (Omit<Holiday, 'id'> | IndividualHoliday)[], dateSet: Set<string> }>();
     resources.forEach(resource => {
-        const regional = resource.holiday_region ? GOV_HOLIDAYS_DB[resource.holiday_region] || [] : [];
+        // Use dynamic holidays prop instead of hardcoded GOV_HOLIDAYS_DB
+        // This allows regional holidays to be managed by the user
+        const regional = resource.holiday_region 
+            ? holidays.filter(h => h.country === resource.holiday_region)
+            : [];
+            
         const individual = resource.individual_holidays || [];
         const allHolidays = [...regional, ...individual];
         map.set(resource.name, {
@@ -191,7 +196,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         });
     });
     return map;
-  }, [resources]);
+  }, [resources, holidays]);
 
   const groupedResources = useMemo(() => {
     return resources.reduce((acc, resource) => {
@@ -801,14 +806,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         <Trash2 size={12} />
                       </button>
                     </div>
-                    <div className={`flex-shrink-0 p-3 text-center text-xs font-bold text-slate-300 border-r border-slate-600 flex items-center justify-center gap-2 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 39 } : detailsColStyle}>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); onAddModule(project.id); }}
-                        className="flex items-center gap-1 text-[10px] bg-slate-600 hover:bg-slate-500 px-2 py-0.5 rounded transition-colors"
-                      >
-                          <Plus size={10} /> Module
-                      </button>
-                    </div>
+                    {/* Removed Add Module button cell here to fix layout and as requested */}
+                    <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 39 } : detailsColStyle}></div>
+                    
                     {timeline.map(col => {
                       const total = getProjectTotal(project, col);
                       const isCurrent = isCurrentColumn(col);
@@ -931,6 +931,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 onDrop={(e) => handleTaskDrop(e, project.id, module.id, taskIndex)}
                                 onContextMenu={(e) => {
                                   e.preventDefault();
+                                  e.stopPropagation(); // Stop propagation to prevent module menu from showing
                                   setContextMenu({ type: 'task', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id });
                                 }}
                                 className={`flex border-b border-slate-100 bg-slate-50/40 group/task ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>

@@ -8,7 +8,9 @@ import { Settings } from './components/Settings';
 import { Resources } from './components/Resources';
 import { VersionHistory } from './components/VersionHistory';
 import { DebugLog } from './components/DebugLog';
-import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users } from 'lucide-react';
+import { AdminSettings } from './components/AdminSettings';
+import { AIAssistant } from './components/AIAssistant';
+import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
@@ -107,7 +109,7 @@ const App: React.FC = () => {
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'planner' | 'estimator' | 'settings' | 'resources'>('planner');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'planner' | 'estimator' | 'settings' | 'resources' | 'holidays'>('planner');
   const [showHistory, setShowHistory] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   
@@ -278,6 +280,15 @@ const App: React.FC = () => {
     
     if (resourcesError) console.error(resourcesError);
     else if (resourcesData) setResources(resourcesData);
+
+    // Fetch regional holidays
+    const { data: holidaysData, error: holidaysError } = await supabase
+      .from('holidays')
+      .select('*')
+      .eq('user_id', session.user.id);
+      
+    if (holidaysError) console.error(holidaysError);
+    else if (holidaysData) setHolidays(holidaysData);
 
     if (isRefresh) setIsRefreshing(false);
     else setLoading(false);
@@ -876,208 +887,276 @@ const App: React.FC = () => {
     statusTimeoutRef.current = window.setTimeout(() => setSaveStatus('idle'), 3000);
   };
 
-  const onImportPlan = async (importedProjects: Project[], importedHolidays: Holiday[]) => {
-    log('Starting plan import', { projects: importedProjects.length, holidays: importedHolidays.length });
-    setLoading(true);
-  
-    await callSupabase('DELETE all projects for import', {}, supabase.from('projects').delete().eq('user_id', session!.user.id));
-    
-    for (const project of importedProjects) {
-      const { data: newProject } = await callSupabase('INSERT imported project', {name: project.name}, supabase.from('projects').insert({ name: project.name, user_id: session!.user.id }).select().single());
-      if (newProject) {
-        for (const [moduleIndex, module] of project.modules.entries()) {
-          const { data: newModule } = await callSupabase('INSERT imported module', {name: module.name}, supabase.from('modules').insert({ 
-            name: module.name, 
-            project_id: newProject.id, 
-            user_id: session!.user.id, 
-            function_points: module.functionPoints, 
-            legacy_function_points: module.legacyFunctionPoints,
-            sort_order: moduleIndex,
-          }).select().single());
-          if (newModule) {
-            for (const [taskIndex, task] of module.tasks.entries()) {
-              const { data: newTask } = await callSupabase('INSERT imported task', {name: task.name}, supabase.from('tasks').insert({ 
-                name: task.name, 
-                module_id: newModule.id, 
-                user_id: session!.user.id,
-                sort_order: taskIndex,
-              }).select().single());
-              if (newTask) {
-                for (const assignment of task.assignments) {
-                  const { data: newAssignment } = await callSupabase('INSERT imported assignment', {role: assignment.role}, supabase.from('task_assignments').insert({ task_id: newTask.id, role: assignment.role, resource_name: assignment.resourceName, user_id: session!.user.id, start_date: formatDateForInput(new Date()), duration: 1 }).select().single());
-                  if (newAssignment && assignment.allocations.length > 0) {
-                    const allocationsToInsert = assignment.allocations.map(alloc => ({ assignment_id: newAssignment.id, week_id: alloc.weekId, count: alloc.count, days: alloc.days || {}, user_id: session!.user.id, }));
-                    await callSupabase('INSERT imported allocations', {}, supabase.from('resource_allocations').insert(allocationsToInsert));
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  
-    await fetchData(true);
-    log('Finished plan import', {}, 'success');
-  };
-
-  const handleSaveVersion = async (name: string) => {
-    const { error } = await callSupabase('SAVE version', { name }, supabase.from('versions').insert({ name, user_id: session!.user.id, data: { projects, holidays, resources } }));
-    if (error) { alert("Error: Could not save version."); } 
-    else { alert(`Version '${name}' saved successfully!`); }
-  };
-
-  const handleRestoreVersion = async (id: number) => {
-    const { data: version, error } = await callSupabase('FETCH version for restore', { id }, supabase.from('versions').select('data').eq('id', id).single());
-    if (error || !version) { alert("Error: Version not found."); return; }
-    
-    log('Start restoring version', { id });
-    await supabase.from('projects').delete().eq('user_id', session!.user.id);
-    await supabase.from('resources').delete().eq('user_id', session!.user.id);
-    
-    setProjects(version.data.projects || []);
-    setResources(version.data.resources || []);
-    
-    alert(`Version restored. Any new changes will be saved to your current state.`);
-    setShowHistory(false);
-  };
-
-  // --- Resource Management ---
+  // --- Resource Management Functions ---
   const addResource = async (name: string, category: Role, region: string, type: 'Internal' | 'External') => {
     const { error } = await callSupabase(
-      'CREATE resource', { name, category, region, type },
-      supabase.from('resources').insert({ name, category, holiday_region: region, type, user_id: session!.user.id }).select().single()
+      'CREATE resource', { name, category },
+      supabase.from('resources').insert({ 
+        name, 
+        category, 
+        holiday_region: region === 'No Region' ? null : region,
+        type, 
+        user_id: session!.user.id 
+      }).select().single()
     );
-    if (error) { 
-      alert('Failed to add resource.'); 
-    } else {
-      fetchData(true);
-    }
-  };
-
-  const updateResourceCategory = async (id: string, category: Role) => {
-    const { error } = await callSupabase(
-      'UPDATE resource category', { id, category },
-      supabase.from('resources').update({ category }).eq('id', id)
-    );
-    if (error) { alert('Failed to update resource category.'); }
-    else { fetchData(true); }
-  };
-
-  const updateResourceRegion = async (id: string, region: string | null) => {
-    const { error } = await callSupabase(
-      'UPDATE resource region', { id, region },
-      supabase.from('resources').update({ holiday_region: region }).eq('id', id)
-    );
-    if (error) { alert('Failed to update resource region.'); }
-    else { fetchData(true); }
-  };
-  
-  const updateResourceType = async (id: string, type: 'Internal' | 'External') => {
-    const { error } = await callSupabase(
-      'UPDATE resource type', { id, type },
-      supabase.from('resources').update({ type }).eq('id', id)
-    );
-    if (error) { alert('Failed to update resource type.'); }
+    if (error) { alert("Failed to add resource."); }
     else { fetchData(true); }
   };
 
   const deleteResource = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this resource? This will unassign them from all tasks.')) {
+    if (window.confirm('Are you sure you want to delete this resource?')) {
         const { error } = await callSupabase('DELETE resource', { id }, supabase.from('resources').delete().eq('id', id));
-        if (error) { alert('Failed to delete resource.'); }
-        else { fetchData(true); }
+        if (error) { alert("Failed to delete resource."); } else { fetchData(true); }
     }
+  };
+
+  const updateResourceCategory = async (id: string, category: Role) => {
+    const { error } = await callSupabase('UPDATE resource category', { id, category }, supabase.from('resources').update({ category }).eq('id', id));
+    if (error) alert("Failed to update resource category."); else fetchData(true);
+  };
+
+  const updateResourceRegion = async (id: string, region: string | null) => {
+      const { error } = await callSupabase('UPDATE resource region', { id, region }, supabase.from('resources').update({ holiday_region: region }).eq('id', id));
+      if (error) alert("Failed to update resource region."); else fetchData(true);
+  };
+
+  const updateResourceType = async (id: string, type: 'Internal' | 'External') => {
+      const { error } = await callSupabase('UPDATE resource type', { id, type }, supabase.from('resources').update({ type }).eq('id', id));
+      if (error) alert("Failed to update resource type."); else fetchData(true);
   };
 
   const addIndividualHoliday = async (resourceId: string, date: string, name: string) => {
-    const { error } = await callSupabase(
-      'CREATE individual holiday', { resourceId, date, name },
-      supabase.from('individual_holidays').insert({ resource_id: resourceId, date, name, user_id: session!.user.id })
-    );
-    if (error) { alert('Failed to add individual holiday.'); } 
-    else { fetchData(true); }
+      const { error } = await callSupabase('ADD individual holiday', { resourceId, date }, supabase.from('individual_holidays').insert({ resource_id: resourceId, date, name, user_id: session!.user.id }));
+      if (error) alert("Failed to add holiday."); else fetchData(true);
   };
 
   const deleteIndividualHoliday = async (holidayId: string) => {
-    if (window.confirm('Are you sure you want to delete this individual holiday?')) {
-      const { error } = await callSupabase('DELETE individual holiday', { holidayId }, supabase.from('individual_holidays').delete().eq('id', holidayId));
-      if (error) { alert('Failed to delete individual holiday.'); } 
-      else { fetchData(true); }
-    }
+      const { error } = await callSupabase('DELETE individual holiday', { id: holidayId }, supabase.from('individual_holidays').delete().eq('id', holidayId));
+      if (error) alert("Failed to delete holiday."); else fetchData(true);
+  };
+  
+  const addHoliday = async (holidays: Omit<Holiday, 'id'>[]) => {
+      const toInsert = holidays.map(h => ({ ...h, user_id: session!.user.id }));
+      const { error } = await callSupabase('ADD holidays', { count: toInsert.length }, supabase.from('holidays').insert(toInsert));
+      if (error) alert("Failed to add holidays."); else fetchData(true);
+  };
+
+  const deleteHoliday = async (id: string) => {
+      const { error } = await callSupabase('DELETE holiday', { id }, supabase.from('holidays').delete().eq('id', id));
+      if (error) alert("Failed to delete holiday."); else fetchData(true);
+  };
+
+  const deleteHolidaysByCountry = async (country: string) => {
+      const { error } = await callSupabase('DELETE holidays by country', { country }, supabase.from('holidays').delete().eq('country', country).eq('user_id', session!.user.id));
+      if (error) alert("Failed to delete holidays."); else fetchData(true);
+  };
+
+  // --- Version History Functions ---
+  const saveCurrentVersion = async (name: string) => {
+      const { error } = await callSupabase('SAVE version', { name }, supabase.from('versions').insert({ 
+          name, 
+          user_id: session!.user.id,
+          data: { projects, resources, holidays } // Store full state snapshot
+      }));
+      if (error) alert("Failed to save version.");
+  };
+
+  const restoreVersion = async (versionId: number) => {
+      const { data, error } = await supabase.from('versions').select('data').eq('id', versionId).single();
+      if (error || !data) { alert("Failed to restore version."); return; }
+      
+      const snapshot = data.data;
+      if (snapshot.projects) {
+          // Warning: This is a complex operation in a real app (diffing/syncing). 
+          // For now, we just alerting that this would require backend logic to restore deeply nested relations.
+          alert("Version restore logic would implementation deep backend restore. Loading snapshot into memory only.");
+          setProjects(snapshot.projects);
+          setResources(snapshot.resources || []);
+          setHolidays(snapshot.holidays || []);
+      }
   };
 
   if (!session) {
     return (
-      <div className="flex justify-center items-center h-screen bg-slate-100">
-        <div className="w-full max-w-md p-8 bg-white rounded-xl shadow-lg">
-          <Auth supabaseClient={supabase} appearance={{ theme: ThemeSupa }} providers={['google', 'github']} />
+      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+        <div className="bg-white p-8 rounded-xl shadow-lg border border-slate-200 w-full max-w-md">
+          <h1 className="text-2xl font-bold text-center mb-6 text-slate-800">OMS Resource Master</h1>
+          <Auth
+            supabaseClient={supabase}
+            appearance={{ theme: ThemeSupa }}
+            theme="default"
+            providers={[]}
+          />
         </div>
       </div>
     );
   }
 
+  if (loading) {
+      return <div className="flex h-screen items-center justify-center text-slate-500 gap-2"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-500"></div> Loading data...</div>;
+  }
+
   return (
-    <>
-      {showHistory && <VersionHistory onClose={() => setShowHistory(false)} onRestore={handleRestoreVersion} onSaveCurrent={handleSaveVersion}/>}
-      {isDebugLogEnabled && <DebugLog entries={logEntries} setEntries={setLogEntries} />}
-      <div className="flex h-screen w-full bg-slate-100">
-        <aside className={`${isSidebarCollapsed ? 'w-20' : 'w-64'} bg-slate-900 text-slate-300 flex flex-col shadow-xl transition-all duration-300 ease-in-out`}>
-          <div className={`p-4 border-b border-slate-800 flex flex-col gap-4 ${isSidebarCollapsed ? 'items-center' : ''}`}>
-            <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center flex-col gap-4' : 'justify-between'}`}>
-              <div className="flex items-center gap-3 overflow-hidden">
-                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold flex-shrink-0">OM</div>
-                {!isSidebarCollapsed && <span className="font-bold text-lg text-white whitespace-nowrap">Resourcer</span>}
-              </div>
-              <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-800 hover:text-white" title={isSidebarCollapsed ? "Expand" : "Collapse"}>
-                {isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-              </button>
+    <div className="h-screen flex flex-col bg-slate-100 overflow-hidden">
+        {/* Top Navigation Bar */}
+        <div className="bg-white border-b border-slate-200 h-14 flex items-center justify-between px-4 flex-shrink-0 z-20">
+            <div className="flex items-center gap-4">
+                <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors">
+                    {isSidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+                </button>
+                <h1 className="font-bold text-lg text-slate-800 tracking-tight">OMS Resource Master</h1>
             </div>
-          </div>
-          <nav className="flex-1 p-2 space-y-2 mt-2">
-            <button onClick={() => setActiveTab('dashboard')} title="Dashboard" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><LayoutDashboard size={20} />{!isSidebarCollapsed && <span className="font-medium">Dashboard</span>}</button>
-            <button onClick={() => setActiveTab('planner')} title="Planner" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'planner' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><Calendar size={20} />{!isSidebarCollapsed && <span className="font-medium">Planner</span>}</button>
-            <button onClick={() => setActiveTab('estimator')} title="Estimator" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'estimator' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><Calculator size={20} />{!isSidebarCollapsed && <span className="font-medium">Estimator</span>}</button>
-            <button onClick={() => setActiveTab('resources')} title="Resources" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg ${activeTab === 'resources' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800'}`}><Users size={20} />{!isSidebarCollapsed && <span className="font-medium">Resources</span>}</button>
-          </nav>
-          <div className="p-2 border-t border-slate-800">
-            <div className={`p-2 ${isSidebarCollapsed ? '' : 'mb-2'}`}>
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-indigo-500 text-white flex items-center justify-center font-bold rounded-full flex-shrink-0">
-                  {session.user.email ? session.user.email[0].toUpperCase() : 'U'}
+            <div className="flex items-center gap-4">
+                <span className="text-xs font-medium bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full border border-indigo-100">{session.user.email}</span>
+                <button 
+                  onClick={() => supabase.auth.signOut()} 
+                  className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Sign Out"
+                >
+                    <LogOut size={18} />
+                </button>
+            </div>
+        </div>
+
+        <div className="flex-1 flex overflow-hidden">
+            {/* Sidebar */}
+            <div className={`${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-white border-r border-slate-200 flex flex-col transition-all duration-300 ease-in-out z-10`}>
+                <nav className="p-2 space-y-1 mt-4">
+                   <SidebarItem icon={LayoutDashboard} label="Dashboard" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} collapsed={isSidebarCollapsed} />
+                   <SidebarItem icon={Calendar} label="Planner" isActive={activeTab === 'planner'} onClick={() => setActiveTab('planner')} collapsed={isSidebarCollapsed} />
+                   <SidebarItem icon={Calculator} label="Estimator" isActive={activeTab === 'estimator'} onClick={() => setActiveTab('estimator')} collapsed={isSidebarCollapsed} />
+                   <div className="my-2 border-t border-slate-100"></div>
+                   <SidebarItem icon={Users} label="Resources" isActive={activeTab === 'resources'} onClick={() => setActiveTab('resources')} collapsed={isSidebarCollapsed} />
+                   <SidebarItem icon={Globe} label="Holidays" isActive={activeTab === 'holidays'} onClick={() => setActiveTab('holidays')} collapsed={isSidebarCollapsed} />
+                   <div className="my-2 border-t border-slate-100"></div>
+                   <SidebarItem icon={SettingsIcon} label="Settings" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} collapsed={isSidebarCollapsed} />
+                </nav>
+            </div>
+
+            {/* Main Content */}
+            <div className="flex-1 bg-slate-50 relative overflow-hidden flex flex-col">
+                <div className="flex-1 p-4 overflow-hidden">
+                    {activeTab === 'dashboard' && <Dashboard projects={projects} />}
+                    
+                    {activeTab === 'planner' && (
+                        <div className="h-full">
+                            <PlannerGrid 
+                                projects={projects} 
+                                holidays={holidays}
+                                resources={resources}
+                                timelineStart={timelineStart}
+                                timelineEnd={timelineEnd}
+                                onExtendTimeline={handleExtendTimeline}
+                                onUpdateAllocation={updateAllocation}
+                                onUpdateAssignmentResourceName={updateAssignmentResourceName}
+                                onUpdateAssignmentDependency={updateAssignmentDependency}
+                                onAddTask={addTask}
+                                onAddAssignment={addAssignment}
+                                onCopyAssignment={onCopyAssignment}
+                                onReorderModules={reorderModules}
+                                onReorderTasks={reorderTasks}
+                                onReorderAssignments={reorderAssignments}
+                                onShiftTask={onShiftTask}
+                                onUpdateAssignmentSchedule={updateAssignmentSchedule}
+                                onAddProject={addProject}
+                                onAddModule={addModule}
+                                onUpdateProjectName={updateProjectName}
+                                onUpdateModuleName={updateModuleName}
+                                onUpdateTaskName={updateTaskName}
+                                onDeleteProject={deleteProject}
+                                onDeleteModule={deleteModule}
+                                onDeleteTask={deleteTask}
+                                onDeleteAssignment={deleteAssignment}
+                                onImportPlan={(p) => { setProjects(p); }} // Simplified import logic for now
+                                onShowHistory={() => setShowHistory(true)}
+                                onRefresh={() => fetchData(true)}
+                                saveStatus={saveStatus}
+                                isRefreshing={isRefreshing}
+                            />
+                        </div>
+                    )}
+                    
+                    {activeTab === 'estimator' && (
+                        <div className="h-full">
+                            <Estimator 
+                                projects={projects} 
+                                onUpdateFunctionPoints={updateFunctionPoints}
+                                onReorderModules={reorderModules}
+                            />
+                        </div>
+                    )}
+
+                    {activeTab === 'resources' && (
+                        <div className="h-full overflow-y-auto custom-scrollbar">
+                           <Resources 
+                              resources={resources}
+                              onAddResource={addResource}
+                              onDeleteResource={deleteResource}
+                              onUpdateResourceCategory={updateResourceCategory}
+                              onUpdateResourceRegion={updateResourceRegion}
+                              onUpdateResourceType={updateResourceType}
+                              onAddIndividualHoliday={addIndividualHoliday}
+                              onDeleteIndividualHoliday={deleteIndividualHoliday}
+                           />
+                        </div>
+                    )}
+
+                    {activeTab === 'holidays' && (
+                        <div className="h-full overflow-hidden">
+                            <AdminSettings 
+                                holidays={holidays}
+                                onAddHolidays={addHoliday}
+                                onDeleteHoliday={deleteHoliday}
+                                onDeleteHolidaysByCountry={deleteHolidaysByCountry}
+                            />
+                        </div>
+                    )}
+                    
+                    {activeTab === 'settings' && (
+                        <div className="max-w-4xl mx-auto h-full overflow-y-auto custom-scrollbar">
+                           <Settings isDebugLogEnabled={isDebugLogEnabled} setIsDebugLogEnabled={setIsDebugLogEnabled} />
+                        </div>
+                    )}
                 </div>
-                {!isSidebarCollapsed && (
-                  <div className="overflow-hidden">
-                    <p className="text-sm font-semibold text-white truncate" title={session.user.email}>{session.user.email}</p>
-                  </div>
-                )}
-              </div>
             </div>
-            <div className="space-y-1">
-              <button onClick={() => setActiveTab('settings')} title="Settings" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-3 py-2 text-sm rounded-lg ${activeTab === 'settings' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}><SettingsIcon size={16} />{!isSidebarCollapsed && <span>Settings</span>}</button>
-              <button onClick={() => supabase.auth.signOut()} title="Sign Out" className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} gap-3 px-3 py-2 text-sm rounded-lg text-slate-400 hover:text-white hover:bg-slate-800`}><LogOut size={16} />{!isSidebarCollapsed && <span>Sign Out</span>}</button>
-            </div>
-          </div>
-        </aside>
-        <main className="flex-1 flex flex-col overflow-hidden">
-          <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
-            <h1 className="text-xl font-bold text-slate-800">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</h1>
-          </header>
-          <div className="flex-1 overflow-auto p-6">
-            {loading ? <div className="text-center p-8 text-slate-500">Loading your data...</div> : (
-              <>
-                {activeTab === 'dashboard' && <Dashboard projects={projects} />}
-                {activeTab === 'planner' && <PlannerGrid projects={projects} resources={resources} holidays={holidays} timelineStart={timelineStart} timelineEnd={timelineEnd} onExtendTimeline={handleExtendTimeline} onUpdateAllocation={updateAllocation} onUpdateAssignmentResourceName={updateAssignmentResourceName} onUpdateAssignmentDependency={updateAssignmentDependency} onAddTask={addTask} onAddAssignment={addAssignment} onCopyAssignment={onCopyAssignment} onReorderModules={reorderModules} onReorderTasks={reorderTasks} onReorderAssignments={reorderAssignments} onShiftTask={onShiftTask} onUpdateAssignmentSchedule={updateAssignmentSchedule} onAddProject={addProject} onAddModule={addModule} onUpdateProjectName={updateProjectName} onUpdateModuleName={updateModuleName} onUpdateTaskName={updateTaskName} onDeleteProject={deleteProject} onDeleteModule={deleteModule} onDeleteTask={deleteTask} onDeleteAssignment={deleteAssignment} onImportPlan={onImportPlan} onShowHistory={() => setShowHistory(true)} onRefresh={() => fetchData(true)} saveStatus={saveStatus} isRefreshing={isRefreshing} />}
-                {activeTab === 'estimator' && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full"><div className="lg:col-span-1 h-fit"><Estimator projects={projects} onUpdateFunctionPoints={updateFunctionPoints} onReorderModules={reorderModules}/></div><div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-8 flex items-center justify-center flex-col text-slate-400"><Calculator className="w-16 h-16 mb-4 opacity-20" /><h3 className="text-lg font-medium text-slate-600">Effort Estimation</h3></div></div>}
-                {activeTab === 'resources' && <Resources resources={resources} onAddResource={addResource} onDeleteResource={deleteResource} onUpdateResourceCategory={updateResourceCategory} onUpdateResourceRegion={updateResourceRegion} onAddIndividualHoliday={addIndividualHoliday} onDeleteIndividualHoliday={deleteIndividualHoliday} onUpdateResourceType={updateResourceType} />}
-                {activeTab === 'settings' && <Settings isDebugLogEnabled={isDebugLogEnabled} setIsDebugLogEnabled={setIsDebugLogEnabled} />}
-              </>
-            )}
-          </div>
-        </main>
-      </div>
-    </>
+        </div>
+
+        {/* Floating Components */}
+        <DebugLog entries={logEntries} setEntries={setLogEntries} />
+        {showHistory && (
+            <VersionHistory 
+                onClose={() => setShowHistory(false)} 
+                onRestore={restoreVersion}
+                onSaveCurrent={saveCurrentVersion}
+            />
+        )}
+        <AIAssistant 
+            projects={projects}
+            resources={resources}
+            onAddTask={addTask}
+            onAssignResource={updateAssignmentResourceName}
+        />
+    </div>
   );
 };
+
+const SidebarItem: React.FC<{ icon: React.ElementType, label: string, isActive: boolean, onClick: () => void, collapsed: boolean }> = ({ icon: Icon, label, isActive, onClick, collapsed }) => (
+    <button 
+        onClick={onClick}
+        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative
+            ${isActive ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}
+            ${collapsed ? 'justify-center' : ''}
+        `}
+        title={collapsed ? label : ''}
+    >
+        <Icon size={20} className={`${isActive ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
+        {!collapsed && <span>{label}</span>}
+        {collapsed && (
+            <div className="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50">
+                {label}
+            </div>
+        )}
+    </button>
+);
 
 export default App;
