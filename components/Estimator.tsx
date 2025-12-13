@@ -215,7 +215,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
                 <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase tracking-wider">
                     <tr>
                         <th className="w-10 py-3 border-b border-slate-200"></th>
-                        <th className="py-3 px-4 border-b border-slate-200 border-r text-left">Module</th>
+                        <th className="py-3 px-4 border-b border-slate-200 border-r text-left min-w-[200px]">Module</th>
                         
                         {/* Phase 1 Header */}
                         <th colSpan={3} className="py-2 px-4 text-center bg-amber-50 border-b border-amber-100 border-r border-slate-200 text-amber-800">
@@ -234,17 +234,17 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
                         <th className="border-b border-slate-200 border-r bg-slate-50"></th>
                         
                         {/* Phase 1 Subheaders */}
-                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-amber-50/30 w-24">Legacy FP</th>
-                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-amber-50/30 w-20" title="Man-Days">Effort</th>
-                        <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-amber-50/30 w-20" title="Calendar Time">Duration</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-amber-50/30 w-32">Legacy FP</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-amber-50/30 w-28" title="Man-Days">Effort</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-amber-50/30 w-28" title="Calendar Time">Duration</th>
 
                         {/* Phase 2 Subheaders */}
-                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-indigo-50/30 w-24">MVP FP</th>
-                        <th className="py-2 px-2 text-center border-b border-slate-200 bg-indigo-50/30 w-24">Difficulty</th>
-                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-indigo-50/30 w-20" title="Man-Days (Calculated with Difficulty)">Effort</th>
-                        <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-indigo-50/30 w-20" title="Calendar Time">Duration</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-indigo-50/30 w-32">MVP FP</th>
+                        <th className="py-2 px-2 text-center border-b border-slate-200 bg-indigo-50/30 w-40">Difficulty</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-indigo-50/30 w-28" title="Man-Days (Calculated with Difficulty)">Effort</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-indigo-50/30 w-28" title="Calendar Time">Duration</th>
 
-                        <th className="py-2 px-4 text-right border-b border-slate-200 bg-slate-100 w-28 font-bold">Est. Delivery</th>
+                        <th className="py-2 px-4 text-right border-b border-slate-200 bg-slate-100 w-40 font-bold">Est. Delivery</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
