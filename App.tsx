@@ -193,14 +193,55 @@ const App: React.FC = () => {
         return;
     }
 
-    let minWeekId: string | null = null;
+    let minVal = Infinity;
+    let maxVal = -Infinity;
+    let minPoint: WeekPoint | null = null;
+    let maxPoint: WeekPoint | null = null;
+
+    const processDate = (dateStr: string) => {
+        if (!dateStr) return;
+        try {
+            const d = new Date(dateStr.replace(/-/g, '/'));
+            const weekId = getWeekIdFromDate(d);
+            const [y, w] = weekId.split('-').map(Number);
+            if (!isNaN(y) && !isNaN(w)) {
+                const val = y * 100 + w;
+                if (val < minVal) {
+                    minVal = val;
+                    minPoint = { year: y, week: w };
+                }
+                if (val > maxVal) {
+                    maxVal = val;
+                    maxPoint = { year: y, week: w };
+                }
+            }
+        } catch (e) {
+            // ignore invalid dates
+        }
+    };
+
     projects.forEach(project => {
         project.modules.forEach(module => {
             module.tasks.forEach(task => {
                 task.assignments.forEach(assignment => {
+                    if (assignment.startDate) {
+                        processDate(assignment.startDate);
+                        // Approximate end date check to extend timeline
+                        if (assignment.duration) {
+                             const d = new Date(assignment.startDate.replace(/-/g, '/'));
+                             d.setDate(d.getDate() + Math.ceil(assignment.duration * 1.5)); 
+                             processDate(formatDateForInput(d));
+                        }
+                    }
+                    
                     assignment.allocations.forEach(alloc => {
-                        if (alloc.weekId && (!minWeekId || alloc.weekId < minWeekId)) {
-                            minWeekId = alloc.weekId;
+                        if (alloc.weekId) {
+                            const [y, w] = alloc.weekId.split('-').map(Number);
+                            if (!isNaN(y) && !isNaN(w)) {
+                                const val = y * 100 + w;
+                                if (val < minVal) { minVal = val; minPoint = { year: y, week: w }; }
+                                if (val > maxVal) { maxVal = val; maxPoint = { year: y, week: w }; }
+                            }
                         }
                     });
                 });
@@ -208,16 +249,13 @@ const App: React.FC = () => {
         });
     });
 
-    if (minWeekId) {
-        const [yearStr, weekStr] = minWeekId.split('-');
-        const year = parseInt(yearStr, 10);
-        const week = parseInt(weekStr, 10);
-
-        if (!isNaN(year) && !isNaN(week)) {
-            setTimelineStart({ year, week });
-            timelineInitialized.current = true;
-        }
-    } else {
+    if (minPoint && maxPoint) {
+        // Add buffer of 4 weeks on both sides
+        setTimelineStart(addWeeksToPoint(minPoint, -4));
+        setTimelineEnd(addWeeksToPoint(maxPoint, 4));
+        timelineInitialized.current = true;
+    } else if (projects.length > 0) {
+        // Data loaded but no schedule found, ensure we don't re-run
         timelineInitialized.current = true;
     }
   }, [projects, loading]);
