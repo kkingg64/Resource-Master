@@ -603,6 +603,27 @@ const App: React.FC = () => {
     }
   };
 
+  const getHolidaysForResource = (resourceName: string | undefined): Set<string> => {
+    const holidaySet = new Set<string>();
+    if (!resourceName) return holidaySet;
+
+    const resource = resources.find(r => r.name === resourceName);
+    if (!resource) return holidaySet;
+
+    // Add regional holidays
+    if (resource.holiday_region) {
+        holidays
+            .filter(h => h.country === resource.holiday_region)
+            .forEach(h => holidaySet.add(h.date));
+    }
+
+    // Add individual holidays
+    const individualHolidays = resource.individual_holidays || [];
+    individualHolidays.forEach(h => holidaySet.add(h.date));
+
+    return holidaySet;
+  };
+
   const updateAssignmentDependency = async (assignmentId: string, parentAssignmentId: string | null) => {
     const previousState = deepClone(projects);
     
@@ -626,31 +647,12 @@ const App: React.FC = () => {
         const parentAssignment = allAssignmentsFlat.find(a => a.id === parentAssignmentId);
         
         if (childAssignment && parentAssignment) {
-            // Get parent's holidays
-            const parentHolidaysSet = new Set<string>();
-            const parentResource = resources.find(r => r.name === parentAssignment.resourceName);
-            if (parentResource) {
-                if (parentResource.holiday_region) {
-                    holidays.filter(h => h.country === parentResource.holiday_region).forEach(h => parentHolidaysSet.add(h.date));
-                }
-                parentResource.individual_holidays?.forEach(h => parentHolidaysSet.add(h.date));
-            }
-    
+            const parentHolidaysSet = getHolidaysForResource(parentAssignment.resourceName);
             const parentStartDateStr = parentAssignment.startDate || formatDateForInput(new Date());
             const parentDuration = parentAssignment.duration || 1;
-            
             const parentEndDateStr = calculateEndDate(parentStartDateStr, parentDuration, parentHolidaysSet);
     
-            // Get child's holidays
-            const childHolidaysSet = new Set<string>();
-            const childResource = resources.find(r => r.name === childAssignment.resourceName);
-            if (childResource) {
-                if (childResource.holiday_region) {
-                    holidays.filter(h => h.country === childResource.holiday_region).forEach(h => childHolidaysSet.add(h.date));
-                }
-                childResource.individual_holidays?.forEach(h => childHolidaysSet.add(h.date));
-            }
-    
+            const childHolidaysSet = getHolidaysForResource(childAssignment.resourceName);
             const childNewStartDateStr = findNextWorkingDay(parentEndDateStr, childHolidaysSet);
 
             // This will handle DB updates and state refresh
@@ -696,15 +698,7 @@ const App: React.FC = () => {
 
       // --- Recalculate and Update Allocations ---
       const newAllocations: ResourceAllocation[] = [];
-      const resource = resources.find(r => r.name === assignmentToUpdate.resourceName);
-      let resourceHolidayDates = new Set<string>();
-      if (resource) {
-          if (resource.holiday_region) {
-              holidays.filter(h => h.country === resource.holiday_region).forEach(h => resourceHolidayDates.add(h.date));
-          }
-          const individualHolidays = resource.individual_holidays || [];
-          individualHolidays.forEach(h => resourceHolidayDates.add(h.date));
-      }
+      const resourceHolidayDates = getHolidaysForResource(assignmentToUpdate.resourceName);
 
       if (current.startDate && current.duration > 0) {
           const allocationStartDate = new Date(current.startDate.replace(/-/g, '/'));
@@ -746,15 +740,7 @@ const App: React.FC = () => {
       if (children.length > 0) {
         const parentEndDate = calculateEndDate(current.startDate, current.duration, resourceHolidayDates);
         for (const child of children) {
-          const childResource = resources.find(r => r.name === child.resourceName);
-          let childHolidaysSet = new Set<string>();
-          if (childResource) {
-              if (childResource.holiday_region) {
-                  holidays.filter(h => h.country === childResource.holiday_region).forEach(h => childHolidaysSet.add(h.date));
-              }
-              const individual = childResource.individual_holidays || [];
-              individual.forEach(h => childHolidaysSet.add(h.date));
-          }
+          const childHolidaysSet = getHolidaysForResource(child.resourceName);
           const childNewStartDate = findNextWorkingDay(parentEndDate, childHolidaysSet);
           propagationQueue.push({ assignmentId: child.id, startDate: childNewStartDate, duration: child.duration || 1 });
         }
