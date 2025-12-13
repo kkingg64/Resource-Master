@@ -966,7 +966,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             const total = getModuleTotal(module, col);
                             const isCurrent = isCurrentColumn(col);
                             return (
-                                <div key={col.id} className={`flex-shrink-0 border-r border-slate-200/50 flex items-center justify-center bg-indigo-50/20 ${isCurrent ? 'bg-amber-50/30' : ''}`} style={{ width: `${colWidth}px` }}>
+                                <div key={col.id} className={`flex-shrink-0 border-r border-slate-200/50 flex items-center justify-center bg-indigo-50 ${isCurrent ? 'bg-indigo-50/80' : ''}`} style={{ width: `${colWidth}px` }}>
                                   {total > 0 && (
                                     <span className="text-[10px] font-bold text-indigo-900">{formatValue(total)}</span>
                                   )}
@@ -1034,4 +1034,336 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 }}
                                 className={`flex border-b border-slate-100 bg-slate-50 group/task ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>
                                 <div 
-                                  className="flex-shrink-0 py-1.5
+                                  className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50 z-20 flex items-center justify-between pl-6 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]"
+                                  style={stickyStyle}
+                                >
+                                  <div 
+                                    className="flex items-center gap-2 overflow-hidden cursor-pointer flex-1"
+                                    onClick={() => !isEditingTask && toggleTask(task.id)}
+                                  >
+                                    <div className="cursor-grab text-slate-400 hover:text-slate-600" title="Drag to reorder task">
+                                        <GripVertical size={14} />
+                                    </div>
+                                    {isTaskCollapsed ? <ChevronRight size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                                    <div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0"></div>
+                                    
+                                    {isEditingTask ? (
+                                      <input 
+                                        ref={editInputRef}
+                                        value={editValue}
+                                        onChange={(e) => setEditValue(e.target.value)}
+                                        onBlur={saveEdit}
+                                        onKeyDown={handleKeyDown}
+                                        className="bg-white text-slate-700 text-xs font-bold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                      />
+                                    ) : (
+                                      <span 
+                                        className="text-xs text-slate-700 font-bold truncate select-none hover:text-indigo-600 flex-1" 
+                                        title="Double click to rename"
+                                        onDoubleClick={(e) => startEditing(taskEditId, task.name, e)}
+                                      >
+                                        {task.name}
+                                      </span>
+                                    )}
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity">
+                                    <button 
+                                      onClick={() => onAddAssignment(project.id, module.id, task.id, Role.DEV)}
+                                      className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
+                                      title="Add another resource to this task"
+                                    >
+                                      <UserPlus size={14} />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-50 flex items-center px-2 py-1.5 gap-1 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 19 } : detailsColStyle}>
+                                  {isTaskCollapsed && (
+                                    <>
+                                      <div className="w-[14px]"></div> {/* Spacer for grip handle */}
+                                      <div className="flex-1 grid grid-cols-[1fr_60px_30px] gap-2 text-xs text-slate-500 font-medium text-center items-center">
+                                        <span title="Earliest Start Date" className="bg-slate-200/50 rounded p-1 text-left">{earliestStartDate ? earliestStartDate.substring(5) : '-'}</span>
+                                        <span title="Total Duration (days)" className="bg-slate-200/50 rounded p-1">{totalDuration > 0 ? `${totalDuration}d` : '-'}</span>
+                                        <div></div>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                                
+                                {timeline.map(col => {
+                                  const total = getTaskTotal(task, col);
+                                  const isCurrent = isCurrentColumn(col);
+                                  return (
+                                    <div key={`th-${task.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 flex items-center justify-center bg-slate-50 ${isCurrent ? 'bg-slate-50' : ''}`} style={{ width: `${colWidth}px` }}>
+                                      {total > 0 && (
+                                        <span className="text-[10px] font-semibold text-slate-600">{formatValue(total)}</span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              {!isTaskCollapsed && task.assignments.map((assignment, assignmentIndex) => {
+                                let assignmentStartDate;
+                                if (assignment.startDate) {
+                                    assignmentStartDate = new Date(assignment.startDate.replace(/-/g, '/'));
+                                } else if (assignment.startWeekId) {
+                                    assignmentStartDate = getDateFromWeek(parseInt(assignment.startWeekId.split('-')[0]), parseInt(assignment.startWeekId.split('-')[1]));
+                                } else {
+                                    assignmentStartDate = new Date();
+                                }
+
+                                const resourceName = assignment.resourceName || 'Unassigned';
+                                const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned');
+                                
+                                const possibleParents = allAssignmentsForDependencies.filter(
+                                  parent => parent.id !== assignment.id && !isCircularDependency(assignment.id, parent.id)
+                                );
+                                
+                                const groupedParents = possibleParents.reduce((acc, parent) => {
+                                    if (!acc[parent.groupLabel]) acc[parent.groupLabel] = [];
+                                    acc[parent.groupLabel].push(parent);
+                                    return acc;
+                                }, {} as Record<string, typeof possibleParents>);
+
+                                const isEditingDuration = editingId === `duration::${assignment.id}`;
+
+                                return (
+                                <div 
+                                  key={assignment.id} 
+                                  className={`flex border-b border-slate-100 group/assign ${draggedAssignment?.taskId === task.id && draggedAssignment?.index === assignmentIndex ? 'opacity-30' : ''}`}
+                                  draggable
+                                  onDragStart={(e) => handleAssignmentDragStart(e, task.id, assignmentIndex)}
+                                  onDragOver={handleAssignmentDragOver}
+                                  onDrop={(e) => handleAssignmentDrop(e, project.id, module.id, task.id, assignmentIndex)}
+                                  onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setContextMenu({ type: 'assignment', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id, assignmentId: assignment.id });
+                                  }}
+                                >
+                                  <div 
+                                    className={`flex-shrink-0 py-0.5 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-10 flex items-center justify-between border-l-[3px] ${getRoleColorClass(assignment.role)} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`}
+                                    style={stickyStyle}
+                                  >
+                                    <div className="flex-1 overflow-hidden flex items-center gap-2 pl-12">
+                                      <select
+                                        value={assignment.resourceName || 'Unassigned'}
+                                        onChange={(e) => onUpdateAssignmentResourceName(project.id, module.id, task.id, assignment.id, e.target.value)}
+                                        className="w-full text-xs text-slate-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer hover:text-indigo-600"
+                                      >
+                                          <option value="Unassigned">Unassigned</option>
+                                          {Object.entries(groupedResources).map(([category, resList]) => (
+                                            <optgroup label={category} key={category}>
+                                              {resList.map(r => <option key={r.id} value={r.name}>{r.name} {r.type === 'External' ? '(Ext.)' : ''}</option>)}
+                                            </optgroup>
+                                          ))}
+                                      </select>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 gap-1 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 9 } : detailsColStyle}>
+                                      <div className="cursor-grab text-slate-300 hover:text-slate-500" title="Drag to reorder assignment">
+                                          <GripVertical size={14} />
+                                      </div>
+                                      <div className="flex-1 grid grid-cols-[1fr_60px_30px] gap-2 items-center">
+                                        <input 
+                                            type="date"
+                                            title="Start Date"
+                                            disabled={!!assignment.parentAssignmentId}
+                                            className={`text-xs py-0.5 px-1 rounded-md bg-transparent border-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full hover:bg-slate-100 ${!!assignment.parentAssignmentId ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-600'}`}
+                                            value={formatDateForInput(assignmentStartDate)}
+                                            onChange={(e) => handleAssignmentStartDateChange(assignment, e.target.value)}
+                                        />
+                                        <input 
+                                            type="number"
+                                            min="1"
+                                            title="Duration (days)"
+                                            value={isEditingDuration ? editValue : (assignment.duration || 1)}
+                                            onFocus={() => {
+                                              setEditingId(`duration::${assignment.id}`);
+                                              setEditValue((assignment.duration || 1).toString());
+                                            }}
+                                            onChange={(e) => setEditValue(e.target.value)}
+                                            onBlur={() => saveDuration(assignment)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    saveDuration(assignment);
+                                                    (e.target as HTMLInputElement).blur();
+                                                } else if (e.key === 'Escape') {
+                                                    setEditingId(null);
+                                                    (e.target as HTMLInputElement).blur();
+                                                }
+                                            }}
+                                            ref={isEditingDuration ? editInputRef : undefined}
+                                            className="text-xs py-0.5 px-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center hover:bg-slate-100"
+                                        />
+                                        <div className="relative h-full flex items-center justify-center">
+                                           <select 
+                                              value={assignment.parentAssignmentId || ''}
+                                              onChange={(e) => onUpdateAssignmentDependency(assignment.id, e.target.value || null)}
+                                              title="Task Dependency"
+                                              className="absolute inset-0 w-full h-full text-transparent bg-transparent border-none appearance-none cursor-pointer focus:ring-1 focus:ring-indigo-500 rounded-md"
+                                            >
+                                                <option value="" className="text-black">- No Dependency -</option>
+                                                {Object.entries(groupedParents).map(([label, group]) => (
+                                                    <optgroup label={label} key={label}>
+                                                        {group.map(parent => (
+                                                            <option key={parent.id} value={parent.id} className="text-black">{parent.name}</option>
+                                                        ))}
+                                                    </optgroup>
+                                                ))}
+                                            </select>
+                                            {assignment.parentAssignmentId ? <Link size={14} className="text-indigo-600 pointer-events-none" /> : <Link2 size={14} className="text-slate-400 pointer-events-none" />}
+                                        </div>
+                                      </div>
+                                  </div>
+                                  
+                                  {timeline.map(col => {
+                                    const raw = getRawCellValue(assignment, col);
+                                    const display = formatValue(raw);
+                                    const hasValue = raw > 0;
+                                    const isCurrent = isCurrentColumn(col);
+                                    
+                                    const dateStr = col.date ? formatDateForInput(col.date) : '';
+                                    const isHol = viewMode === 'day' && !!(resourceHolidayData && resourceHolidayData.dateSet.has(dateStr));
+                                    const holidayInfo = isHol ? resourceHolidayData!.holidays.find(h => h.date === dateStr) : undefined;
+
+                                    return (
+                                      <div 
+                                        key={`${assignment.id}-${col.id}`} 
+                                        className={`flex-shrink-0 border-r border-slate-100 relative ${isHol ? 'bg-[repeating-linear-gradient(45deg,theme(colors.red.50),theme(colors.red.50)_5px,theme(colors.red.100)_5px,theme(colors.red.100)_10px)]' : isCurrent ? 'bg-amber-50/50' : ''}`} 
+                                        style={{ width: `${colWidth}px` }}
+                                        title={holidayInfo?.name}
+                                      >
+                                        {isHol && holidayInfo ? (
+                                          <div className="flex items-center justify-center h-full text-xs font-bold text-red-700 select-none">
+                                            {'country' in holidayInfo ? holidayInfo.country : 'AL'}
+                                          </div>
+                                        ) : (
+                                          <input 
+                                            type="text"
+                                            className={`w-full h-full text-center text-xs focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors
+                                                ${hasValue ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50'}
+                                            `}
+                                            value={display}
+                                            placeholder={'-'}
+                                            onChange={(e) => handleCellUpdate(project.id, module.id, task.id, assignment.id, col, e.target.value)}
+                                          />
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )})}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })}
+            
+            <div className="flex bg-slate-800 text-white border-t border-slate-700 sticky bottom-0 z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.2)] mt-0.5">
+              <div 
+                className="flex-shrink-0 p-3 border-r border-slate-700 sticky left-0 bg-slate-800 z-50 font-bold text-sm shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]"
+                style={stickyStyle}
+              >
+                GRAND TOTAL
+              </div>
+              <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}></div>
+              {timeline.map(col => {
+                const total = projects.reduce((acc, p) => acc + getProjectTotal(p, col), 0);
+                const isCurrent = isCurrentColumn(col);
+                
+                return (
+                  <div key={`total-${col.id}`} className={`flex-shrink-0 border-r border-slate-700 flex items-center justify-center text-xs font-mono font-bold ${isCurrent ? 'bg-slate-700 ring-1 ring-inset ring-amber-400/50' : ''}`} style={{ width: `${colWidth}px` }}>
+                    {total > 0 ? formatValue(total) : ''}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+      {contextMenu && (
+        <div
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          className="absolute z-50 bg-white shadow-xl rounded-md border border-slate-200 p-1 animate-in fade-in"
+        >
+          {contextMenu.type === 'project' && (
+            <>
+              <button
+                onClick={() => { onAddModule(contextMenu.projectId); setContextMenu(null); }}
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"
+              >
+                <Plus size={12} /> Add New Module
+              </button>
+              <div className="h-px bg-slate-100 my-1"></div>
+              <button
+                onClick={() => { onDeleteProject(contextMenu.projectId); setContextMenu(null); }}
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"
+              >
+                <Trash2 size={12} /> Delete Project
+              </button>
+            </>
+          )}
+          {contextMenu.type === 'module' && contextMenu.moduleId && (
+            <>
+              <button
+                onClick={() => { handleAddTaskClick(contextMenu.projectId, contextMenu.moduleId!); setContextMenu(null); }}
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"
+              >
+                <Plus size={12} /> Add New Task
+              </button>
+              <div className="h-px bg-slate-100 my-1"></div>
+               <button
+                onClick={() => { onDeleteModule(contextMenu.projectId, contextMenu.moduleId!); setContextMenu(null); }}
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"
+              >
+                <Trash2 size={12} /> Delete Module
+              </button>
+            </>
+          )}
+          {contextMenu.type === 'task' && contextMenu.moduleId && contextMenu.taskId && (
+            <>
+              <button
+                onClick={() => { onAddAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, Role.DEV); setContextMenu(null); }}
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"
+              >
+                <UserPlus size={12} /> Add Resource
+              </button>
+              <div className="h-px bg-slate-100 my-1"></div>
+              <button
+                onClick={() => { onDeleteTask(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!); setContextMenu(null); }}
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"
+              >
+                <Trash2 size={12} /> Delete Task
+              </button>
+            </>
+          )}
+          {contextMenu.type === 'assignment' && contextMenu.assignmentId && contextMenu.moduleId && contextMenu.taskId && (
+            <>
+              <button
+                onClick={() => { onCopyAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }}
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"
+              >
+                <Copy size={12} /> Duplicate Assignment
+              </button>
+              <div className="h-px bg-slate-100 my-1"></div>
+              <button
+                onClick={() => { onDeleteAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }}
+                className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"
+              >
+                <Trash2 size={12} /> Delete Assignment
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </>
+  );
+};
