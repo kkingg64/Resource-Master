@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday } from '../types';
-import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput } from '../constants';
+import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
 import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -831,19 +831,41 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     let moduleTotalDuration = 0;
 
                     if (isModuleCollapsed) {
-                        const allAssignments = module.tasks.flatMap(t => t.assignments);
-                        if (allAssignments.length > 0) {
-                            moduleTotalDuration = allAssignments.reduce((sum, a) => sum + (a.duration || 0), 0);
-                            
-                            const startDates = allAssignments
-                                .map(a => a.startDate ? new Date(a.startDate.replace(/-/g, '/')) : null)
-                                .filter((d): d is Date => d !== null);
+                      const allAssignments = module.tasks.flatMap(t => t.assignments);
+                      if (allAssignments.length > 0) {
+                          let earliestDate: Date | null = null;
+                          let latestEndDate: Date | null = null;
 
-                            if (startDates.length > 0) {
-                                const earliestDate = new Date(Math.min(...startDates.map(d => d.getTime())));
-                                moduleEarliestStartDate = formatDateForInput(earliestDate);
-                            }
-                        }
+                          const moduleHolidays = new Set<string>();
+                          allAssignments.forEach(a => {
+                              const resourceHolidayData = resourceHolidaysMap.get(a.resourceName || '');
+                              if (resourceHolidayData) {
+                                  resourceHolidayData.dateSet.forEach(d => moduleHolidays.add(d));
+                              }
+                          });
+
+                          allAssignments.forEach(assignment => {
+                              if (!assignment.startDate || !assignment.duration) return;
+
+                              const startDate = new Date(assignment.startDate.replace(/-/g, '/'));
+                              if (!earliestDate || startDate < earliestDate) {
+                                  earliestDate = startDate;
+                              }
+                              
+                              const assignmentHolidays = resourceHolidaysMap.get(assignment.resourceName || '')?.dateSet || new Set<string>();
+                              const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidays);
+                              const endDate = new Date(endDateStr.replace(/-/g, '/'));
+                              
+                              if (!latestEndDate || endDate > latestEndDate) {
+                                  latestEndDate = endDate;
+                              }
+                          });
+                          
+                          if (earliestDate && latestEndDate) {
+                              moduleEarliestStartDate = formatDateForInput(earliestDate);
+                              moduleTotalDuration = calculateWorkingDaysBetween(formatDateForInput(earliestDate), formatDateForInput(latestEndDate), moduleHolidays);
+                          }
+                      }
                     }
 
                     return (
@@ -936,15 +958,39 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           
                           let earliestStartDate: string | null = null;
                           let totalDuration = 0;
-                          if (isTaskCollapsed && task.assignments.length > 0) {
-                              totalDuration = task.assignments.reduce((sum, a) => sum + (a.duration || 0), 0);
-                              const startDates = task.assignments
-                                  .map(a => a.startDate ? new Date(a.startDate.replace(/-/g, '/')) : null)
-                                  .filter((d): d is Date => d !== null);
 
-                              if (startDates.length > 0) {
-                                  const earliestDate = new Date(Math.min(...startDates.map(d => d.getTime())));
+                          if (isTaskCollapsed && task.assignments.length > 0) {
+                              let earliestDate: Date | null = null;
+                              let latestEndDate: Date | null = null;
+                              
+                              const taskHolidays = new Set<string>();
+                              task.assignments.forEach(a => {
+                                  const resourceHolidayData = resourceHolidaysMap.get(a.resourceName || '');
+                                  if (resourceHolidayData) {
+                                      resourceHolidayData.dateSet.forEach(d => taskHolidays.add(d));
+                                  }
+                              });
+
+                              task.assignments.forEach(assignment => {
+                                  if (!assignment.startDate || !assignment.duration) return;
+
+                                  const startDate = new Date(assignment.startDate.replace(/-/g, '/'));
+                                  if (!earliestDate || startDate < earliestDate) {
+                                      earliestDate = startDate;
+                                  }
+                                  
+                                  const assignmentHolidays = resourceHolidaysMap.get(assignment.resourceName || '')?.dateSet || new Set<string>();
+                                  const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidays);
+                                  const endDate = new Date(endDateStr.replace(/-/g, '/'));
+                                  
+                                  if (!latestEndDate || endDate > latestEndDate) {
+                                      latestEndDate = endDate;
+                                  }
+                              });
+                              
+                              if (earliestDate && latestEndDate) {
                                   earliestStartDate = formatDateForInput(earliestDate);
+                                  totalDuration = calculateWorkingDaysBetween(formatDateForInput(earliestDate), formatDateForInput(latestEndDate), taskHolidays);
                               }
                           }
 

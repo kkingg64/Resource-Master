@@ -464,3 +464,26 @@ export const findNextWorkingDay = (dateStr: string, holidays: Set<string>): stri
     currentDate.setDate(currentDate.getDate() + 1);
   }
 };
+
+export const calculateWorkingDaysBetween = (startDateStr: string, endDateStr: string, holidays: Set<string>): number => {
+  if (!startDateStr || !endDateStr) return 0;
+  
+  let currentDate = new Date(startDateStr.replace(/-/g, '/'));
+  const endDate = new Date(endDateStr.replace(/-/g, '/'));
+  
+  if (currentDate > endDate) return 0;
+
+  let workingDays = 0;
+  
+  while (currentDate <= endDate) {
+    const dayOfWeek = currentDate.getDay();
+    const dateStr = formatDateForInput(currentDate);
+
+    if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidays.has(dateStr)) {
+      workingDays++;
+    }
+    
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+  return workingDays;
+};
