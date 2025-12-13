@@ -770,9 +770,35 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}></div>
                   {timeline.map(col => {
                       const isCurrent = isCurrentColumn(col);
-                      return (<div key={col.id} className={`flex-shrink-0 text-center text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col h-full ${isCurrent ? 'bg-amber-50 text-amber-700 border-b-2 border-b-amber-400' : 'text-slate-500'}`} style={{ width: `${colWidth}px` }} title={isCurrent ? 'Current Date' : ''}>
+                      let isHKHoliday = false;
+                      let holidayName = '';
+                      
+                      if (viewMode === 'day' && col.date) {
+                          const dateStr = formatDateForInput(col.date);
+                          const holiday = holidays.find(h => h.country === 'HK' && h.date === dateStr);
+                          if (holiday) {
+                              isHKHoliday = true;
+                              holidayName = holiday.name;
+                          }
+                      }
+
+                      let className = `flex-shrink-0 text-center text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col h-full`;
+                      
+                      if (isHKHoliday) {
+                        className += ' bg-red-50 text-red-700';
+                      } else if (isCurrent) {
+                        className += ' bg-amber-50 text-amber-700';
+                      } else {
+                        className += ' text-slate-500';
+                      }
+
+                      if (isCurrent) {
+                         className += ' border-b-2 border-b-amber-400';
+                      }
+
+                      return (<div key={col.id} className={className} style={{ width: `${colWidth}px` }} title={isHKHoliday ? holidayName : (isCurrent ? 'Current Date' : '')}>
                         <span>{col.label}</span>
-                        {viewMode === 'day' && col.date && <span className={`text-[9px] ${isCurrent ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>{col.date.getDate()}</span>}
+                        {viewMode === 'day' && col.date && <span className={`text-[9px] ${isHKHoliday ? 'text-red-600 font-bold' : isCurrent ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>{col.date.getDate()}</span>}
                       </div>);
                   })}
                 </div>
