@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, ProjectModule, ComplexityLevel, Holiday, Role } from '../types';
-import { Calculator, GripVertical, ArrowRight, Layout, Server, ChevronDown, Calendar as CalendarIcon, Link2 } from 'lucide-react';
+import { Calculator, GripVertical, ArrowRight, Layout, Server, ChevronDown, Calendar as CalendarIcon, Link2, Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { calculateEndDate, formatDateForInput } from '../constants';
 
 interface EstimatorProps {
@@ -145,7 +145,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
   };
 
   // Helper to find the max end date of a specific task
-  const getTaskEndDate = (module: ProjectModule, taskId: string): string | null => {
+  const getTaskEndDate = (module: ProjectModule, taskId: string): Date | null => {
       const task = module.tasks.find(t => t.id === taskId);
       if (!task) return null;
       
@@ -159,8 +159,40 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
               }
           }
       });
-      return maxEndDate ? formatDateForInput(maxEndDate) : null;
+      return maxEndDate;
   };
+
+  // Helper to find the latest end date of ANY task in the module
+  const getModuleLatestEndDate = (module: ProjectModule): Date | null => {
+      let maxEndDate: Date | null = null;
+      module.tasks.forEach(task => {
+          task.assignments.forEach(a => {
+              if (a.startDate && a.duration) {
+                  const endDateStr = calculateEndDate(a.startDate, a.duration, holidaySet);
+                  const endDate = new Date(endDateStr.replace(/-/g, '/'));
+                  if (!maxEndDate || endDate > maxEndDate) {
+                      maxEndDate = endDate;
+                  }
+              }
+          });
+      });
+      return maxEndDate;
+  }
+
+  // Helper to find earliest start date from planner tasks
+  const getModuleEarliestStartDate = (module: ProjectModule): string | null => {
+      let minDate: string | null = null;
+      module.tasks.forEach(task => {
+          task.assignments.forEach(a => {
+              if (a.startDate) {
+                  if (!minDate || a.startDate < minDate) {
+                      minDate = a.startDate;
+                  }
+              }
+          });
+      });
+      return minDate;
+  }
 
 
   return (
@@ -248,8 +280,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                 <col className="w-12" />  {/* Wks */}
 
                 {/* Delivery: 2 cols */}
-                <col className="w-24" />  {/* Start */}
-                <col className="w-24" />  {/* ETA / Delivery Task */}
+                <col className="w-28" />  {/* Start */}
+                <col className="w-28" />  {/* ETA / Delivery Task */}
             </colgroup>
             <thead className="bg-slate-50 text-slate-600 text-[10px] uppercase tracking-wider sticky top-0 z-20 shadow-sm font-semibold">
                 <tr>
@@ -281,7 +313,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     <th className="py-1 text-center border-b border-slate-200 border-r bg-indigo-50/30">Wks</th>
                     
                     <th className="py-1 text-center border-b border-slate-200 bg-slate-50">Start</th>
-                    <th className="py-1 text-center border-b border-slate-200 bg-slate-50">ETA / Task</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-slate-50">Plan vs Est</th>
                 </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-[11px]">
@@ -311,56 +343,32 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     const beEffort = Math.ceil((beFP / beVelocity) * COMPLEXITY_MULTIPLIERS[beComp]);
                     const beDuration = Math.ceil(beEffort / beTeamSize);
 
+                    // 1. Calculate Estimated Duration from FPs
                     const totalDuration = prepDuration + Math.max(feDuration, beDuration);
-                    const devDuration = Math.max(feDuration, beDuration);
                     
-                    let deliveryDate: string | null = null;
-                    
-                    // Logic: If manual delivery task is selected, use that.
-                    // Else if start date override, calculate.
-                    // Else calculate best guess.
-                    
-                    const manualDeliveryDate = m.deliveryTaskId ? getTaskEndDate(m, m.deliveryTaskId) : null;
-                    
-                    if (manualDeliveryDate) {
-                        deliveryDate = manualDeliveryDate;
-                    } else if (m.startDate) {
-                        deliveryDate = calculateEndDate(m.startDate, totalDuration, holidaySet);
+                    // 2. Determine Base Start Date (Manual > Planner Earliest)
+                    const plannerEarliestStart = getModuleEarliestStartDate(m);
+                    const baseStartDate = m.startDate || plannerEarliestStart;
+
+                    // 3. Calculate "Estimated" Delivery Date
+                    let estimatedDateStr: string | null = null;
+                    if (baseStartDate && totalDuration > 0) {
+                        estimatedDateStr = calculateEndDate(baseStartDate, totalDuration, holidaySet);
+                    }
+
+                    // 4. Calculate "Planned" Delivery Date (Manual Task > Planner Latest)
+                    let plannerDateObj: Date | null = null;
+                    if (m.deliveryTaskId) {
+                        plannerDateObj = getTaskEndDate(m, m.deliveryTaskId);
                     } else {
-                        // ... default calculation logic ...
-                         const devStartDate = m.tasks.reduce((min: string | null, task) => {
-                                const hasDev = task.assignments.some(a => a.role === Role.DEV);
-                                if (!hasDev) return min;
-                                const taskMin = task.assignments
-                                    .filter(a => a.role === Role.DEV)
-                                    .reduce((tMin: string | null, assign) => {
-                                        if (!assign.startDate) return tMin;
-                                        if (!tMin || assign.startDate < tMin) return assign.startDate;
-                                        return tMin;
-                                    }, null);
-                                if (!taskMin) return min;
-                                if (!min || taskMin < min) return taskMin;
-                                return min;
-                            }, null);
+                        plannerDateObj = getModuleLatestEndDate(m);
+                    }
+                    const plannerDateStr = plannerDateObj ? formatDateForInput(plannerDateObj) : null;
 
-                            if (devStartDate && devDuration > 0) {
-                                deliveryDate = calculateEndDate(devStartDate, devDuration, holidaySet);
-                            } else {
-                                const moduleStartDate = m.tasks.reduce((min: string | null, task) => {
-                                    const taskMin = task.assignments.reduce((tMin: string | null, assign) => {
-                                        if (!assign.startDate) return tMin;
-                                        if (!tMin || assign.startDate < tMin) return assign.startDate;
-                                        return tMin;
-                                    }, null);
-                                    if (!taskMin) return min;
-                                    if (!min || taskMin < min) return taskMin;
-                                    return min;
-                                }, null);
-
-                                if (moduleStartDate && totalDuration > 0) {
-                                    deliveryDate = calculateEndDate(moduleStartDate, totalDuration, holidaySet);
-                                }
-                            }
+                    // 5. Compare
+                    let varianceStatus: 'ok' | 'late' | 'unknown' = 'unknown';
+                    if (estimatedDateStr && plannerDateStr) {
+                        varianceStatus = plannerDateStr <= estimatedDateStr ? 'ok' : 'late';
                     }
 
                     return (
@@ -421,29 +429,47 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                     </div>
                                 </div>
                             </td>
-                            <td className="px-1 border-b border-slate-100 bg-slate-50/50 text-right relative group/delivery">
-                                <div className="flex flex-col items-end leading-none py-1 h-full justify-center">
-                                     {deliveryDate ? (
-                                        <span className={`text-[10px] font-bold ${m.deliveryTaskId ? 'text-green-700' : 'text-indigo-700'}`}>
-                                            {new Date(deliveryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            <td className="px-1 border-b border-slate-100 bg-white text-right relative group/delivery align-middle">
+                                <div className="flex flex-col gap-0.5 py-1 px-1 h-full justify-center">
+                                     {/* Estimated Date */}
+                                     <div className="flex items-center justify-between gap-2 text-[9px] text-slate-400 border-b border-slate-50 pb-0.5">
+                                        <span>Est:</span>
+                                        <span className="font-mono">
+                                            {estimatedDateStr ? new Date(estimatedDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}
                                         </span>
-                                    ) : <span className="text-slate-300">-</span>}
+                                     </div>
+
+                                     {/* Planner Date */}
+                                     <div className={`flex items-center justify-between gap-2 text-[10px] font-bold ${
+                                         varianceStatus === 'ok' ? 'text-green-600' : 
+                                         varianceStatus === 'late' ? 'text-red-600' : 'text-slate-600'
+                                     }`}>
+                                        <div className="flex items-center gap-1">
+                                            <span>Plan:</span>
+                                            {varianceStatus === 'late' && <AlertCircle size={8} />}
+                                            {varianceStatus === 'ok' && <CheckCircle2 size={8} />}
+                                        </div>
+                                        <span className="font-mono">
+                                            {plannerDateStr ? new Date(plannerDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}
+                                        </span>
+                                     </div>
                                     
                                     {/* Task Picker Overlay */}
-                                    <div className="absolute inset-0 opacity-0 group-hover/delivery:opacity-100 transition-opacity bg-white/90 flex items-center justify-center">
+                                    <div className="absolute inset-0 opacity-0 group-hover/delivery:opacity-100 transition-opacity bg-white/95 flex items-center justify-center shadow-sm">
                                          <div className="relative w-full h-full">
                                             <select 
                                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
                                                 value={m.deliveryTaskId || ''}
                                                 onChange={(e) => onUpdateModuleDeliveryTask(selectedProjectId, m.id, e.target.value || null)}
                                             >
-                                                <option value="">- Auto Calculate -</option>
+                                                <option value="">- Latest Task -</option>
                                                 {m.tasks.map(t => (
                                                     <option key={t.id} value={t.id}>{t.name}</option>
                                                 ))}
                                             </select>
-                                            <div className="w-full h-full flex items-center justify-center gap-1 text-[9px] text-slate-500 pointer-events-none">
-                                                <Link2 size={10} /> {m.deliveryTaskId ? 'Mapped' : 'Auto'}
+                                            <div className="w-full h-full flex flex-col items-center justify-center gap-0.5 text-[9px] text-indigo-600 pointer-events-none p-1">
+                                                <Link2 size={12} /> 
+                                                <span className="truncate w-full text-center">{m.deliveryTaskId ? 'Mapped' : 'Auto'}</span>
                                             </div>
                                          </div>
                                     </div>
@@ -477,7 +503,10 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
       {/* Footer Info */}
       <div className="bg-slate-50 border-t border-slate-200 p-2 text-[10px] text-slate-400 text-center flex justify-between items-center px-4">
           <span>* FE/BE in parallel</span>
-          <span>* Auto-calculates based on planner if date not set</span>
+          <div className="flex gap-4">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> On Track</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Delayed</span>
+          </div>
       </div>
     </div>
   );
