@@ -73,7 +73,7 @@ const IndividualHolidayManager: React.FC<{
 
 export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, onDeleteResource, onUpdateResourceCategory, onUpdateResourceRegion, onUpdateResourceType, onAddIndividualHoliday, onDeleteIndividualHoliday }) => {
   const [newResourceName, setNewResourceName] = useState('');
-  const [newResourceCategory, setNewResourceCategory] = useState<Role>(Role.DEV);
+  const [newResourceCategory, setNewResourceCategory] = useState<Role>(Role.EA);
   const [newResourceRegion, setNewResourceRegion] = useState<string>('HK');
   const [newResourceType, setNewResourceType] = useState<'Internal' | 'External'>('Internal');
   const [isAdding, setIsAdding] = useState(false);
@@ -96,6 +96,7 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
     [Role.EA]: 'bg-pink-100 text-pink-800 border-pink-200 focus:ring-pink-500',
     [Role.DM]: 'bg-yellow-100 text-yellow-800 border-yellow-200 focus:ring-yellow-500',
     [Role.DEV]: 'bg-blue-100 text-blue-800 border-blue-200 focus:ring-blue-500',
+    [Role.PREP_DEV]: 'bg-teal-100 text-teal-800 border-teal-200 focus:ring-teal-500',
     [Role.PLM_D365]: 'bg-green-100 text-green-800 border-green-200 focus:ring-green-500',
     [Role.BA]: 'bg-purple-100 text-purple-800 border-purple-200 focus:ring-purple-500',
     [Role.APP_SUPPORT]: 'bg-red-100 text-red-800 border-red-200 focus:ring-red-500',
@@ -162,11 +163,9 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
             <div className="text-center p-4 text-slate-400 border border-dashed rounded-lg">No resources added yet.</div>
           ) : (
              <div className="border border-slate-200 rounded-lg overflow-hidden">
-                {/* FIX: Renamed destructured `countries` to `countryGroups` to avoid shadowing the `countries` variable from the outer scope. */}
                 {groupedAndSortedResources.map(({ department, countries: countryGroups }) => (
                   <div key={department} className="border-b border-slate-200 last:border-b-0">
                     <h3 className="bg-slate-100 p-3 text-sm font-bold text-slate-700 tracking-wider uppercase">{department}</h3>
-                    {/* FIX: Use the renamed `countryGroups` variable for mapping. */}
                     {countryGroups.map(({ country, resources: countryResources }) => (
                       <div key={country}>
                         <h4 className="bg-slate-50 px-6 py-2 text-xs font-semibold text-slate-500 uppercase border-y border-slate-100">{country}</h4>

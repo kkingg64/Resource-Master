@@ -1,5 +1,3 @@
-
-
 import React, { useMemo } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
@@ -23,6 +21,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
         [Role.BA]: 0,
         [Role.APP_SUPPORT]: 0,
         [Role.BRAND_SOLUTIONS]: 0,
+        [Role.PREP_DEV]: 0,
         total: 0
       };
 
@@ -91,6 +90,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
               />
               <Legend />
               <Bar dataKey={Role.DEV} stackId="a" fill="#4f46e5" name="Dev Team" radius={[0, 0, 4, 4]} />
+              <Bar dataKey={Role.PREP_DEV} stackId="a" fill="#14b8a6" name="Prep & Dev" />
               <Bar dataKey={Role.BA} stackId="a" fill="#8b5cf6" name="BA" />
               <Bar dataKey={Role.APP_SUPPORT} stackId="a" fill="#ef4444" name="App Support" />
               <Bar dataKey={Role.BRAND_SOLUTIONS} stackId="a" fill="#f97316" name="Brand Solutions" radius={[4, 4, 0, 0]} />

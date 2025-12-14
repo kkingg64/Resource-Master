@@ -447,6 +447,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       case Role.DM: return 'border-l-yellow-500';
       case Role.COE: return 'border-l-cyan-500';
       case Role.EA: return 'border-l-pink-500';
+      case Role.PREP_DEV: return 'border-l-teal-500';
       default: return 'border-l-slate-400';
     }
   };
@@ -589,7 +590,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     if (collapsedModules[moduleId]) {
       toggleModule(moduleId);
     }
-    onAddTask(projectId, moduleId, newTaskId, "New Task", Role.DEV);
+    // Changed default role to EA (coding team) as requested
+    onAddTask(projectId, moduleId, newTaskId, "New Task", Role.EA);
     // FIX: `project` and `module` are not defined here. Use `projectId` and `moduleId` instead.
     startEditing(`task::${projectId}::${moduleId}::${newTaskId}`, "New Task");
   };
@@ -1095,7 +1097,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   
                                   <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity">
                                     <button 
-                                      onClick={() => onAddAssignment(project.id, module.id, task.id, Role.DEV)}
+                                      onClick={() => onAddAssignment(project.id, module.id, task.id, Role.EA)}
                                       className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200"
                                       title="Add another resource to this task"
                                     >
@@ -1357,7 +1359,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           {contextMenu.type === 'task' && contextMenu.moduleId && contextMenu.taskId && (
             <>
               <button
-                onClick={() => { onAddAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, Role.DEV); setContextMenu(null); }}
+                onClick={() => { onAddAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, Role.EA); setContextMenu(null); }}
                 className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"
               >
                 <UserPlus size={12} /> Add Resource
