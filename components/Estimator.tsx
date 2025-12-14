@@ -121,9 +121,11 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         totalBeDuration += beDuration;
 
         // --- Date Calculation for Totals ---
-        const totalDuration = Math.ceil(prepEffort / prepTeamSize) + Math.max(feDuration, beDuration);
+        // Logic: Prep is sequential, then FE and BE run in parallel.
+        // Total Duration = Prep Duration + Max(FE Duration, BE Duration)
+        const moduleTotalDuration = Math.ceil(prepEffort / prepTeamSize) + Math.max(feDuration, beDuration);
 
-        // 1. Determine Base Start Date
+        // 1. Determine Base Start Date for this Module
         let baseStartDate = m.startDate || null;
         if (!baseStartDate && m.startTaskId) {
             const task = m.tasks.find(t => t.id === m.startTaskId);
@@ -149,16 +151,16 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
              baseStartDate = minDate;
         }
 
-        // 2. Calculate Estimated Date
-        if (baseStartDate && totalDuration > 0) {
-            const estDateStr = calculateEndDate(baseStartDate, totalDuration, holidaySet);
+        // 2. Calculate Estimated End Date for Module
+        if (baseStartDate && moduleTotalDuration > 0) {
+            const estDateStr = calculateEndDate(baseStartDate, moduleTotalDuration, holidaySet);
             const estDate = new Date(estDateStr.replace(/-/g, '/'));
             if (!projectMaxEstDate || estDate > projectMaxEstDate) {
                 projectMaxEstDate = estDate;
             }
         }
 
-        // 3. Calculate Planned Date (Planner Latest End Date)
+        // 3. Calculate Planned End Date from Planner (Actual Assignments)
         let modMaxEndDate: Date | null = null;
         m.tasks.forEach(task => {
             task.assignments.forEach(a => {
@@ -171,6 +173,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                 }
             });
         });
+        
         if (modMaxEndDate) {
             if (!projectMaxPlanDate || modMaxEndDate > projectMaxPlanDate) {
                 projectMaxPlanDate = modMaxEndDate;
@@ -399,6 +402,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     const beDuration = Math.ceil(beEffort / beTeam);
 
                     // 1. Calculate Estimated Duration from FPs (in working days)
+                    // Logic: Prep runs first, then FE and BE run in parallel.
                     const totalDuration = prepDuration + Math.max(feDuration, beDuration);
                     
                     // 2. Determine Base Start Date
