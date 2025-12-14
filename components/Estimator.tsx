@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, ProjectModule, ComplexityLevel, Holiday, Role } from '../types';
-import { Calculator, GripVertical, BarChart3, Users, HelpCircle, ArrowRight, Gauge, CalendarDays, Code, Layout, Server, ChevronDown } from 'lucide-react';
+import { Calculator, GripVertical, BarChart3, Users, HelpCircle, ArrowRight, Gauge, CalendarDays, Code, Layout, Server, ChevronDown, Calendar as CalendarIcon } from 'lucide-react';
 import { calculateEndDate, formatDateForInput } from '../constants';
 
 interface EstimatorProps {
@@ -24,7 +24,7 @@ const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: Compl
         <div className="relative w-full h-full flex items-center justify-center group cursor-pointer bg-white border border-transparent hover:border-slate-300 rounded px-1 transition-colors">
             {/* Display Layer */}
             <div className="flex items-center gap-1 pointer-events-none z-0">
-                <span className={`text-xs font-bold ${
+                <span className={`text-[10px] font-bold ${
                     value === 'Low' ? 'text-green-600' :
                     value === 'Medium' ? 'text-blue-600' :
                     value === 'High' ? 'text-orange-600' :
@@ -148,7 +148,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
 
   const formatWeeks = (days: number) => {
     const weeks = (days / 5).toFixed(1);
-    return `${weeks} wks`;
+    return `${weeks}w`;
   };
 
   return (
@@ -216,56 +216,83 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
       </div>
 
       {/* Main Content: Spreadsheet View */}
-      <div className="flex-1 overflow-auto p-6">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden w-full">
+      <div className="flex-1 overflow-auto p-4">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-w-max">
             <table className="w-full text-sm text-left border-collapse table-fixed">
+                <colgroup>
+                    <col className="w-8" /> {/* Drag Handle */}
+                    <col className="w-48" /> {/* Module Name */}
+                    
+                    {/* Prep */}
+                    <col className="w-16" /> {/* Legacy FP */}
+                    <col className="w-10" /> {/* Vel */}
+                    <col className="w-10" /> {/* Team */}
+                    <col className="w-12" /> {/* Effort */}
+                    <col className="w-12" /> {/* Dur */}
+
+                    {/* FE */}
+                    <col className="w-16" /> {/* FE FP */}
+                    <col className="w-14" /> {/* Diff */}
+                    <col className="w-12" /> {/* Effort */}
+                    <col className="w-12" /> {/* Dur */}
+
+                    {/* BE */}
+                    <col className="w-16" /> {/* BE FP */}
+                    <col className="w-14" /> {/* Diff */}
+                    <col className="w-12" /> {/* Effort */}
+                    <col className="w-12" /> {/* Dur */}
+
+                    {/* Delivery */}
+                    <col className="w-28" /> {/* Start Date */}
+                    <col className="w-24" /> {/* Est Date */}
+                </colgroup>
                 <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase tracking-wider">
                     <tr>
-                        <th className="w-10 py-3 border-b border-slate-200"></th>
-                        <th className="py-3 px-4 border-b border-slate-200 border-r text-left w-1/4">Module</th>
+                        <th className="py-3 border-b border-slate-200"></th>
+                        <th className="py-3 px-2 border-b border-slate-200 border-r text-left truncate">Module</th>
                         
                         {/* Preparation */}
-                        <th colSpan={5} className="py-2 px-4 text-center bg-amber-50 border-b border-amber-100 border-r border-slate-200 text-amber-800">
-                            Preparation (Configurable)
+                        <th colSpan={5} className="py-2 px-1 text-center bg-amber-50 border-b border-amber-100 border-r border-slate-200 text-amber-800">
+                            Preparation
                         </th>
                         
                         {/* Front-End */}
-                        <th colSpan={4} className="py-2 px-4 text-center bg-blue-50 border-b border-blue-100 border-r border-slate-200 text-blue-800">
-                            Front-End Dev
+                        <th colSpan={4} className="py-2 px-1 text-center bg-blue-50 border-b border-blue-100 border-r border-slate-200 text-blue-800">
+                            Front-End
                         </th>
 
                         {/* Back-End */}
-                        <th colSpan={4} className="py-2 px-4 text-center bg-indigo-50 border-b border-indigo-100 border-r border-slate-200 text-indigo-800">
-                            Back-End Dev
+                        <th colSpan={4} className="py-2 px-1 text-center bg-indigo-50 border-b border-indigo-100 border-r border-slate-200 text-indigo-800">
+                            Back-End
                         </th>
 
-                        <th colSpan={2} className="py-3 px-4 text-center border-b border-slate-200 bg-slate-100 w-48">Delivery</th>
+                        <th colSpan={2} className="py-3 px-2 text-center border-b border-slate-200 bg-slate-100">Delivery</th>
                     </tr>
                     <tr className="text-[10px] text-slate-500">
                         <th className="border-b border-slate-200 bg-slate-50"></th>
                         <th className="border-b border-slate-200 border-r bg-slate-50"></th>
                         
                         {/* Prep Subs */}
-                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-amber-50/30">Legacy FP</th>
-                        <th className="py-2 px-2 text-center border-b border-slate-200 bg-amber-50/30" title="Preparation Velocity">Vel.</th>
-                        <th className="py-2 px-2 text-center border-b border-slate-200 bg-amber-50/30" title="Team Size">Team</th>
-                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-amber-50/30">Effort</th>
-                        <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-amber-50/30">Dur.</th>
+                        <th className="py-1 px-1 text-center border-b border-slate-200 bg-amber-50/30">L. FP</th>
+                        <th className="py-1 px-1 text-center border-b border-slate-200 bg-amber-50/30" title="Velocity">Vel</th>
+                        <th className="py-1 px-1 text-center border-b border-slate-200 bg-amber-50/30" title="Team Size">Tm</th>
+                        <th className="py-1 px-1 text-right border-b border-slate-200 bg-amber-50/30">M.D.</th>
+                        <th className="py-1 px-1 text-right border-b border-slate-200 border-r bg-amber-50/30">Wks</th>
 
                         {/* FE Subs */}
-                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-blue-50/30">FE FP</th>
-                        <th className="py-2 px-2 text-center border-b border-slate-200 bg-blue-50/30 w-16">Diff</th>
-                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-blue-50/30">Effort</th>
-                        <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-blue-50/30">Dur.</th>
+                        <th className="py-1 px-1 text-center border-b border-slate-200 bg-blue-50/30">FE FP</th>
+                        <th className="py-1 px-1 text-center border-b border-slate-200 bg-blue-50/30">Diff</th>
+                        <th className="py-1 px-1 text-right border-b border-slate-200 bg-blue-50/30">M.D.</th>
+                        <th className="py-1 px-1 text-right border-b border-slate-200 border-r bg-blue-50/30">Wks</th>
 
                          {/* BE Subs */}
-                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-indigo-50/30">BE FP</th>
-                        <th className="py-2 px-2 text-center border-b border-slate-200 bg-indigo-50/30 w-16">Diff</th>
-                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-indigo-50/30">Effort</th>
-                        <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-indigo-50/30">Dur.</th>
+                        <th className="py-1 px-1 text-center border-b border-slate-200 bg-indigo-50/30">BE FP</th>
+                        <th className="py-1 px-1 text-center border-b border-slate-200 bg-indigo-50/30">Diff</th>
+                        <th className="py-1 px-1 text-right border-b border-slate-200 bg-indigo-50/30">M.D.</th>
+                        <th className="py-1 px-1 text-right border-b border-slate-200 border-r bg-indigo-50/30">Wks</th>
                         
-                        <th className="py-2 px-2 text-center border-b border-slate-200 bg-slate-100 w-24">Start Date</th>
-                        <th className="py-2 px-4 text-right border-b border-slate-200 bg-slate-100 w-24 font-bold">Est. Date</th>
+                        <th className="py-1 px-1 text-center border-b border-slate-200 bg-slate-100">Start Date</th>
+                        <th className="py-1 px-2 text-right border-b border-slate-200 bg-slate-100 font-bold">ETA</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -358,23 +385,23 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                         <GripVertical size={14} />
                                     </div>
                                 </td>
-                                <td className="px-4 py-2 border-b border-slate-100 border-r border-slate-200">
+                                <td className="px-2 py-2 border-b border-slate-100 border-r border-slate-200">
                                     <div className="flex items-center justify-between">
-                                        <span className="font-medium text-slate-700 truncate block w-full" title={m.name}>{m.name}</span>
+                                        <span className="font-medium text-slate-700 truncate block w-full text-xs" title={m.name}>{m.name}</span>
                                     </div>
                                 </td>
                                 
                                 {/* Preparation */}
                                 <td className="px-1 py-1 border-b border-slate-100 hover:bg-slate-50 relative group/cell">
                                     <input 
-                                        type="number" min="0" className="w-full h-full text-right p-2 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-600 text-xs transition-colors"
+                                        type="number" min="0" className="w-full h-full text-center p-1 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-600 text-[11px] transition-colors"
                                         value={m.legacyFunctionPoints || 0}
                                         onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, parseInt(e.target.value) || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0, prepVelocity, prepTeamSize)}
                                     />
                                 </td>
                                 <td className="px-1 py-1 border-b border-slate-100 hover:bg-slate-50 relative">
                                      <input 
-                                        type="number" min="1" className="w-full h-full text-center p-1 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-500 text-xs transition-colors"
+                                        type="number" min="1" className="w-full h-full text-center p-1 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-500 text-[11px] transition-colors"
                                         value={prepVelocity}
                                         onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0, parseInt(e.target.value) || 1, prepTeamSize)}
                                         title="Prep Velocity"
@@ -382,19 +409,19 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                 </td>
                                 <td className="px-1 py-1 border-b border-slate-100 hover:bg-slate-50 relative">
                                      <input 
-                                        type="number" min="1" className="w-full h-full text-center p-1 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-500 text-xs transition-colors"
+                                        type="number" min="1" className="w-full h-full text-center p-1 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-500 text-[11px] transition-colors"
                                         value={prepTeamSize}
                                         onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0, prepVelocity, parseInt(e.target.value) || 1)}
                                         title="Prep Team Size"
                                     />
                                 </td>
-                                <td className="px-2 py-1 text-right border-b border-slate-100 font-mono text-xs text-slate-400">{prepEffort || '-'}</td>
-                                <td className="px-2 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-xs font-medium text-amber-700">{prepDuration || '-'}</td>
+                                <td className="px-2 py-1 text-right border-b border-slate-100 font-mono text-[11px] text-slate-400">{prepEffort || '-'}</td>
+                                <td className="px-2 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-[11px] font-medium text-amber-700">{formatWeeks(prepDuration)}</td>
 
                                 {/* Front-End */}
                                 <td className="px-1 py-1 border-b border-slate-100 hover:bg-slate-50 relative group/cell">
                                     <input 
-                                        type="number" min="0" className="w-full h-full text-right p-2 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-600 text-xs transition-colors"
+                                        type="number" min="0" className="w-full h-full text-center p-1 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-600 text-[11px] transition-colors"
                                         value={m.frontendFunctionPoints || 0}
                                         onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, parseInt(e.target.value) || 0, m.backendFunctionPoints || 0, prepVelocity, prepTeamSize)}
                                     />
@@ -402,13 +429,13 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                 <td className="px-1 py-1 border-b border-slate-100">
                                     <ComplexitySelect value={feComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'frontend', val)} />
                                 </td>
-                                <td className="px-2 py-1 text-right border-b border-slate-100 font-mono text-xs text-slate-400">{feEffort || '-'}</td>
-                                <td className="px-2 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-xs font-medium text-blue-700">{feDuration || '-'}</td>
+                                <td className="px-2 py-1 text-right border-b border-slate-100 font-mono text-[11px] text-slate-400">{feEffort || '-'}</td>
+                                <td className="px-2 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-[11px] font-medium text-blue-700">{formatWeeks(feDuration)}</td>
 
                                 {/* Back-End */}
                                 <td className="px-1 py-1 border-b border-slate-100 hover:bg-slate-50 relative group/cell">
                                     <input 
-                                        type="number" min="0" className="w-full h-full text-right p-2 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-600 text-xs transition-colors"
+                                        type="number" min="0" className="w-full h-full text-center p-1 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-600 text-[11px] transition-colors"
                                         value={m.backendFunctionPoints || 0}
                                         onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, parseInt(e.target.value) || 0, prepVelocity, prepTeamSize)}
                                     />
@@ -416,27 +443,36 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                 <td className="px-1 py-1 border-b border-slate-100">
                                     <ComplexitySelect value={beComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'backend', val)} />
                                 </td>
-                                <td className="px-2 py-1 text-right border-b border-slate-100 font-mono text-xs text-slate-400">{beEffort || '-'}</td>
-                                <td className="px-2 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-xs font-medium text-indigo-700">{beDuration || '-'}</td>
+                                <td className="px-2 py-1 text-right border-b border-slate-100 font-mono text-[11px] text-slate-400">{beEffort || '-'}</td>
+                                <td className="px-2 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-[11px] font-medium text-indigo-700">{formatWeeks(beDuration)}</td>
                                 
                                 {/* Start Date Input */}
-                                <td className="px-1 py-1 border-b border-slate-100 bg-slate-50/30">
-                                    <input 
-                                        type="date" 
-                                        className="w-full h-full text-center p-1 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded text-xs text-slate-600"
-                                        value={m.startDate || ''}
-                                        onChange={(e) => onUpdateModuleStartDate(selectedProjectId, m.id, e.target.value)}
-                                        title="Override Start Date"
-                                    />
+                                <td className="px-1 py-1 border-b border-slate-100 bg-slate-50/20 relative">
+                                    <div className={`relative w-full h-full flex items-center justify-center rounded border transition-colors ${m.startDate ? 'bg-indigo-50 border-indigo-200' : 'border-transparent hover:bg-slate-100 hover:border-slate-200'}`}>
+                                        <input 
+                                            type="date" 
+                                            className="w-full h-full opacity-0 absolute inset-0 cursor-pointer z-10"
+                                            value={m.startDate || ''}
+                                            onChange={(e) => onUpdateModuleStartDate(selectedProjectId, m.id, e.target.value)}
+                                            title="Click to pick a start date"
+                                        />
+                                        {m.startDate ? (
+                                            <span className="text-[10px] font-mono text-indigo-700 font-medium truncate px-1">
+                                                {new Date(m.startDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                            </span>
+                                        ) : (
+                                            <CalendarIcon size={12} className="text-slate-300" />
+                                        )}
+                                    </div>
                                 </td>
 
                                 {/* Delivery */}
-                                <td className="px-4 py-2 text-right border-b border-slate-100 bg-slate-50/50 font-mono text-xs font-bold text-slate-800">
+                                <td className="px-2 py-2 text-right border-b border-slate-100 bg-slate-50/50 font-mono text-[10px] font-bold text-slate-800">
                                     {deliveryDate ? (
                                         <div className="flex flex-col items-end">
-                                            <span className="text-indigo-700">{new Date(deliveryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                                            <span className="text-[9px] text-slate-400 font-normal">
-                                                {m.startDate ? `(Manual: ${formatWeeks(totalDuration)})` : (
+                                            <span className="text-indigo-700 text-xs">{new Date(deliveryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                            <span className="text-[8px] text-slate-400 font-normal">
+                                                {m.startDate ? `(Fixed: ${formatWeeks(totalDuration)})` : (
                                                     (m.tasks.some(t => t.assignments.some(a => a.role === Role.DEV))) ? `(Dev: ${formatWeeks(devDuration)})` : `(Total: ${formatWeeks(totalDuration)})`
                                                 )}
                                             </span>
@@ -451,27 +487,27 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                 </tbody>
                 <tfoot className="bg-slate-50 font-semibold text-xs border-t-2 border-slate-200">
                     <tr>
-                        <td colSpan={2} className="px-4 py-3 text-right text-slate-500 uppercase">Totals</td>
+                        <td colSpan={2} className="px-2 py-2 text-right text-slate-500 uppercase text-[10px]">Totals</td>
                         
                         {/* Prep Totals */}
-                        <td className="px-2 py-3 text-right text-slate-700">{totals.legacyFP}</td>
-                        <td colSpan={2} className="px-2 py-3 text-center text-slate-400">-</td>
-                        <td className="px-2 py-3 text-right text-slate-700">{totals.prepEffort}</td>
-                        <td className="px-2 py-3 text-right text-amber-700 border-r border-slate-300">{formatWeeks(totals.prepDuration)}</td>
+                        <td className="px-1 py-2 text-center text-slate-700 text-[11px]">{totals.legacyFP}</td>
+                        <td colSpan={2} className="px-1 py-2 text-center text-slate-400 text-[11px]">-</td>
+                        <td className="px-2 py-2 text-right text-slate-700 text-[11px]">{totals.prepEffort}</td>
+                        <td className="px-2 py-2 text-right text-amber-700 border-r border-slate-300 text-[11px]">{formatWeeks(totals.prepDuration)}</td>
 
                         {/* FE Totals */}
-                        <td className="px-2 py-3 text-right text-slate-700">{totals.feFP}</td>
-                        <td className="px-2 py-3 text-center text-slate-400">-</td>
-                        <td className="px-2 py-3 text-right text-slate-700">{totals.feEffort}</td>
-                        <td className="px-2 py-3 text-right text-blue-700 border-r border-slate-300">{formatWeeks(totals.feDuration)}</td>
+                        <td className="px-1 py-2 text-center text-slate-700 text-[11px]">{totals.feFP}</td>
+                        <td className="px-1 py-2 text-center text-slate-400 text-[11px]">-</td>
+                        <td className="px-2 py-2 text-right text-slate-700 text-[11px]">{totals.feEffort}</td>
+                        <td className="px-2 py-2 text-right text-blue-700 border-r border-slate-300 text-[11px]">{formatWeeks(totals.feDuration)}</td>
 
                          {/* BE Totals */}
-                        <td className="px-2 py-3 text-right text-slate-700">{totals.beFP}</td>
-                        <td className="px-2 py-3 text-center text-slate-400">-</td>
-                        <td className="px-2 py-3 text-right text-slate-700">{totals.beEffort}</td>
-                        <td className="px-2 py-3 text-right text-indigo-700 border-r border-slate-300">{formatWeeks(totals.beDuration)}</td>
+                        <td className="px-1 py-2 text-center text-slate-700 text-[11px]">{totals.beFP}</td>
+                        <td className="px-1 py-2 text-center text-slate-400 text-[11px]">-</td>
+                        <td className="px-2 py-2 text-right text-slate-700 text-[11px]">{totals.beEffort}</td>
+                        <td className="px-2 py-2 text-right text-indigo-700 border-r border-slate-300 text-[11px]">{formatWeeks(totals.beDuration)}</td>
 
-                        <td colSpan={2} className="px-4 py-3 text-right text-slate-900 text-sm"></td>
+                        <td colSpan={2} className="px-4 py-2 text-right text-slate-900 text-sm"></td>
                     </tr>
                 </tfoot>
             </table>
