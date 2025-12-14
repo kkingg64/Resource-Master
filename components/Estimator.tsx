@@ -121,9 +121,9 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         totalBeDuration += beDuration;
 
         // --- Date Calculation for Totals ---
-        // Logic: Prep is sequential, then FE and BE run in parallel.
-        // Total Duration = Prep Duration + Max(FE Duration, BE Duration)
-        const moduleTotalDuration = Math.ceil(prepEffort / prepTeamSize) + Math.max(feDuration, beDuration);
+        // Logic: Delivery calculation based on Front-end and Back-end FPs only (parallel execution).
+        // Prep duration is excluded from the critical path for this estimation metric.
+        const moduleTotalDuration = Math.max(feDuration, beDuration);
 
         // 1. Determine Base Start Date for this Module
         let baseStartDate = m.startDate || null;
@@ -155,6 +155,12 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         if (baseStartDate && moduleTotalDuration > 0) {
             const estDateStr = calculateEndDate(baseStartDate, moduleTotalDuration, holidaySet);
             const estDate = new Date(estDateStr.replace(/-/g, '/'));
+            if (!projectMaxEstDate || estDate > projectMaxEstDate) {
+                projectMaxEstDate = estDate;
+            }
+        } else if (baseStartDate && moduleTotalDuration === 0) {
+            // Case where duration is 0, end date is start date
+            const estDate = new Date(baseStartDate.replace(/-/g, '/'));
             if (!projectMaxEstDate || estDate > projectMaxEstDate) {
                 projectMaxEstDate = estDate;
             }
@@ -402,8 +408,9 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     const beDuration = Math.ceil(beEffort / beTeam);
 
                     // 1. Calculate Estimated Duration from FPs (in working days)
-                    // Logic: Prep runs first, then FE and BE run in parallel.
-                    const totalDuration = prepDuration + Math.max(feDuration, beDuration);
+                    // Logic: Delivery calculation based on Front-end and Back-end FPs only (parallel execution).
+                    // Prep duration is excluded from the critical path for this estimation metric.
+                    const totalDuration = Math.max(feDuration, beDuration);
                     
                     // 2. Determine Base Start Date
                     let baseStartDate = m.startDate || null;
@@ -427,6 +434,9 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     let estimatedDateStr: string | null = null;
                     if (baseStartDate && totalDuration > 0) {
                         estimatedDateStr = calculateEndDate(baseStartDate, totalDuration, holidaySet);
+                    } else if (baseStartDate && totalDuration === 0) {
+                        // If duration is 0, finish date is start date
+                        estimatedDateStr = formatDateForInput(new Date(baseStartDate.replace(/-/g, '/')));
                     }
 
                     // 4. Calculate "Planned" Delivery Date (Planner Latest End Date)
