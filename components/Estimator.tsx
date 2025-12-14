@@ -6,7 +6,7 @@ import { calculateEndDate, formatDateForInput } from '../constants';
 interface EstimatorProps {
   projects: Project[];
   holidays: Holiday[];
-  onUpdateFunctionPoints: (projectId: string, moduleId: string, legacyFp: number, frontendFp: number, backendFp: number, prepVelocity: number, prepTeamSize: number) => void;
+  onUpdateFunctionPoints: (projectId: string, moduleId: string, legacyFp: number, frontendFp: number, backendFp: number, prepVelocity: number, prepTeamSize: number, feVelocity: number, feTeamSize: number, beVelocity: number, beTeamSize: number) => void;
   onUpdateModuleComplexity: (projectId: string, moduleId: string, type: 'frontend' | 'backend', complexity: ComplexityLevel) => void;
   onUpdateModuleStartDate: (projectId: string, moduleId: string, startDate: string | null) => void;
   onUpdateModuleDeliveryTask: (projectId: string, moduleId: string, deliveryTaskId: string | null) => void;
@@ -51,11 +51,6 @@ const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: Compl
 };
 
 export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateFunctionPoints, onUpdateModuleComplexity, onUpdateModuleStartDate, onUpdateModuleDeliveryTask, onUpdateModuleStartTask, onReorderModules }) => {
-  const [feVelocity, setFeVelocity] = useState<number>(5);
-  const [feTeamSize, setFeTeamSize] = useState<number>(2);
-  const [beVelocity, setBeVelocity] = useState<number>(5);
-  const [beTeamSize, setBeTeamSize] = useState<number>(2);
-
   const [selectedProjectId, setSelectedProjectId] = useState<string>(projects[0]?.id || '');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   
@@ -93,18 +88,22 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         totalPrepDuration += Math.ceil(prepEffort / prepTeamSize);
 
         const feFP = m.frontendFunctionPoints || 0;
+        const feVel = m.frontendVelocity || 5;
+        const feTeam = m.frontendTeamSize || 2;
         const feComp = m.frontendComplexity || 'Medium';
         totalFeFP += feFP;
-        const feEffort = Math.ceil((feFP / feVelocity) * COMPLEXITY_MULTIPLIERS[feComp]);
+        const feEffort = Math.ceil((feFP / feVel) * COMPLEXITY_MULTIPLIERS[feComp]);
         totalFeEffort += feEffort;
-        totalFeDuration += Math.ceil(feEffort / feTeamSize);
+        totalFeDuration += Math.ceil(feEffort / feTeam);
 
         const beFP = m.backendFunctionPoints || 0;
+        const beVel = m.backendVelocity || 5;
+        const beTeam = m.backendTeamSize || 2;
         const beComp = m.backendComplexity || 'Medium';
         totalBeFP += beFP;
-        const beEffort = Math.ceil((beFP / beVelocity) * COMPLEXITY_MULTIPLIERS[beComp]);
+        const beEffort = Math.ceil((beFP / beVel) * COMPLEXITY_MULTIPLIERS[beComp]);
         totalBeEffort += beEffort;
-        totalBeDuration += Math.ceil(beEffort / beTeamSize);
+        totalBeDuration += Math.ceil(beEffort / beTeam);
     });
 
     return {
@@ -119,7 +118,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         beDuration: totalBeDuration,
         totalDuration: totalPrepDuration + Math.max(totalFeDuration, totalBeDuration)
     };
-  }, [modules, feVelocity, feTeamSize, beVelocity, beTeamSize]);
+  }, [modules]);
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.setData("text/plain", index.toString());
@@ -216,40 +215,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                 </select>
             </div>
         </div>
-
-        <div className="flex gap-4">
-            {/* FE Settings */}
-            <div className="flex items-center gap-2 bg-blue-50/50 px-3 py-1.5 rounded border border-blue-100">
-                <div className="flex items-center gap-1.5 border-r border-blue-200 pr-2 mr-1">
-                    <Layout size={12} className="text-blue-600" />
-                    <span className="text-[10px] font-bold text-blue-700 uppercase">FE</span>
-                </div>
-                <div className="flex items-center gap-1">
-                    <label className="text-[10px] text-slate-500">Vel:</label>
-                    <input type="number" min="1" value={feVelocity} onChange={(e) => setFeVelocity(Math.max(1, parseInt(e.target.value) || 1))} className="w-8 p-0.5 text-center text-xs border border-blue-200 rounded h-6"/>
-                </div>
-                <div className="flex items-center gap-1">
-                    <label className="text-[10px] text-slate-500">Team:</label>
-                    <input type="number" min="1" value={feTeamSize} onChange={(e) => setFeTeamSize(Math.max(1, parseInt(e.target.value) || 1))} className="w-8 p-0.5 text-center text-xs border border-blue-200 rounded h-6"/>
-                </div>
-            </div>
-
-            {/* BE Settings */}
-            <div className="flex items-center gap-2 bg-indigo-50/50 px-3 py-1.5 rounded border border-indigo-100">
-                <div className="flex items-center gap-1.5 border-r border-indigo-200 pr-2 mr-1">
-                    <Server size={12} className="text-indigo-600" />
-                    <span className="text-[10px] font-bold text-indigo-700 uppercase">BE</span>
-                </div>
-                <div className="flex items-center gap-1">
-                    <label className="text-[10px] text-slate-500">Vel:</label>
-                    <input type="number" min="1" value={beVelocity} onChange={(e) => setBeVelocity(Math.max(1, parseInt(e.target.value) || 1))} className="w-8 p-0.5 text-center text-xs border border-indigo-200 rounded h-6"/>
-                </div>
-                <div className="flex items-center gap-1">
-                    <label className="text-[10px] text-slate-500">Team:</label>
-                    <input type="number" min="1" value={beTeamSize} onChange={(e) => setBeTeamSize(Math.max(1, parseInt(e.target.value) || 1))} className="w-8 p-0.5 text-center text-xs border border-indigo-200 rounded h-6"/>
-                </div>
-            </div>
-        </div>
       </div>
 
       {/* Table Container */}
@@ -266,14 +231,18 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                 <col className="w-12" />  {/* MD */}
                 <col className="w-12" />  {/* Wks */}
 
-                {/* FE: 4 cols */}
+                {/* FE: 6 cols */}
                 <col className="w-14" />  {/* FE FP */}
+                <col className="w-10" />  {/* Vel */}
+                <col className="w-10" />  {/* Team */}
                 <col className="w-12" />  {/* Diff */}
                 <col className="w-12" />  {/* MD */}
                 <col className="w-12" />  {/* Wks */}
 
-                {/* BE: 4 cols */}
+                {/* BE: 6 cols */}
                 <col className="w-14" />  {/* BE FP */}
+                <col className="w-10" />  {/* Vel */}
+                <col className="w-10" />  {/* Team */}
                 <col className="w-12" />  {/* Diff */}
                 <col className="w-12" />  {/* MD */}
                 <col className="w-12" />  {/* Wks */}
@@ -287,8 +256,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     <th className="py-2 border-b border-slate-200 bg-slate-50"></th>
                     <th className="py-2 px-2 border-b border-slate-200 border-r text-left truncate bg-slate-50">Module</th>
                     <th colSpan={5} className="py-1 px-1 text-center bg-amber-50/80 border-b border-amber-100 border-r border-slate-200 text-amber-800">Preparation</th>
-                    <th colSpan={4} className="py-1 px-1 text-center bg-blue-50/80 border-b border-blue-100 border-r border-slate-200 text-blue-800">Front-End</th>
-                    <th colSpan={4} className="py-1 px-1 text-center bg-indigo-50/80 border-b border-indigo-100 border-r border-slate-200 text-indigo-800">Back-End</th>
+                    <th colSpan={6} className="py-1 px-1 text-center bg-blue-50/80 border-b border-blue-100 border-r border-slate-200 text-blue-800">Front-End</th>
+                    <th colSpan={6} className="py-1 px-1 text-center bg-indigo-50/80 border-b border-indigo-100 border-r border-slate-200 text-indigo-800">Back-End</th>
                     <th colSpan={2} className="py-2 px-2 text-center border-b border-slate-200 bg-slate-50">Delivery</th>
                 </tr>
                 <tr className="text-[9px] text-slate-500">
@@ -302,11 +271,15 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     <th className="py-1 text-center border-b border-slate-200 border-r bg-amber-50/30">Wks</th>
 
                     <th className="py-1 text-center border-b border-slate-200 bg-blue-50/30">FP</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-blue-50/30">Vel</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-blue-50/30">Team</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-blue-50/30">Cpx</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-blue-50/30">M.D.</th>
                     <th className="py-1 text-center border-b border-slate-200 border-r bg-blue-50/30">Wks</th>
 
                     <th className="py-1 text-center border-b border-slate-200 bg-indigo-50/30">FP</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-indigo-50/30">Vel</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-indigo-50/30">Team</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-indigo-50/30">Cpx</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-indigo-50/30">M.D.</th>
                     <th className="py-1 text-center border-b border-slate-200 border-r bg-indigo-50/30">Wks</th>
@@ -318,7 +291,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
             <tbody className="divide-y divide-slate-100 text-[11px]">
                 {modules.length === 0 && (
                     <tr>
-                        <td colSpan={17} className="p-12 text-center text-slate-400 bg-slate-50/30">
+                        <td colSpan={21} className="p-12 text-center text-slate-400 bg-slate-50/30">
                             <div className="flex flex-col items-center justify-center gap-2">
                                 <Layout className="w-8 h-8 text-slate-300"/>
                                 <p>No modules found.</p>
@@ -333,14 +306,18 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     const prepDuration = Math.ceil(prepEffort / prepTeamSize);
 
                     const feFP = m.frontendFunctionPoints || 0;
+                    const feVel = m.frontendVelocity || 5;
+                    const feTeam = m.frontendTeamSize || 2;
                     const feComp = m.frontendComplexity || 'Medium';
-                    const feEffort = Math.ceil((feFP / feVelocity) * COMPLEXITY_MULTIPLIERS[feComp]);
-                    const feDuration = Math.ceil(feEffort / feTeamSize);
+                    const feEffort = Math.ceil((feFP / feVel) * COMPLEXITY_MULTIPLIERS[feComp]);
+                    const feDuration = Math.ceil(feEffort / feTeam);
 
                     const beFP = m.backendFunctionPoints || 0;
+                    const beVel = m.backendVelocity || 5;
+                    const beTeam = m.backendTeamSize || 2;
                     const beComp = m.backendComplexity || 'Medium';
-                    const beEffort = Math.ceil((beFP / beVelocity) * COMPLEXITY_MULTIPLIERS[beComp]);
-                    const beDuration = Math.ceil(beEffort / beTeamSize);
+                    const beEffort = Math.ceil((beFP / beVel) * COMPLEXITY_MULTIPLIERS[beComp]);
+                    const beDuration = Math.ceil(beEffort / beTeam);
 
                     // 1. Calculate Estimated Duration from FPs
                     const totalDuration = prepDuration + Math.max(feDuration, beDuration);
@@ -383,6 +360,32 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         varianceStatus = estimatedDateStr > plannerDateStr ? 'risk' : 'safe';
                     }
 
+                    const updateParams = (
+                        legacyFP: number, 
+                        feFP: number, 
+                        beFP: number, 
+                        pVel: number, 
+                        pTeam: number,
+                        fVel: number,
+                        fTeam: number,
+                        bVel: number,
+                        bTeam: number
+                    ) => {
+                        onUpdateFunctionPoints(
+                            selectedProjectId, 
+                            m.id, 
+                            legacyFP, 
+                            feFP, 
+                            beFP, 
+                            pVel, 
+                            pTeam,
+                            fVel,
+                            fTeam,
+                            bVel,
+                            bTeam
+                        );
+                    };
+
                     return (
                         <tr 
                             key={m.id}
@@ -401,20 +404,26 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                             
                             {/* Prep */}
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <input type="number" min="0" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-600" value={m.legacyFunctionPoints || 0} onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, parseInt(e.target.value) || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0, prepVelocity, prepTeamSize)} />
+                                <input type="number" min="0" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-600" value={m.legacyFunctionPoints || 0} onChange={(e) => updateParams(parseInt(e.target.value) || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                    <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={prepVelocity} onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0, parseInt(e.target.value) || 1, prepTeamSize)} />
+                                    <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={prepVelocity} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, parseInt(e.target.value) || 1, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                    <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={prepTeamSize} onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0, prepVelocity, parseInt(e.target.value) || 1)} />
+                                    <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={prepTeamSize} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, parseInt(e.target.value) || 1, feVel, feTeam, beVel, beTeam)} />
                             </td>
                             <td className="px-1 text-center border-b border-slate-100 text-slate-400 font-mono">{prepEffort || '-'}</td>
                             <td className="px-1 text-center border-b border-slate-100 border-r border-slate-200 text-amber-700 font-medium">{formatWeeks(prepDuration)}</td>
 
                             {/* FE */}
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <input type="number" min="0" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-600" value={m.frontendFunctionPoints || 0} onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, parseInt(e.target.value) || 0, m.backendFunctionPoints || 0, prepVelocity, prepTeamSize)} />
+                                <input type="number" min="0" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-600" value={m.frontendFunctionPoints || 0} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, parseInt(e.target.value) || 0, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
+                            </td>
+                            <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
+                                <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={feVel} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, parseInt(e.target.value) || 1, feTeam, beVel, beTeam)} />
+                            </td>
+                            <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
+                                <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={feTeam} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, parseInt(e.target.value) || 1, beVel, beTeam)} />
                             </td>
                             <td className="p-0 border-b border-slate-100">
                                 <ComplexitySelect value={feComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'frontend', val)} />
@@ -424,7 +433,13 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
 
                             {/* BE */}
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <input type="number" min="0" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-600" value={m.backendFunctionPoints || 0} onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, parseInt(e.target.value) || 0, prepVelocity, prepTeamSize)} />
+                                <input type="number" min="0" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-600" value={m.backendFunctionPoints || 0} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, feFP, parseInt(e.target.value) || 0, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
+                            </td>
+                            <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
+                                <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={beVel} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, parseInt(e.target.value) || 1, beTeam)} />
+                            </td>
+                            <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
+                                <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={beTeam} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, parseInt(e.target.value) || 1)} />
                             </td>
                             <td className="p-0 border-b border-slate-100">
                                 <ComplexitySelect value={beComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'backend', val)} />
@@ -530,11 +545,11 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     <td className="text-center text-slate-700">{totals.prepEffort}</td>
                     <td className="text-center text-amber-700 border-r border-slate-300">{formatWeeks(totals.prepDuration)}</td>
                     <td className="text-center text-slate-700">{totals.feFP}</td>
-                    <td className="text-center text-slate-300">-</td>
+                    <td colSpan={3} className="text-center text-slate-300">-</td>
                     <td className="text-center text-slate-700">{totals.feEffort}</td>
                     <td className="text-center text-blue-700 border-r border-slate-300">{formatWeeks(totals.feDuration)}</td>
                     <td className="text-center text-slate-700">{totals.beFP}</td>
-                    <td className="text-center text-slate-300">-</td>
+                    <td colSpan={3} className="text-center text-slate-300">-</td>
                     <td className="text-center text-slate-700">{totals.beEffort}</td>
                     <td className="text-center text-indigo-700 border-r border-slate-300">{formatWeeks(totals.beDuration)}</td>
                     <td colSpan={2}></td>

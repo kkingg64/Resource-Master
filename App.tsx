@@ -90,6 +90,12 @@ const structureProjectsData = (
       prepVelocity: m.prep_velocity || 10,
       prepTeamSize: m.prep_team_size || 2,
 
+      // New FE/BE fields (default to 5 vel, 2 team if not set)
+      frontendVelocity: m.frontend_velocity || 5,
+      frontendTeamSize: m.frontend_team_size || 2,
+      backendVelocity: m.backend_velocity || 5,
+      backendTeamSize: m.backend_team_size || 2,
+
       startDate: m.start_date, // New Start Date field
       startTaskId: m.start_task_id, // New Start Task Anchor
       deliveryTaskId: m.delivery_task_id, // Deprecated but kept
@@ -344,7 +350,19 @@ const App: React.FC = () => {
     else setLoading(false);
   };
   
-  const updateFunctionPoints = async (projectId: string, moduleId: string, legacyFp: number, frontendFp: number, backendFp: number, prepVelocity: number, prepTeamSize: number) => {
+  const updateFunctionPoints = async (
+      projectId: string, 
+      moduleId: string, 
+      legacyFp: number, 
+      frontendFp: number, 
+      backendFp: number, 
+      prepVelocity: number, 
+      prepTeamSize: number,
+      frontendVelocity: number,
+      frontendTeamSize: number,
+      backendVelocity: number,
+      backendTeamSize: number
+    ) => {
      const previousState = deepClone(projects);
      const module = projects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId);
      if (module) {
@@ -354,22 +372,30 @@ const App: React.FC = () => {
         module.functionPoints = frontendFp + backendFp;
         module.prepVelocity = prepVelocity;
         module.prepTeamSize = prepTeamSize;
+        module.frontendVelocity = frontendVelocity;
+        module.frontendTeamSize = frontendTeamSize;
+        module.backendVelocity = backendVelocity;
+        module.backendTeamSize = backendTeamSize;
         setProjects(deepClone(projects));
      }
      
      const { error } = await callSupabase(
-        'UPDATE function points & prep', 
-        { id: moduleId, legacyFp, frontendFp, backendFp, prepVelocity, prepTeamSize }, 
+        'UPDATE module estimates', 
+        { id: moduleId, legacyFp, frontendFp, backendFp, prepVelocity, prepTeamSize, frontendVelocity, frontendTeamSize, backendVelocity, backendTeamSize }, 
         supabase.from('modules').update({ 
             legacy_function_points: legacyFp, 
             frontend_function_points: frontendFp,
             backend_function_points: backendFp,
             function_points: frontendFp + backendFp,
             prep_velocity: prepVelocity,
-            prep_team_size: prepTeamSize
+            prep_team_size: prepTeamSize,
+            frontend_velocity: frontendVelocity,
+            frontend_team_size: frontendTeamSize,
+            backend_velocity: backendVelocity,
+            backend_team_size: backendTeamSize
         }).eq('id', moduleId)
     );
-     if (error) { setProjects(previousState); alert("Failed to update function points."); }
+     if (error) { setProjects(previousState); alert("Failed to update module estimates."); }
   };
   
   const updateModuleComplexity = async (projectId: string, moduleId: string, type: 'frontend' | 'backend', complexity: ComplexityLevel) => {

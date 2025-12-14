@@ -61,6 +61,12 @@ export interface ProjectModule {
   prepVelocity?: number;
   prepTeamSize?: number;
 
+  // New Per-Module FE/BE Config
+  frontendVelocity?: number;
+  frontendTeamSize?: number;
+  backendVelocity?: number;
+  backendTeamSize?: number;
+
   // Manual Start Date Override
   startDate?: string;
   // Start Task Anchor (Task ID from within this module)
