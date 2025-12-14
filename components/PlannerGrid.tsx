@@ -978,6 +978,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     const isEditingModule = editingId === moduleEditId;
 
                     let moduleEarliestStartDate: string | null = null;
+                    let moduleLatestEndDate: Date | null = null;
                     let moduleTotalDuration = 0;
 
                     if (isModuleCollapsed) {
@@ -1015,6 +1016,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           
                           if (earliestDate && latestEndDate) {
                               moduleEarliestStartDate = formatDateForInput(earliestDate);
+                              moduleLatestEndDate = latestEndDate;
                               moduleTotalDuration = calculateWorkingDaysBetween(formatDateForInput(earliestDate), formatDateForInput(latestEndDate), moduleHolidays);
                           }
                       }
@@ -1093,10 +1095,56 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           {timeline.map(col => {
                             const total = getModuleTotal(module, col);
                             const isCurrent = isCurrentColumn(col);
+                            
+                            let isInModuleRange = false;
+                            let isModuleStart = false;
+                            let isModuleEnd = false;
+
+                            if (isModuleCollapsed && moduleEarliestStartDate && moduleLatestEndDate) {
+                                const modStart = new Date(moduleEarliestStartDate.replace(/-/g, '/'));
+                                const modEnd = moduleLatestEndDate;
+
+                                if (viewMode === 'day' && col.date) {
+                                    isInModuleRange = col.date >= modStart && col.date <= modEnd;
+                                    isModuleStart = col.date.getTime() === modStart.getTime();
+                                    isModuleEnd = col.date.getTime() === modEnd.getTime();
+                                    if (formatDateForInput(col.date) === formatDateForInput(modStart)) isModuleStart = true;
+                                    if (formatDateForInput(col.date) === formatDateForInput(modEnd)) isModuleEnd = true;
+                                } else if (viewMode === 'week') {
+                                    const [y, w] = col.id.split('-').map(Number);
+                                    const colDate = getDateFromWeek(y, w);
+                                    const colEnd = new Date(colDate);
+                                    colEnd.setDate(colEnd.getDate() + 6);
+                                    isInModuleRange = (modStart <= colEnd) && (modEnd >= colDate);
+                                    if (isInModuleRange) {
+                                        const startWeekId = getWeekIdFromDate(modStart);
+                                        const endWeekId = getWeekIdFromDate(modEnd);
+                                        isModuleStart = col.id === startWeekId;
+                                        isModuleEnd = col.id === endWeekId;
+                                    }
+                                } else if (viewMode === 'month') {
+                                    if (col.weekIds && col.weekIds.length > 0) {
+                                        const startWeek = col.weekIds[0];
+                                        const endWeek = col.weekIds[col.weekIds.length - 1];
+                                        const [y1, w1] = startWeek.split('-').map(Number);
+                                        const mStart = getDateFromWeek(y1, w1);
+                                        const [y2, w2] = endWeek.split('-').map(Number);
+                                        const mEnd = new Date(getDateFromWeek(y2, w2));
+                                        mEnd.setDate(mEnd.getDate() + 6);
+                                        isInModuleRange = (modStart <= mEnd) && (modEnd >= mStart);
+                                        isModuleStart = modStart >= mStart && modStart <= mEnd; 
+                                        isModuleEnd = modEnd >= mStart && modEnd <= mEnd;
+                                    }
+                                }
+                            }
+
                             return (
-                                <div key={col.id} className={`flex-shrink-0 border-r border-slate-200/50 flex items-center justify-center bg-indigo-50 ${isCurrent ? 'bg-indigo-50/80' : ''}`} style={{ width: `${colWidth}px` }}>
+                                <div key={col.id} className={`flex-shrink-0 border-r border-slate-200/50 flex items-center justify-center bg-indigo-50 relative ${isCurrent ? 'bg-indigo-50/80' : ''}`} style={{ width: `${colWidth}px` }}>
+                                  {isInModuleRange && displayMode === 'allocation' && (
+                                      <div className={`absolute inset-y-1 inset-x-0 bg-indigo-200 ${isModuleStart ? 'rounded-l-md ml-1' : ''} ${isModuleEnd ? 'rounded-r-md mr-1' : ''} pointer-events-none`}></div>
+                                  )}
                                   {total > 0 && displayMode === 'allocation' && (
-                                    <span className="text-[10px] font-bold text-indigo-900">{formatValue(total)}</span>
+                                    <span className="text-[10px] font-bold text-indigo-900 relative z-10">{formatValue(total)}</span>
                                   )}
                                 </div>
                             );
@@ -1109,11 +1157,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           const isEditingTask = editingId === taskEditId;
                           
                           let earliestStartDate: string | null = null;
+                          let latestEndDate: Date | null = null;
                           let totalDuration = 0;
 
                           if (isTaskCollapsed && task.assignments.length > 0) {
                               let earliestDate: Date | null = null;
-                              let latestEndDate: Date | null = null;
                               
                               const taskHolidays = new Set<string>();
                               task.assignments.forEach(a => {
@@ -1222,10 +1270,56 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 {timeline.map(col => {
                                   const total = getTaskTotal(task, col);
                                   const isCurrent = isCurrentColumn(col);
+
+                                  let isInTaskRange = false;
+                                  let isTaskStart = false;
+                                  let isTaskEnd = false;
+
+                                  if (isTaskCollapsed && earliestStartDate && latestEndDate) {
+                                      const tStart = new Date(earliestStartDate.replace(/-/g, '/'));
+                                      const tEnd = latestEndDate;
+
+                                      if (viewMode === 'day' && col.date) {
+                                          isInTaskRange = col.date >= tStart && col.date <= tEnd;
+                                          isTaskStart = col.date.getTime() === tStart.getTime();
+                                          isTaskEnd = col.date.getTime() === tEnd.getTime();
+                                          if (formatDateForInput(col.date) === formatDateForInput(tStart)) isTaskStart = true;
+                                          if (formatDateForInput(col.date) === formatDateForInput(tEnd)) isTaskEnd = true;
+                                      } else if (viewMode === 'week') {
+                                          const [y, w] = col.id.split('-').map(Number);
+                                          const colDate = getDateFromWeek(y, w);
+                                          const colEnd = new Date(colDate);
+                                          colEnd.setDate(colEnd.getDate() + 6);
+                                          isInTaskRange = (tStart <= colEnd) && (tEnd >= colDate);
+                                          if (isInTaskRange) {
+                                              const startWeekId = getWeekIdFromDate(tStart);
+                                              const endWeekId = getWeekIdFromDate(tEnd);
+                                              isTaskStart = col.id === startWeekId;
+                                              isTaskEnd = col.id === endWeekId;
+                                          }
+                                      } else if (viewMode === 'month') {
+                                          if (col.weekIds && col.weekIds.length > 0) {
+                                              const startWeek = col.weekIds[0];
+                                              const endWeek = col.weekIds[col.weekIds.length - 1];
+                                              const [y1, w1] = startWeek.split('-').map(Number);
+                                              const mStart = getDateFromWeek(y1, w1);
+                                              const [y2, w2] = endWeek.split('-').map(Number);
+                                              const mEnd = new Date(getDateFromWeek(y2, w2));
+                                              mEnd.setDate(mEnd.getDate() + 6);
+                                              isInTaskRange = (tStart <= mEnd) && (tEnd >= mStart);
+                                              isTaskStart = tStart >= mStart && tStart <= mEnd; 
+                                              isTaskEnd = tEnd >= mStart && tEnd <= mEnd;
+                                          }
+                                      }
+                                  }
+
                                   return (
-                                    <div key={`th-${task.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 flex items-center justify-center bg-slate-50 ${isCurrent ? 'bg-slate-50' : ''}`} style={{ width: `${colWidth}px` }}>
+                                    <div key={`th-${task.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 flex items-center justify-center bg-slate-50 relative ${isCurrent ? 'bg-slate-50' : ''}`} style={{ width: `${colWidth}px` }}>
+                                      {isInTaskRange && displayMode === 'allocation' && (
+                                          <div className={`absolute inset-y-1 inset-x-0 bg-slate-200 ${isTaskStart ? 'rounded-l-md ml-1' : ''} ${isTaskEnd ? 'rounded-r-md mr-1' : ''} pointer-events-none`}></div>
+                                      )}
                                       {total > 0 && displayMode === 'allocation' && (
-                                        <span className="text-[10px] font-semibold text-slate-600">{formatValue(total)}</span>
+                                        <span className="text-[10px] font-semibold text-slate-600 relative z-10">{formatValue(total)}</span>
                                       )}
                                     </div>
                                   );
