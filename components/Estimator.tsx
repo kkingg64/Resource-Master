@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Project, ProjectModule, ComplexityLevel } from '../types';
-import { Calculator, GripVertical, BarChart3, Users, HelpCircle, ArrowRight, Gauge } from 'lucide-react';
+import { Project, ProjectModule, ComplexityLevel, Holiday } from '../types';
+import { Calculator, GripVertical, BarChart3, Users, HelpCircle, ArrowRight, Gauge, CalendarDays } from 'lucide-react';
+import { calculateEndDate, formatDateForInput } from '../constants';
 
 interface EstimatorProps {
   projects: Project[];
+  holidays: Holiday[];
   onUpdateFunctionPoints: (projectId: string, moduleId: string, legacyFp: number, mvpFp: number) => void;
   onUpdateModuleComplexity: (projectId: string, moduleId: string, complexity: ComplexityLevel) => void;
   onReorderModules: (projectId: string, startIndex: number, endIndex: number) => void;
@@ -16,7 +18,7 @@ const COMPLEXITY_MULTIPLIERS: Record<ComplexityLevel, number> = {
   'Complex': 2.0
 };
 
-export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunctionPoints, onUpdateModuleComplexity, onReorderModules }) => {
+export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateFunctionPoints, onUpdateModuleComplexity, onReorderModules }) => {
   // Phase 1: Preparation (Fact Finding / Legacy Analysis)
   const [prepVelocity, setPrepVelocity] = useState<number>(10); // FP per person-day
   const [prepTeamSize, setPrepTeamSize] = useState<number>(2);
@@ -27,6 +29,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>(projects[0]?.id || '');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  
+  const holidaySet = useMemo(() => new Set(holidays.map(h => h.date)), [holidays]);
   
   useEffect(() => {
     let currentProject = projects.find(p => p.id === selectedProjectId);
@@ -225,7 +229,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
                             Development
                         </th>
 
-                        <th className="py-3 px-4 text-center border-b border-slate-200 bg-slate-100">Total</th>
+                        <th className="py-3 px-4 text-center border-b border-slate-200 bg-slate-100">Timeline / Delivery</th>
                     </tr>
                     <tr className="text-[10px] text-slate-500">
                         <th className="border-b border-slate-200 bg-slate-50"></th>
@@ -265,6 +269,22 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
                         const devDuration = Math.ceil(devEffort / devTeamSize);
 
                         const totalDuration = prepDuration + devDuration;
+
+                        // Find Earliest Planner Start Date
+                        const earliestStart = m.tasks.reduce((min: string | null, task) => {
+                            const taskMin = task.assignments.reduce((tMin: string | null, assign) => {
+                                if (!assign.startDate) return tMin;
+                                if (!tMin || assign.startDate < tMin) return assign.startDate;
+                                return tMin;
+                            }, null);
+                            if (!taskMin) return min;
+                            if (!min || taskMin < min) return taskMin;
+                            return min;
+                        }, null);
+
+                        const deliveryDate = earliestStart && totalDuration > 0
+                             ? calculateEndDate(earliestStart, totalDuration, holidaySet)
+                             : null;
 
                         return (
                             <tr 
@@ -322,10 +342,10 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
                                             onChange={(e) => onUpdateModuleComplexity(selectedProjectId, m.id, e.target.value as ComplexityLevel)}
                                             className="w-full text-xs p-1 bg-transparent border-none focus:ring-0 cursor-pointer text-center font-medium text-slate-600 appearance-none hover:text-indigo-600"
                                         >
-                                            <option value="Low">Low (1x)</option>
-                                            <option value="Medium">Medium (1.2x)</option>
-                                            <option value="High">High (1.5x)</option>
-                                            <option value="Complex">Complex (2x)</option>
+                                            <option value="Low">Low</option>
+                                            <option value="Medium">Medium</option>
+                                            <option value="High">High</option>
+                                            <option value="Complex">Complex</option>
                                         </select>
                                         <Gauge size={10} className="absolute right-0 top-1.5 text-slate-300 pointer-events-none" />
                                     </div>
@@ -339,7 +359,14 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
 
                                 {/* Total */}
                                 <td className="px-4 py-2 text-right border-b border-slate-100 bg-slate-50 font-mono text-xs font-bold text-slate-800">
-                                    {totalDuration > 0 ? formatWeeks(totalDuration) : '-'}
+                                    {deliveryDate ? (
+                                        <div className="flex flex-col items-end">
+                                            <span className="text-indigo-700" title={`Based on start date: ${earliestStart}`}>{new Date(deliveryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                            <span className="text-[9px] text-slate-400 font-normal">({formatWeeks(totalDuration)})</span>
+                                        </div>
+                                    ) : (
+                                        <span className="text-slate-400">{totalDuration > 0 ? formatWeeks(totalDuration) : '-'}</span>
+                                    )}
                                 </td>
                             </tr>
                         );
@@ -360,9 +387,9 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
                         <td className="px-2 py-3 text-right text-slate-700">{totals.devEffort}</td>
                         <td className="px-2 py-3 text-right text-indigo-700 border-r border-slate-300">{formatWeeks(totals.devDuration)}</td>
 
-                        {/* Grand Total */}
+                        {/* Grand Total - Removed combined total duration as requested to keep phases separated */}
                         <td className="px-4 py-3 text-right text-slate-900 text-sm">
-                            {formatWeeks(totals.totalDuration)}
+                            
                         </td>
                     </tr>
                 </tfoot>
@@ -370,7 +397,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
         </div>
         <div className="mt-4 text-[10px] text-slate-400 text-right">
             * Duration estimates assume Preparation and Development run sequentially per module, but parallel across the team. <br/>
-            * Development Effort includes difficulty multiplier.
+            * Development Effort includes difficulty multiplier. <br/>
+            * Delivery dates calculated based on the earliest Planner assignment start date + total duration.
         </div>
       </div>
     </div>

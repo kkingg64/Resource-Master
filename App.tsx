@@ -1169,6 +1169,7 @@ const App: React.FC = () => {
                         <div className="h-full">
                             <Estimator 
                                 projects={projects} 
+                                holidays={holidays}
                                 onUpdateFunctionPoints={updateFunctionPoints}
                                 onReorderModules={reorderModules}
                                 onUpdateModuleComplexity={updateModuleComplexity}
