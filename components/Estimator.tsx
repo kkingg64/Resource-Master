@@ -54,7 +54,12 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
   const [selectedProjectId, setSelectedProjectId] = useState<string>(projects[0]?.id || '');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   
-  const holidaySet = useMemo(() => new Set(holidays.map(h => h.date)), [holidays]);
+  // Strict HK Working Day Calculation: Only filter holidays where country is 'HK'
+  const holidaySet = useMemo(() => new Set(
+    holidays
+        .filter(h => h.country === 'HK')
+        .map(h => h.date)
+  ), [holidays]);
   
   useEffect(() => {
     let currentProject = projects.find(p => p.id === selectedProjectId);
@@ -91,19 +96,21 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         const feVel = m.frontendVelocity || 5;
         const feTeam = m.frontendTeamSize || 2;
         const feComp = m.frontendComplexity || 'Medium';
-        totalFeFP += feFP;
         const feEffort = Math.ceil((feFP / feVel) * COMPLEXITY_MULTIPLIERS[feComp]);
+        const feDuration = Math.ceil(feEffort / feTeam);
+        totalFeFP += feFP;
         totalFeEffort += feEffort;
-        totalFeDuration += Math.ceil(feEffort / feTeam);
+        totalFeDuration += feDuration;
 
         const beFP = m.backendFunctionPoints || 0;
         const beVel = m.backendVelocity || 5;
         const beTeam = m.backendTeamSize || 2;
         const beComp = m.backendComplexity || 'Medium';
-        totalBeFP += beFP;
         const beEffort = Math.ceil((beFP / beVel) * COMPLEXITY_MULTIPLIERS[beComp]);
+        const beDuration = Math.ceil(beEffort / beTeam);
+        totalBeFP += beFP;
         totalBeEffort += beEffort;
-        totalBeDuration += Math.ceil(beEffort / beTeam);
+        totalBeDuration += beDuration;
     });
 
     return {
@@ -116,7 +123,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         prepDuration: totalPrepDuration,
         feDuration: totalFeDuration,
         beDuration: totalBeDuration,
-        totalDuration: totalPrepDuration + Math.max(totalFeDuration, totalBeDuration)
     };
   }, [modules]);
 
@@ -213,6 +219,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                 </select>
+                <span className="text-[10px] text-slate-400 ml-2">(Est. based on HK Holidays)</span>
             </div>
         </div>
       </div>
@@ -319,7 +326,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     const beEffort = Math.ceil((beFP / beVel) * COMPLEXITY_MULTIPLIERS[beComp]);
                     const beDuration = Math.ceil(beEffort / beTeam);
 
-                    // 1. Calculate Estimated Duration from FPs
+                    // 1. Calculate Estimated Duration from FPs (in working days)
                     const totalDuration = prepDuration + Math.max(feDuration, beDuration);
                     
                     // 2. Determine Base Start Date
@@ -341,7 +348,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         baseStartDate = getModuleEarliestStartDate(m);
                     }
 
-                    // 3. Calculate "Estimated" Delivery Date
+                    // 3. Calculate "Estimated" Delivery Date (Using HK working days logic via holidaySet)
                     let estimatedDateStr: string | null = null;
                     if (baseStartDate && totalDuration > 0) {
                         estimatedDateStr = calculateEndDate(baseStartDate, totalDuration, holidaySet);
