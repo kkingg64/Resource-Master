@@ -87,10 +87,12 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
 
     let projectMaxEstDate: Date | null = null;
     let projectMaxPlanDate: Date | null = null;
+    let totalVarianceDays = 0;
 
     modules.forEach(m => {
         const feFP = m.frontendFunctionPoints || 0;
         const beFP = m.backendFunctionPoints || 0;
+        const hasFP = feFP > 0 || beFP > 0;
         
         // Use edited legacyFunctionPoints as the Reference FP
         const prepBase = m.legacyFunctionPoints || 0;
@@ -121,8 +123,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         totalBeDuration += beDuration;
 
         // --- Date Calculation for Totals ---
-        // Logic: Delivery calculation based on Front-end and Back-end FPs only (parallel execution).
-        // Prep duration is excluded from the critical path for this estimation metric.
         const moduleTotalDuration = Math.max(feDuration, beDuration);
 
         // 1. Determine Base Start Date for this Module
@@ -152,16 +152,16 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         }
 
         // 2. Calculate Estimated End Date for Module
-        if (baseStartDate && moduleTotalDuration > 0) {
-            const estDateStr = calculateEndDate(baseStartDate, moduleTotalDuration, holidaySet);
-            const estDate = new Date(estDateStr.replace(/-/g, '/'));
-            if (!projectMaxEstDate || estDate > projectMaxEstDate) {
-                projectMaxEstDate = estDate;
+        let estDate: Date | null = null;
+        if (hasFP && baseStartDate) {
+            if (moduleTotalDuration > 0) {
+                const estDateStr = calculateEndDate(baseStartDate, moduleTotalDuration, holidaySet);
+                estDate = new Date(estDateStr.replace(/-/g, '/'));
+            } else {
+                estDate = new Date(baseStartDate.replace(/-/g, '/'));
             }
-        } else if (baseStartDate && moduleTotalDuration === 0) {
-            // Case where duration is 0, end date is start date
-            const estDate = new Date(baseStartDate.replace(/-/g, '/'));
-            if (!projectMaxEstDate || estDate > projectMaxEstDate) {
+            
+            if (estDate && (!projectMaxEstDate || estDate > projectMaxEstDate)) {
                 projectMaxEstDate = estDate;
             }
         }
@@ -185,6 +185,24 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                 projectMaxPlanDate = modMaxEndDate;
             }
         }
+
+        // 4. Calculate Individual Variance Contribution
+        if (estDate && modMaxEndDate) {
+            const estStr = formatDateForInput(estDate);
+            const planStr = formatDateForInput(modMaxEndDate);
+            
+            let days = 0;
+            if (estStr === planStr) {
+                days = 0;
+            } else if (estStr < planStr) {
+                // Est is earlier than Plan (Saved time). Negative.
+                days = - (calculateWorkingDaysBetween(estStr, planStr, holidaySet) - 1);
+            } else {
+                // Est is later than Plan (Need more time). Positive.
+                days = calculateWorkingDaysBetween(planStr, estStr, holidaySet) - 1;
+            }
+            totalVarianceDays += days;
+        }
     });
 
     return {
@@ -198,7 +216,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         feDuration: totalFeDuration,
         beDuration: totalBeDuration,
         projectMaxEstDate,
-        projectMaxPlanDate
+        projectMaxPlanDate,
+        totalVarianceDays
     };
   }, [modules, holidaySet]);
 
@@ -226,11 +245,9 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
     return `${weeks}w`;
   };
 
-  // Helper to find the start date of a specific task
   const getTaskStartDate = (module: ProjectModule, taskId: string): string | null => {
       const task = module.tasks.find(t => t.id === taskId);
       if (!task) return null;
-      // Find earliest start date in this task's assignments
       let minStart: string | null = null;
       task.assignments.forEach(a => {
           if (a.startDate) {
@@ -242,7 +259,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
       return minStart;
   };
 
-  // Helper to find the latest end date of ANY task in the module
   const getModuleLatestEndDate = (module: ProjectModule): Date | null => {
       let maxEndDate: Date | null = null;
       module.tasks.forEach(task => {
@@ -259,7 +275,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
       return maxEndDate;
   }
 
-  // Helper to find earliest start date from planner tasks
   const getModuleEarliestStartDate = (module: ProjectModule): string | null => {
       let minDate: string | null = null;
       module.tasks.forEach(task => {
@@ -306,31 +321,23 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
             <colgroup>
                 <col className="w-8" />   {/* Drag */}
                 <col className="w-48" />  {/* Module Name */}
-                
-                {/* Prep: 5 cols */}
                 <col className="w-14" />  {/* Ref FP */}
                 <col className="w-10" />  {/* Vel */}
                 <col className="w-10" />  {/* Team */}
                 <col className="w-12" />  {/* MD */}
                 <col className="w-12" />  {/* Wks */}
-
-                {/* FE: 6 cols */}
                 <col className="w-14" />  {/* FE FP */}
                 <col className="w-10" />  {/* Vel */}
                 <col className="w-10" />  {/* Team */}
                 <col className="w-12" />  {/* Diff */}
                 <col className="w-12" />  {/* MD */}
                 <col className="w-12" />  {/* Wks */}
-
-                {/* BE: 6 cols */}
                 <col className="w-14" />  {/* BE FP */}
                 <col className="w-10" />  {/* Vel */}
                 <col className="w-10" />  {/* Team */}
                 <col className="w-12" />  {/* Diff */}
                 <col className="w-12" />  {/* MD */}
                 <col className="w-12" />  {/* Wks */}
-
-                {/* Delivery: 3 cols */}
                 <col className="w-24" />  {/* Start */}
                 <col className="w-28" />  {/* ETA / Delivery Task */}
                 <col className="w-20" />  {/* Variance */}
@@ -387,8 +394,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                 {modules.map((m, index) => {
                     const feFP = m.frontendFunctionPoints || 0;
                     const beFP = m.backendFunctionPoints || 0;
+                    const hasFP = feFP > 0 || beFP > 0;
                     
-                    // Use manually entered Reference FP
                     const prepBase = m.legacyFunctionPoints || 0;
                     const prepVelocity = m.prepVelocity || 10;
                     const prepTeamSize = m.prepTeamSize || 2;
@@ -407,12 +414,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     const beEffort = Math.ceil((beFP / beVel) * COMPLEXITY_MULTIPLIERS[beComp]);
                     const beDuration = Math.ceil(beEffort / beTeam);
 
-                    // 1. Calculate Estimated Duration from FPs (in working days)
-                    // Logic: Delivery calculation based on Front-end and Back-end FPs only (parallel execution).
-                    // Prep duration is excluded from the critical path for this estimation metric.
                     const totalDuration = Math.max(feDuration, beDuration);
                     
-                    // 2. Determine Base Start Date
                     let baseStartDate = m.startDate || null;
                     let isTaskBased = false;
                     let startTaskName = '';
@@ -430,35 +433,45 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         baseStartDate = getModuleEarliestStartDate(m);
                     }
 
-                    // 3. Calculate "Estimated" Delivery Date (Using HK working days logic via holidaySet)
+                    // Calculate "Estimated" Delivery Date
                     let estimatedDateStr: string | null = null;
-                    if (baseStartDate && totalDuration > 0) {
-                        estimatedDateStr = calculateEndDate(baseStartDate, totalDuration, holidaySet);
-                    } else if (baseStartDate && totalDuration === 0) {
-                        // If duration is 0, finish date is start date
-                        estimatedDateStr = formatDateForInput(new Date(baseStartDate.replace(/-/g, '/')));
+                    if (hasFP) {
+                        if (baseStartDate && totalDuration > 0) {
+                            estimatedDateStr = calculateEndDate(baseStartDate, totalDuration, holidaySet);
+                        } else if (baseStartDate && totalDuration === 0) {
+                            estimatedDateStr = formatDateForInput(new Date(baseStartDate.replace(/-/g, '/')));
+                        }
                     }
 
-                    // 4. Calculate "Planned" Delivery Date (Planner Latest End Date)
+                    // Calculate "Planned" Delivery Date
                     const plannerDateObj = getModuleLatestEndDate(m);
                     const plannerDateStr = plannerDateObj ? formatDateForInput(plannerDateObj) : null;
 
-                    // 5. Compare & Variance Calculation
+                    // Variance Calculation
                     let varianceStatus: 'safe' | 'risk' | 'unknown' = 'unknown';
                     let varianceText = '-';
                     let varianceClass = 'text-slate-300';
 
                     if (estimatedDateStr && plannerDateStr) {
                         if (estimatedDateStr <= plannerDateStr) {
+                             // Est is earlier or same as Plan -> Safe (Negative Variance)
                              varianceStatus = 'safe';
-                             const diff = calculateWorkingDaysBetween(estimatedDateStr, plannerDateStr, holidaySet) - 1;
-                             varianceText = `+${Math.max(0, diff)}d`; // Ensure non-negative if same day
+                             // calculateWorkingDaysBetween returns total days inclusive.
+                             // Example: 1st to 1st = 1 day -> diff should be 0.
+                             // 1st to 2nd = 2 days -> diff should be 1.
+                             let diff = calculateWorkingDaysBetween(estimatedDateStr, plannerDateStr, holidaySet) - 1;
+                             if(estimatedDateStr === plannerDateStr) diff = 0;
+                             
+                             // Logic: Saved Time = Negative. So we negate the positive diff.
+                             const savedDays = -diff; 
+                             
+                             varianceText = `${savedDays}d`;
                              varianceClass = 'text-green-600 font-bold';
-                             if(estimatedDateStr === plannerDateStr) varianceText = '0d';
                         } else {
+                             // Est is later than Plan -> Risk (Positive Variance)
                              varianceStatus = 'risk';
                              const diff = calculateWorkingDaysBetween(plannerDateStr, estimatedDateStr, holidaySet) - 1;
-                             varianceText = `-${Math.max(0, diff)}d`;
+                             varianceText = `+${diff}d`;
                              varianceClass = 'text-red-600 font-bold';
                         }
                     }
@@ -670,13 +683,13 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     <td className="px-1 py-1 border-b border-slate-200 bg-slate-50 text-right">
                         <div className="flex flex-col gap-0.5 justify-center h-full">
                              <div className="flex items-center justify-between gap-2 text-[9px] text-slate-400 border-b border-slate-200/50 pb-0.5">
-                                <span>Est:</span>
+                                <span>Max Est:</span>
                                 <span className="font-mono">
                                     {totals.projectMaxEstDate ? totals.projectMaxEstDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}
                                 </span>
                              </div>
                              <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-slate-700">
-                                <span>Plan:</span>
+                                <span>Max Plan:</span>
                                 <span className="font-mono">
                                     {totals.projectMaxPlanDate ? totals.projectMaxPlanDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}
                                 </span>
@@ -685,23 +698,19 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     </td>
                     <td className="px-1 border-b border-slate-200 bg-slate-50 text-center">
                        {(() => {
-                           if (!totals.projectMaxEstDate || !totals.projectMaxPlanDate) return <span className="text-slate-300">-</span>;
-                           
-                           const estStr = formatDateForInput(totals.projectMaxEstDate);
-                           const planStr = formatDateForInput(totals.projectMaxPlanDate);
-                           
+                           // Total Variance is now the SUM of individual variances, not the variance of the Max dates.
+                           const days = totals.totalVarianceDays;
                            let varianceClass = 'text-slate-300';
                            let varianceText = '-';
 
-                           if (estStr <= planStr) {
-                               const diff = calculateWorkingDaysBetween(estStr, planStr, holidaySet) - 1;
-                               varianceText = `+${Math.max(0, diff)}d`;
-                               varianceClass = 'text-green-600 font-bold';
-                               if (estStr === planStr) varianceText = '0d';
+                           if (days !== 0) {
+                               const sign = days > 0 ? '+' : '';
+                               varianceText = `${sign}${days}d`;
+                               if (days > 0) varianceClass = 'text-red-600 font-bold'; // Positive = Late
+                               else varianceClass = 'text-green-600 font-bold'; // Negative = Early
                            } else {
-                               const diff = calculateWorkingDaysBetween(planStr, estStr, holidaySet) - 1;
-                               varianceText = `-${Math.max(0, diff)}d`;
-                               varianceClass = 'text-red-600 font-bold';
+                               varianceText = '0d';
+                               varianceClass = 'text-green-600 font-bold';
                            }
 
                            return <span className={`text-[10px] font-mono ${varianceClass}`}>{varianceText}</span>;
@@ -716,8 +725,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
       <div className="bg-slate-50 border-t border-slate-200 p-2 text-[10px] text-slate-400 text-center flex justify-between items-center px-4">
           <span>* FE/BE in parallel</span>
           <div className="flex gap-4">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Safe Plan (Plan &ge; Est)</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Aggressive Plan (Plan &lt; Est)</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Saved Days (Negative)</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Delays (Positive)</span>
           </div>
       </div>
     </div>

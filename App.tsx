@@ -127,6 +127,17 @@ const shiftWeekId = (weekId: string, direction: 'left' | 'right'): string => {
   return `${newPoint.year}-${String(newPoint.week).padStart(2, '0')}`;
 };
 
+// Helper to shift week ID by N weeks
+const shiftWeekIdByAmount = (weekId: string, amount: number): string => {
+    if (amount === 0) return weekId;
+    const [yearStr, weekStr] = weekId.split('-');
+    if (!yearStr || !weekStr) return weekId;
+    const point = { year: parseInt(yearStr), week: parseInt(weekStr) };
+    if (isNaN(point.year) || isNaN(point.week)) return weekId;
+    const newPoint = addWeeksToPoint(point, amount);
+    return `${newPoint.year}-${String(newPoint.week).padStart(2, '0')}`;
+};
+
 const App: React.FC = () => {
   const [session, setSession] = useState<any | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -371,6 +382,7 @@ const App: React.FC = () => {
     });
 
     const updates: { id: string, start_date: string }[] = [];
+    const allocationUpdates: { assignmentId: string, allocations: ResourceAllocation[] }[] = [];
     const queue = [startAssignmentId];
     const visited = new Set<string>();
 
@@ -405,9 +417,41 @@ const App: React.FC = () => {
             const newStartDate = findNextWorkingDay(parentEndDate, childHolidays);
 
             if (child.startDate !== newStartDate) {
+                // Check if week changed to shift allocations
+                const oldStartWeekId = child.startDate ? getWeekIdFromDate(new Date(child.startDate.replace(/-/g, '/'))) : null;
+                const newStartWeekId = getWeekIdFromDate(new Date(newStartDate.replace(/-/g, '/')));
+                
+                // Update start date in memory
                 child.startDate = newStartDate;
                 updates.push({ id: child.id, start_date: newStartDate });
                 queue.push(child.id);
+
+                // If week changed, shift allocations in memory
+                if (oldStartWeekId && oldStartWeekId !== newStartWeekId) {
+                    const [y1, w1] = oldStartWeekId.split('-').map(Number);
+                    const [y2, w2] = newStartWeekId.split('-').map(Number);
+                    // Use a simple week diff calculation based on dates for more accuracy over year boundaries
+                    const date1 = getDateFromWeek(y1, w1);
+                    const date2 = getDateFromWeek(y2, w2);
+                    const diffTime = date2.getTime() - date1.getTime();
+                    const weekDiff = Math.round(diffTime / (7 * 24 * 60 * 60 * 1000));
+
+                    if (weekDiff !== 0) {
+                        const newAllocationsMap = new Map<string, ResourceAllocation>();
+                        child.allocations.forEach(alloc => {
+                            const newWeekId = shiftWeekIdByAmount(alloc.weekId, weekDiff);
+                            if (newAllocationsMap.has(newWeekId)) {
+                                const existing = newAllocationsMap.get(newWeekId)!;
+                                existing.count += alloc.count;
+                                existing.days = {}; // Clear daily details on shift as they might be invalid
+                            } else {
+                                newAllocationsMap.set(newWeekId, { ...alloc, weekId: newWeekId, days: {} });
+                            }
+                        });
+                        child.allocations = Array.from(newAllocationsMap.values());
+                        allocationUpdates.push({ assignmentId: child.id, allocations: child.allocations });
+                    }
+                }
             }
         }
     }
@@ -416,6 +460,24 @@ const App: React.FC = () => {
         await Promise.all(updates.map(u => 
             supabase.from('task_assignments').update({ start_date: u.start_date }).eq('id', u.id)
         ));
+    }
+
+    if (allocationUpdates.length > 0) {
+        for (const update of allocationUpdates) {
+            // Delete old allocations for this assignment
+            await supabase.from('resource_allocations').delete().eq('assignment_id', update.assignmentId);
+            // Insert new ones
+            if (update.allocations.length > 0) {
+                const dbAllocations = update.allocations.map(a => ({
+                    assignment_id: update.assignmentId,
+                    user_id: session!.user.id,
+                    week_id: a.weekId,
+                    count: a.count,
+                    days: a.days || {}
+                }));
+                await supabase.from('resource_allocations').insert(dbAllocations);
+            }
+        }
     }
   };
   
