@@ -142,7 +142,6 @@ const App: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const statusTimeoutRef = useRef<number | undefined>(undefined);
   const allocationTimeouts = useRef<Record<string, number>>({});
-  const timelineInitialized = useRef(false);
 
   useEffect(() => {
     return () => window.clearTimeout(statusTimeoutRef.current);
@@ -211,10 +210,8 @@ const App: React.FC = () => {
     }
   }, [session]);
 
-  useEffect(() => {
-    if (projects.length === 0 || loading || timelineInitialized.current) {
-        return;
-    }
+  const calculateTimelineBounds = (currentProjects: Project[]) => {
+    if (currentProjects.length === 0) return;
 
     let minVal = Infinity;
     let maxVal = -Infinity;
@@ -243,7 +240,7 @@ const App: React.FC = () => {
         }
     };
 
-    projects.forEach(project => {
+    currentProjects.forEach(project => {
         project.modules.forEach(module => {
             if (module.startDate) processDate(module.startDate);
             module.tasks.forEach(task => {
@@ -275,17 +272,13 @@ const App: React.FC = () => {
     if (minPoint && maxPoint) {
         setTimelineStart(addWeeksToPoint(minPoint, -1));
         setTimelineEnd(addWeeksToPoint(maxPoint, 4));
-        timelineInitialized.current = true;
-    } else if (projects.length > 0) {
-        timelineInitialized.current = true;
     }
-  }, [projects, loading]);
+  };
   
   const fetchData = async (isRefresh: boolean = false) => {
     if (!session) return;
     if (isRefresh) {
       setIsRefreshing(true);
-      timelineInitialized.current = false;
     } else {
       setLoading(true);
     }
@@ -327,7 +320,12 @@ const App: React.FC = () => {
         }
       }
     }
-    setProjects(structureProjectsData(finalProjectsData, modulesData, tasksData, assignmentsData, allocationsData));
+    
+    const structuredProjects = structureProjectsData(finalProjectsData, modulesData, tasksData, assignmentsData, allocationsData);
+    setProjects(structuredProjects);
+    
+    // Calculate timeline BEFORE stopping the loading spinner to prevent UI jumps
+    calculateTimelineBounds(structuredProjects);
 
     const { data: resourcesData, error: resourcesError } = await supabase
       .from('resources')
@@ -826,8 +824,8 @@ const App: React.FC = () => {
         </div>
 
         <div className="flex-1 flex overflow-hidden">
-            {/* Sidebar */}
-            <div className={`${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-white border-r border-slate-200 flex flex-col transition-all duration-300 ease-in-out z-10`}>
+            {/* Sidebar - INCREASED Z-INDEX TO 60 */}
+            <div className={`${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-white border-r border-slate-200 flex flex-col transition-all duration-300 ease-in-out z-[60]`}>
                 <nav className="p-2 space-y-1 mt-4">
                    <SidebarItem icon={LayoutDashboard} label="Dashboard" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} collapsed={isSidebarCollapsed} />
                    <SidebarItem icon={Calendar} label="Planner" isActive={activeTab === 'planner'} onClick={() => setActiveTab('planner')} collapsed={isSidebarCollapsed} />

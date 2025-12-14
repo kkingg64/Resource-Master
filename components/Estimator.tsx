@@ -393,6 +393,10 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         );
                     };
 
+                    let cellBgClass = 'bg-white';
+                    if (varianceStatus === 'risk') cellBgClass = 'bg-red-50';
+                    if (varianceStatus === 'safe') cellBgClass = 'bg-green-50';
+
                     return (
                         <tr 
                             key={m.id}
@@ -514,10 +518,10 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                             </td>
 
                             {/* Delivery (Pure Comparison) */}
-                            <td className="px-1 border-b border-slate-100 bg-white text-right align-middle">
+                            <td className={`px-1 border-b border-slate-100 text-right align-middle ${cellBgClass}`}>
                                 <div className="flex flex-col gap-0.5 py-1 px-1 h-full justify-center">
                                      {/* Estimated Date */}
-                                     <div className="flex items-center justify-between gap-2 text-[9px] text-slate-400 border-b border-slate-50 pb-0.5">
+                                     <div className="flex items-center justify-between gap-2 text-[9px] text-slate-400 border-b border-slate-200/50 pb-0.5">
                                         <span>Est:</span>
                                         <span className="font-mono">
                                             {estimatedDateStr ? new Date(estimatedDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}
@@ -526,8 +530,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
 
                                      {/* Planner Date */}
                                      <div className={`flex items-center justify-between gap-2 text-[10px] font-bold ${
-                                         varianceStatus === 'safe' ? 'text-green-600' : 
-                                         varianceStatus === 'risk' ? 'text-red-600' : 'text-slate-600'
+                                         varianceStatus === 'safe' ? 'text-green-700' : 
+                                         varianceStatus === 'risk' ? 'text-red-700' : 'text-slate-600'
                                      }`}>
                                         <div className="flex items-center gap-1">
                                             <span>Plan:</span>

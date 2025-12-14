@@ -109,6 +109,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const isResizingDetails = useRef(false);
   
   const [showToggleMenu, setShowToggleMenu] = useState(false);
+  const [hasInitializedCollapse, setHasInitializedCollapse] = useState(false);
 
   const [contextMenu, setContextMenu] = useState<{ 
     x: number; 
@@ -123,6 +124,16 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const importInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const toggleButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Initialize task collapse state (Resources Only Mode) on load
+  useEffect(() => {
+    if (!hasInitializedCollapse && projects.length > 0) {
+        const allTaskIds = projects.flatMap(p => p.modules.flatMap(m => m.tasks.map(t => t.id)));
+        const newCollapsedState = allTaskIds.reduce((acc, id) => ({ ...acc, [id]: true }), {});
+        setCollapsedTasks(newCollapsedState);
+        setHasInitializedCollapse(true);
+    }
+  }, [projects, hasInitializedCollapse]);
 
   useEffect(() => {
     if (editingId && editInputRef.current) {
