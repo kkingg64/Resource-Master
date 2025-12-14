@@ -91,6 +91,7 @@ const structureProjectsData = (
       prepTeamSize: m.prep_team_size || 2,
 
       startDate: m.start_date, // New Start Date field
+      deliveryTaskId: m.delivery_task_id, // New Delivery Task override
 
       sort_order: m.sort_order,
       tasks: moduleTasks,
@@ -399,6 +400,18 @@ const App: React.FC = () => {
     }
     const { error } = await callSupabase('UPDATE module start date', { id: moduleId, startDate }, supabase.from('modules').update({ start_date: startDate }).eq('id', moduleId));
     if (error) { setProjects(previousState); alert("Failed to update module start date."); }
+  };
+
+  const updateModuleDeliveryTask = async (projectId: string, moduleId: string, deliveryTaskId: string | null) => {
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const module = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId);
+    if (module) {
+        module.deliveryTaskId = deliveryTaskId || undefined;
+        setProjects(updatedProjects);
+    }
+    const { error } = await callSupabase('UPDATE module delivery task', { id: moduleId, deliveryTaskId }, supabase.from('modules').update({ delivery_task_id: deliveryTaskId }).eq('id', moduleId));
+    if (error) { setProjects(previousState); alert("Failed to update module delivery task."); }
   };
 
   const updateAllocation = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number, dayDate?: string) => {
@@ -835,6 +848,7 @@ const App: React.FC = () => {
                                 onReorderModules={reorderModules}
                                 onUpdateModuleComplexity={updateModuleComplexity}
                                 onUpdateModuleStartDate={updateModuleStartDate}
+                                onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
                             />
                         </div>
                     )}

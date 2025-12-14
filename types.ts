@@ -63,6 +63,9 @@ export interface ProjectModule {
 
   // Manual Start Date Override
   startDate?: string;
+  
+  // Manual Delivery Task Override (Task ID from within this module)
+  deliveryTaskId?: string;
 
   tasks: ProjectTask[];
   sort_order?: number;

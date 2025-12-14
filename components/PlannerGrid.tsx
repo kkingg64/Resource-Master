@@ -243,12 +243,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     const flatList: { id: string; name: string; parentAssignmentId?: string; groupLabel: string }[] = [];
     projects.forEach(p => {
       p.modules.forEach(m => {
-        const groupLabel = `${p.name} > ${m.name}`;
+        // Group clearly by module name first, then project
+        const groupLabel = `📦 ${m.name}  (Project: ${p.name})`;
         m.tasks.forEach(t => {
           t.assignments.forEach(a => {
             flatList.push({
               id: a.id,
-              name: `${t.name} (${a.resourceName || 'Unassigned'})`,
+              name: `${t.name} • ${a.resourceName || 'Unassigned'}`,
               parentAssignmentId: a.parentAssignmentId,
               groupLabel
             });

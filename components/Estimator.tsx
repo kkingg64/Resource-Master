@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, ProjectModule, ComplexityLevel, Holiday, Role } from '../types';
-import { Calculator, GripVertical, ArrowRight, Layout, Server, ChevronDown, Calendar as CalendarIcon } from 'lucide-react';
-import { calculateEndDate } from '../constants';
+import { Calculator, GripVertical, ArrowRight, Layout, Server, ChevronDown, Calendar as CalendarIcon, Link2 } from 'lucide-react';
+import { calculateEndDate, formatDateForInput } from '../constants';
 
 interface EstimatorProps {
   projects: Project[];
@@ -9,6 +9,7 @@ interface EstimatorProps {
   onUpdateFunctionPoints: (projectId: string, moduleId: string, legacyFp: number, frontendFp: number, backendFp: number, prepVelocity: number, prepTeamSize: number) => void;
   onUpdateModuleComplexity: (projectId: string, moduleId: string, type: 'frontend' | 'backend', complexity: ComplexityLevel) => void;
   onUpdateModuleStartDate: (projectId: string, moduleId: string, startDate: string | null) => void;
+  onUpdateModuleDeliveryTask: (projectId: string, moduleId: string, deliveryTaskId: string | null) => void;
   onReorderModules: (projectId: string, startIndex: number, endIndex: number) => void;
 }
 
@@ -48,7 +49,7 @@ const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: Compl
     );
 };
 
-export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateFunctionPoints, onUpdateModuleComplexity, onUpdateModuleStartDate, onReorderModules }) => {
+export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateFunctionPoints, onUpdateModuleComplexity, onUpdateModuleStartDate, onUpdateModuleDeliveryTask, onReorderModules }) => {
   const [feVelocity, setFeVelocity] = useState<number>(5);
   const [feTeamSize, setFeTeamSize] = useState<number>(2);
   const [beVelocity, setBeVelocity] = useState<number>(5);
@@ -143,6 +144,25 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
     return `${weeks}w`;
   };
 
+  // Helper to find the max end date of a specific task
+  const getTaskEndDate = (module: ProjectModule, taskId: string): string | null => {
+      const task = module.tasks.find(t => t.id === taskId);
+      if (!task) return null;
+      
+      let maxEndDate: Date | null = null;
+      task.assignments.forEach(a => {
+          if (a.startDate && a.duration) {
+              const endDateStr = calculateEndDate(a.startDate, a.duration, holidaySet);
+              const endDate = new Date(endDateStr.replace(/-/g, '/'));
+              if (!maxEndDate || endDate > maxEndDate) {
+                  maxEndDate = endDate;
+              }
+          }
+      });
+      return maxEndDate ? formatDateForInput(maxEndDate) : null;
+  };
+
+
   return (
     <div className="flex flex-col h-full bg-slate-50 border border-slate-200 rounded-lg overflow-hidden">
       {/* Header */}
@@ -229,7 +249,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
 
                 {/* Delivery: 2 cols */}
                 <col className="w-24" />  {/* Start */}
-                <col className="w-20" />  {/* ETA */}
+                <col className="w-24" />  {/* ETA / Delivery Task */}
             </colgroup>
             <thead className="bg-slate-50 text-slate-600 text-[10px] uppercase tracking-wider sticky top-0 z-20 shadow-sm font-semibold">
                 <tr>
@@ -261,7 +281,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     <th className="py-1 text-center border-b border-slate-200 border-r bg-indigo-50/30">Wks</th>
                     
                     <th className="py-1 text-center border-b border-slate-200 bg-slate-50">Start</th>
-                    <th className="py-1 text-center border-b border-slate-200 bg-slate-50">ETA</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-slate-50">ETA / Task</th>
                 </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-[11px]">
@@ -295,10 +315,19 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     const devDuration = Math.max(feDuration, beDuration);
                     
                     let deliveryDate: string | null = null;
-                    if (m.startDate) {
-                            deliveryDate = calculateEndDate(m.startDate, totalDuration, holidaySet);
+                    
+                    // Logic: If manual delivery task is selected, use that.
+                    // Else if start date override, calculate.
+                    // Else calculate best guess.
+                    
+                    const manualDeliveryDate = m.deliveryTaskId ? getTaskEndDate(m, m.deliveryTaskId) : null;
+                    
+                    if (manualDeliveryDate) {
+                        deliveryDate = manualDeliveryDate;
+                    } else if (m.startDate) {
+                        deliveryDate = calculateEndDate(m.startDate, totalDuration, holidaySet);
                     } else {
-                        // ... simplified calculation logic remains same ...
+                        // ... default calculation logic ...
                          const devStartDate = m.tasks.reduce((min: string | null, task) => {
                                 const hasDev = task.assignments.some(a => a.role === Role.DEV);
                                 if (!hasDev) return min;
@@ -392,12 +421,33 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                     </div>
                                 </div>
                             </td>
-                            <td className="px-2 border-b border-slate-100 bg-slate-50/50 text-right">
-                                {deliveryDate ? (
-                                    <div className="flex flex-col items-end leading-none py-1">
-                                        <span className="text-indigo-700 font-bold text-[10px]">{new Date(deliveryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                            <td className="px-1 border-b border-slate-100 bg-slate-50/50 text-right relative group/delivery">
+                                <div className="flex flex-col items-end leading-none py-1 h-full justify-center">
+                                     {deliveryDate ? (
+                                        <span className={`text-[10px] font-bold ${m.deliveryTaskId ? 'text-green-700' : 'text-indigo-700'}`}>
+                                            {new Date(deliveryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                        </span>
+                                    ) : <span className="text-slate-300">-</span>}
+                                    
+                                    {/* Task Picker Overlay */}
+                                    <div className="absolute inset-0 opacity-0 group-hover/delivery:opacity-100 transition-opacity bg-white/90 flex items-center justify-center">
+                                         <div className="relative w-full h-full">
+                                            <select 
+                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                                                value={m.deliveryTaskId || ''}
+                                                onChange={(e) => onUpdateModuleDeliveryTask(selectedProjectId, m.id, e.target.value || null)}
+                                            >
+                                                <option value="">- Auto Calculate -</option>
+                                                {m.tasks.map(t => (
+                                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                                ))}
+                                            </select>
+                                            <div className="w-full h-full flex items-center justify-center gap-1 text-[9px] text-slate-500 pointer-events-none">
+                                                <Link2 size={10} /> {m.deliveryTaskId ? 'Mapped' : 'Auto'}
+                                            </div>
+                                         </div>
                                     </div>
-                                ) : <span className="text-slate-300">-</span>}
+                                </div>
                             </td>
                         </tr>
                     );
