@@ -63,8 +63,10 @@ export interface ProjectModule {
 
   // Manual Start Date Override
   startDate?: string;
+  // Start Task Anchor (Task ID from within this module)
+  startTaskId?: string;
   
-  // Manual Delivery Task Override (Task ID from within this module)
+  // Manual Delivery Task Override (Task ID from within this module) - Deprecated in favor of auto-calc but kept for type safety
   deliveryTaskId?: string;
 
   tasks: ProjectTask[];

@@ -10,6 +10,7 @@ interface EstimatorProps {
   onUpdateModuleComplexity: (projectId: string, moduleId: string, type: 'frontend' | 'backend', complexity: ComplexityLevel) => void;
   onUpdateModuleStartDate: (projectId: string, moduleId: string, startDate: string | null) => void;
   onUpdateModuleDeliveryTask: (projectId: string, moduleId: string, deliveryTaskId: string | null) => void;
+  onUpdateModuleStartTask: (projectId: string, moduleId: string, startTaskId: string | null) => void;
   onReorderModules: (projectId: string, startIndex: number, endIndex: number) => void;
 }
 
@@ -49,7 +50,7 @@ const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: Compl
     );
 };
 
-export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateFunctionPoints, onUpdateModuleComplexity, onUpdateModuleStartDate, onUpdateModuleDeliveryTask, onReorderModules }) => {
+export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateFunctionPoints, onUpdateModuleComplexity, onUpdateModuleStartDate, onUpdateModuleDeliveryTask, onUpdateModuleStartTask, onReorderModules }) => {
   const [feVelocity, setFeVelocity] = useState<number>(5);
   const [feTeamSize, setFeTeamSize] = useState<number>(2);
   const [beVelocity, setBeVelocity] = useState<number>(5);
@@ -144,22 +145,20 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
     return `${weeks}w`;
   };
 
-  // Helper to find the max end date of a specific task
-  const getTaskEndDate = (module: ProjectModule, taskId: string): Date | null => {
+  // Helper to find the start date of a specific task
+  const getTaskStartDate = (module: ProjectModule, taskId: string): string | null => {
       const task = module.tasks.find(t => t.id === taskId);
       if (!task) return null;
-      
-      let maxEndDate: Date | null = null;
+      // Find earliest start date in this task's assignments
+      let minStart: string | null = null;
       task.assignments.forEach(a => {
-          if (a.startDate && a.duration) {
-              const endDateStr = calculateEndDate(a.startDate, a.duration, holidaySet);
-              const endDate = new Date(endDateStr.replace(/-/g, '/'));
-              if (!maxEndDate || endDate > maxEndDate) {
-                  maxEndDate = endDate;
+          if (a.startDate) {
+              if (!minStart || a.startDate < minStart) {
+                  minStart = a.startDate;
               }
           }
       });
-      return maxEndDate;
+      return minStart;
   };
 
   // Helper to find the latest end date of ANY task in the module
@@ -346,9 +345,24 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     // 1. Calculate Estimated Duration from FPs
                     const totalDuration = prepDuration + Math.max(feDuration, beDuration);
                     
-                    // 2. Determine Base Start Date (Manual > Planner Earliest)
-                    const plannerEarliestStart = getModuleEarliestStartDate(m);
-                    const baseStartDate = m.startDate || plannerEarliestStart;
+                    // 2. Determine Base Start Date
+                    // Priority: Manual Override (startDate) > Task Start (startTaskId) > Auto Planner Earliest
+                    let baseStartDate = m.startDate || null;
+                    let isTaskBased = false;
+                    let startTaskName = '';
+
+                    if (!baseStartDate && m.startTaskId) {
+                        const taskStart = getTaskStartDate(m, m.startTaskId);
+                        if (taskStart) {
+                            baseStartDate = taskStart;
+                            isTaskBased = true;
+                            startTaskName = m.tasks.find(t => t.id === m.startTaskId)?.name || '';
+                        }
+                    }
+                    
+                    if (!baseStartDate) {
+                        baseStartDate = getModuleEarliestStartDate(m);
+                    }
 
                     // 3. Calculate "Estimated" Delivery Date
                     let estimatedDateStr: string | null = null;
@@ -356,13 +370,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         estimatedDateStr = calculateEndDate(baseStartDate, totalDuration, holidaySet);
                     }
 
-                    // 4. Calculate "Planned" Delivery Date (Manual Task > Planner Latest)
-                    let plannerDateObj: Date | null = null;
-                    if (m.deliveryTaskId) {
-                        plannerDateObj = getTaskEndDate(m, m.deliveryTaskId);
-                    } else {
-                        plannerDateObj = getModuleLatestEndDate(m);
-                    }
+                    // 4. Calculate "Planned" Delivery Date (Planner Latest End Date)
+                    const plannerDateObj = getModuleLatestEndDate(m);
                     const plannerDateStr = plannerDateObj ? formatDateForInput(plannerDateObj) : null;
 
                     // 5. Compare
@@ -420,29 +429,67 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                             <td className="px-1 text-center border-b border-slate-100 text-slate-400 font-mono">{beEffort || '-'}</td>
                             <td className="px-1 text-center border-b border-slate-100 border-r border-slate-200 text-indigo-700 font-medium">{formatWeeks(beDuration)}</td>
 
-                            {/* Delivery */}
-                            <td className="p-0 border-b border-slate-100 bg-slate-50/30">
-                                <div className="relative w-full h-full group/start">
-                                    <input type="date" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" value={m.startDate || ''} onChange={(e) => onUpdateModuleStartDate(selectedProjectId, m.id, e.target.value)} />
-                                    <div className={`w-full h-full flex items-center justify-center text-[10px] ${m.startDate ? 'text-indigo-700 font-bold' : 'text-slate-400'}`}>
-                                        {baseStartDate ? (
-                                            <div className="flex items-center gap-1">
-                                                <span>{new Date(baseStartDate).toLocaleDateString(undefined, {month:'numeric', day:'numeric'})}</span>
-                                                {!m.startDate && <span className="text-[8px] text-slate-300">A</span>}
-                                            </div>
-                                        ) : (
-                                            <CalendarIcon size={12} className="text-slate-300"/>
-                                        )}
-                                    </div>
-                                     {/* Tooltip for Auto vs Manual */}
-                                     {!m.startDate && baseStartDate && (
-                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover/start:block bg-slate-800 text-white text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap z-20">
-                                            Auto-detected from Planner
+                            {/* Start */}
+                            <td className="p-0 border-b border-slate-100 bg-slate-50/30 relative group/start">
+                                {/* Task/Auto/Manual Selector Overlay */}
+                                <div className="absolute inset-0 opacity-0 group-hover/start:opacity-100 transition-opacity bg-white/95 flex items-center justify-center shadow-sm z-20">
+                                    <div className="relative w-full h-full">
+                                        <select 
+                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                            value={m.startTaskId || (m.startDate ? 'manual' : '')}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                if (val === 'manual' || val === '') {
+                                                    // Clear task selection
+                                                    onUpdateModuleStartTask(selectedProjectId, m.id, null);
+                                                    if(val === '') {
+                                                        // Also clear manual date to go to Auto
+                                                        onUpdateModuleStartDate(selectedProjectId, m.id, null);
+                                                    }
+                                                } else {
+                                                    // Set task selection (this will override manual date logic in UI)
+                                                    onUpdateModuleStartTask(selectedProjectId, m.id, val);
+                                                }
+                                            }}
+                                        >
+                                            <option value="">- Auto (Earliest) -</option>
+                                            <option value="manual">- Manual Date -</option>
+                                            <optgroup label="Select Task">
+                                                {m.tasks.map(t => (
+                                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                                ))}
+                                            </optgroup>
+                                        </select>
+                                        <div className="w-full h-full flex flex-col items-center justify-center text-[9px] text-indigo-600 pointer-events-none p-1">
+                                            <Link2 size={10} /> 
+                                            <span className="truncate w-full text-center">Change Source</span>
                                         </div>
-                                     )}
+                                    </div>
+                                </div>
+
+                                {/* Actual Display Content */}
+                                <div className="w-full h-full flex flex-col items-center justify-center text-[10px] relative z-10 px-1">
+                                    {isTaskBased ? (
+                                        <>
+                                            <span className="text-indigo-700 font-bold truncate w-full text-center" title={`Starts with: ${startTaskName}`}>{startTaskName}</span>
+                                            <span className="text-[9px] text-slate-400">{baseStartDate ? new Date(baseStartDate).toLocaleDateString(undefined, {month:'numeric', day:'numeric'}) : '-'}</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <input 
+                                                type="date" 
+                                                className={`w-full bg-transparent text-center focus:outline-none ${m.startDate ? 'text-indigo-700 font-bold' : 'text-slate-500'}`}
+                                                value={m.startDate || (baseStartDate || '')} 
+                                                onChange={(e) => onUpdateModuleStartDate(selectedProjectId, m.id, e.target.value)}
+                                            />
+                                            {!m.startDate && baseStartDate && <span className="text-[8px] text-slate-300 absolute bottom-0.5 right-1">Auto</span>}
+                                        </>
+                                    )}
                                 </div>
                             </td>
-                            <td className="px-1 border-b border-slate-100 bg-white text-right relative group/delivery align-middle">
+
+                            {/* Delivery (Pure Comparison) */}
+                            <td className="px-1 border-b border-slate-100 bg-white text-right align-middle">
                                 <div className="flex flex-col gap-0.5 py-1 px-1 h-full justify-center">
                                      {/* Estimated Date */}
                                      <div className="flex items-center justify-between gap-2 text-[9px] text-slate-400 border-b border-slate-50 pb-0.5">
@@ -462,30 +509,10 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                             {varianceStatus === 'late' && <AlertCircle size={8} />}
                                             {varianceStatus === 'ok' && <CheckCircle2 size={8} />}
                                         </div>
-                                        <span className="font-mono">
+                                        <span className="font-mono" title="Latest task end date">
                                             {plannerDateStr ? new Date(plannerDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}
                                         </span>
                                      </div>
-                                    
-                                    {/* Task Picker Overlay */}
-                                    <div className="absolute inset-0 opacity-0 group-hover/delivery:opacity-100 transition-opacity bg-white/95 flex items-center justify-center shadow-sm">
-                                         <div className="relative w-full h-full">
-                                            <select 
-                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                                                value={m.deliveryTaskId || ''}
-                                                onChange={(e) => onUpdateModuleDeliveryTask(selectedProjectId, m.id, e.target.value || null)}
-                                            >
-                                                <option value="">- Latest Task -</option>
-                                                {m.tasks.map(t => (
-                                                    <option key={t.id} value={t.id}>{t.name}</option>
-                                                ))}
-                                            </select>
-                                            <div className="w-full h-full flex flex-col items-center justify-center gap-0.5 text-[9px] text-indigo-600 pointer-events-none p-1">
-                                                <Link2 size={12} /> 
-                                                <span className="truncate w-full text-center">{m.deliveryTaskId ? 'Mapped' : 'Auto'}</span>
-                                            </div>
-                                         </div>
-                                    </div>
                                 </div>
                             </td>
                         </tr>

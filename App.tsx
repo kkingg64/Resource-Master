@@ -91,7 +91,8 @@ const structureProjectsData = (
       prepTeamSize: m.prep_team_size || 2,
 
       startDate: m.start_date, // New Start Date field
-      deliveryTaskId: m.delivery_task_id, // New Delivery Task override
+      startTaskId: m.start_task_id, // New Start Task Anchor
+      deliveryTaskId: m.delivery_task_id, // Deprecated but kept
 
       sort_order: m.sort_order,
       tasks: moduleTasks,
@@ -402,7 +403,21 @@ const App: React.FC = () => {
     if (error) { setProjects(previousState); alert("Failed to update module start date."); }
   };
 
+  const updateModuleStartTask = async (projectId: string, moduleId: string, startTaskId: string | null) => {
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const module = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId);
+    if (module) {
+        module.startTaskId = startTaskId || undefined;
+        setProjects(updatedProjects);
+    }
+    const { error } = await callSupabase('UPDATE module start task', { id: moduleId, startTaskId }, supabase.from('modules').update({ start_task_id: startTaskId }).eq('id', moduleId));
+    if (error) { setProjects(previousState); alert("Failed to update module start task."); }
+  };
+
   const updateModuleDeliveryTask = async (projectId: string, moduleId: string, deliveryTaskId: string | null) => {
+    // Deprecated functionality, but keeping handler for backward compat if needed, though UI is removed.
+    // Logic updated to ensure data consistency
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
     const module = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId);
@@ -849,6 +864,7 @@ const App: React.FC = () => {
                                 onUpdateModuleComplexity={updateModuleComplexity}
                                 onUpdateModuleStartDate={updateModuleStartDate}
                                 onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
+                                onUpdateModuleStartTask={updateModuleStartTask}
                             />
                         </div>
                     )}
