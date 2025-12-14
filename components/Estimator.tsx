@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, ProjectModule, ComplexityLevel, Holiday, Role } from '../types';
-import { Calculator, GripVertical, BarChart3, Users, HelpCircle, ArrowRight, Gauge, CalendarDays, Code, Layout, Server, ChevronDown, Calendar as CalendarIcon, Plus } from 'lucide-react';
-import { calculateEndDate, formatDateForInput } from '../constants';
+import { Calculator, GripVertical, ArrowRight, Layout, Server, ChevronDown, Calendar as CalendarIcon } from 'lucide-react';
+import { calculateEndDate } from '../constants';
 
 interface EstimatorProps {
   projects: Project[];
@@ -21,8 +21,8 @@ const COMPLEXITY_MULTIPLIERS: Record<ComplexityLevel, number> = {
 
 const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: ComplexityLevel) => void }> = ({ value, onChange }) => {
     return (
-        <div className="relative w-full h-full flex items-center justify-center group cursor-pointer bg-white border border-transparent hover:border-slate-300 rounded px-1 transition-colors">
-            <div className="flex items-center gap-1 pointer-events-none z-0">
+        <div className="relative w-full h-full flex items-center justify-center group cursor-pointer bg-white/50 hover:bg-white border border-transparent hover:border-slate-300 rounded px-1 transition-colors">
+            <div className="flex items-center gap-0.5 pointer-events-none z-0">
                 <span className={`text-[10px] font-bold ${
                     value === 'Low' ? 'text-green-600' :
                     value === 'Medium' ? 'text-blue-600' :
@@ -31,7 +31,7 @@ const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: Compl
                 }`}>
                     {value.charAt(0)}
                 </span>
-                <ChevronDown size={10} className="text-slate-300 group-hover:text-slate-500" />
+                <ChevronDown size={8} className="text-slate-300 group-hover:text-slate-500" />
             </div>
             <select
                 value={value}
@@ -144,17 +144,18 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
   };
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
-      <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col xl:flex-row xl:items-center justify-between gap-6 flex-shrink-0">
+    <div className="flex flex-col h-full bg-slate-50 border border-slate-200 rounded-lg overflow-hidden">
+      {/* Header */}
+      <div className="bg-white border-b border-slate-200 px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-4 flex-shrink-0">
         <div>
-            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <Calculator className="w-5 h-5 text-indigo-600" />
+            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <Calculator className="w-4 h-4 text-indigo-600" />
                 Effort Estimator
             </h2>
-            <div className="flex items-center gap-2 mt-2">
-                <span className="text-xs text-slate-500">Project:</span>
+            <div className="flex items-center gap-2 mt-1.5">
+                <span className="text-[10px] text-slate-500 uppercase tracking-wide">Project:</span>
                 <select 
-                    className="text-sm border-slate-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 border py-1 pl-2 pr-8"
+                    className="text-xs border-slate-300 rounded focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 border py-1 pl-2 pr-6 h-7"
                     value={selectedProjectId}
                     onChange={(e) => setSelectedProjectId(e.target.value)}
                 >
@@ -165,129 +166,140 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
             </div>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-4 overflow-x-auto pb-2 xl:pb-0">
-            <div className="flex items-center gap-3 bg-blue-50/50 p-2 rounded-lg border border-blue-100 min-w-max">
-                <div className="px-2 border-r border-blue-200 flex items-center gap-1">
-                    <Layout size={14} className="text-blue-600" />
-                    <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">Front-End</span>
+        <div className="flex gap-4">
+            {/* FE Settings */}
+            <div className="flex items-center gap-2 bg-blue-50/50 px-3 py-1.5 rounded border border-blue-100">
+                <div className="flex items-center gap-1.5 border-r border-blue-200 pr-2 mr-1">
+                    <Layout size={12} className="text-blue-600" />
+                    <span className="text-[10px] font-bold text-blue-700 uppercase">FE</span>
                 </div>
-                <div className="flex flex-col">
-                    <label className="text-[10px] text-slate-500 uppercase">Vel.</label>
-                    <input type="number" min="1" value={feVelocity} onChange={(e) => setFeVelocity(Math.max(1, parseInt(e.target.value) || 1))} className="w-10 p-1 text-xs border border-blue-200 rounded"/>
+                <div className="flex items-center gap-1">
+                    <label className="text-[10px] text-slate-500">Vel:</label>
+                    <input type="number" min="1" value={feVelocity} onChange={(e) => setFeVelocity(Math.max(1, parseInt(e.target.value) || 1))} className="w-8 p-0.5 text-center text-xs border border-blue-200 rounded h-6"/>
                 </div>
-                <div className="flex flex-col">
-                    <label className="text-[10px] text-slate-500 uppercase">Team</label>
-                    <input type="number" min="1" value={feTeamSize} onChange={(e) => setFeTeamSize(Math.max(1, parseInt(e.target.value) || 1))} className="w-10 p-1 text-xs border border-blue-200 rounded"/>
+                <div className="flex items-center gap-1">
+                    <label className="text-[10px] text-slate-500">Team:</label>
+                    <input type="number" min="1" value={feTeamSize} onChange={(e) => setFeTeamSize(Math.max(1, parseInt(e.target.value) || 1))} className="w-8 p-0.5 text-center text-xs border border-blue-200 rounded h-6"/>
                 </div>
             </div>
 
-            <ArrowRight className="text-slate-300 hidden md:block self-center flex-shrink-0" size={16} />
-
-            <div className="flex items-center gap-3 bg-indigo-50/50 p-2 rounded-lg border border-indigo-100 min-w-max">
-                <div className="px-2 border-r border-indigo-200 flex items-center gap-1">
-                    <Server size={14} className="text-indigo-600" />
-                    <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Back-End</span>
+            {/* BE Settings */}
+            <div className="flex items-center gap-2 bg-indigo-50/50 px-3 py-1.5 rounded border border-indigo-100">
+                <div className="flex items-center gap-1.5 border-r border-indigo-200 pr-2 mr-1">
+                    <Server size={12} className="text-indigo-600" />
+                    <span className="text-[10px] font-bold text-indigo-700 uppercase">BE</span>
                 </div>
-                <div className="flex flex-col">
-                    <label className="text-[10px] text-slate-500 uppercase">Vel.</label>
-                    <input type="number" min="1" value={beVelocity} onChange={(e) => setBeVelocity(Math.max(1, parseInt(e.target.value) || 1))} className="w-10 p-1 text-xs border border-indigo-200 rounded"/>
+                <div className="flex items-center gap-1">
+                    <label className="text-[10px] text-slate-500">Vel:</label>
+                    <input type="number" min="1" value={beVelocity} onChange={(e) => setBeVelocity(Math.max(1, parseInt(e.target.value) || 1))} className="w-8 p-0.5 text-center text-xs border border-indigo-200 rounded h-6"/>
                 </div>
-                <div className="flex flex-col">
-                    <label className="text-[10px] text-slate-500 uppercase">Team</label>
-                    <input type="number" min="1" value={beTeamSize} onChange={(e) => setBeTeamSize(Math.max(1, parseInt(e.target.value) || 1))} className="w-10 p-1 text-xs border border-indigo-200 rounded"/>
+                <div className="flex items-center gap-1">
+                    <label className="text-[10px] text-slate-500">Team:</label>
+                    <input type="number" min="1" value={beTeamSize} onChange={(e) => setBeTeamSize(Math.max(1, parseInt(e.target.value) || 1))} className="w-8 p-0.5 text-center text-xs border border-indigo-200 rounded h-6"/>
                 </div>
             </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden min-w-max">
-            <table className="w-full text-sm text-left border-collapse table-fixed">
-                <colgroup>
-                    <col className="w-8" />
-                    <col className="w-48" />
-                    <col className="w-14" />
-                    <col className="w-10" />
-                    <col className="w-10" />
-                    <col className="w-12" />
-                    <col className="w-10" />
-                    <col className="w-14" />
-                    <col className="w-14" />
-                    <col className="w-12" />
-                    <col className="w-10" />
-                    <col className="w-14" />
-                    <col className="w-14" />
-                    <col className="w-12" />
-                    <col className="w-10" />
-                    <col className="w-28" />
-                    <col className="w-20" />
-                </colgroup>
-                <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase tracking-wider sticky top-0 z-20 shadow-sm">
+      {/* Table Container */}
+      <div className="flex-1 overflow-auto bg-white relative">
+        <table className="w-full text-left border-collapse table-fixed">
+            <colgroup>
+                <col className="w-8" />   {/* Drag */}
+                <col className="w-48" />  {/* Module Name */}
+                
+                {/* Prep: 5 cols */}
+                <col className="w-14" />  {/* L.FP */}
+                <col className="w-10" />  {/* Vel */}
+                <col className="w-10" />  {/* Team */}
+                <col className="w-12" />  {/* MD */}
+                <col className="w-12" />  {/* Wks */}
+
+                {/* FE: 4 cols */}
+                <col className="w-14" />  {/* FE FP */}
+                <col className="w-12" />  {/* Diff */}
+                <col className="w-12" />  {/* MD */}
+                <col className="w-12" />  {/* Wks */}
+
+                {/* BE: 4 cols */}
+                <col className="w-14" />  {/* BE FP */}
+                <col className="w-12" />  {/* Diff */}
+                <col className="w-12" />  {/* MD */}
+                <col className="w-12" />  {/* Wks */}
+
+                {/* Delivery: 2 cols */}
+                <col className="w-24" />  {/* Start */}
+                <col className="w-20" />  {/* ETA */}
+            </colgroup>
+            <thead className="bg-slate-50 text-slate-600 text-[10px] uppercase tracking-wider sticky top-0 z-20 shadow-sm font-semibold">
+                <tr>
+                    <th className="py-2 border-b border-slate-200 bg-slate-50"></th>
+                    <th className="py-2 px-2 border-b border-slate-200 border-r text-left truncate bg-slate-50">Module</th>
+                    <th colSpan={5} className="py-1 px-1 text-center bg-amber-50/80 border-b border-amber-100 border-r border-slate-200 text-amber-800">Preparation</th>
+                    <th colSpan={4} className="py-1 px-1 text-center bg-blue-50/80 border-b border-blue-100 border-r border-slate-200 text-blue-800">Front-End</th>
+                    <th colSpan={4} className="py-1 px-1 text-center bg-indigo-50/80 border-b border-indigo-100 border-r border-slate-200 text-indigo-800">Back-End</th>
+                    <th colSpan={2} className="py-2 px-2 text-center border-b border-slate-200 bg-slate-50">Delivery</th>
+                </tr>
+                <tr className="text-[9px] text-slate-500">
+                    <th className="border-b border-slate-200 bg-slate-50"></th>
+                    <th className="border-b border-slate-200 border-r bg-slate-50"></th>
+                    
+                    <th className="py-1 text-center border-b border-slate-200 bg-amber-50/30">Legacy</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-amber-50/30">Vel</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-amber-50/30">Team</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-amber-50/30">M.D.</th>
+                    <th className="py-1 text-center border-b border-slate-200 border-r bg-amber-50/30">Wks</th>
+
+                    <th className="py-1 text-center border-b border-slate-200 bg-blue-50/30">FP</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-blue-50/30">Cpx</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-blue-50/30">M.D.</th>
+                    <th className="py-1 text-center border-b border-slate-200 border-r bg-blue-50/30">Wks</th>
+
+                    <th className="py-1 text-center border-b border-slate-200 bg-indigo-50/30">FP</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-indigo-50/30">Cpx</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-indigo-50/30">M.D.</th>
+                    <th className="py-1 text-center border-b border-slate-200 border-r bg-indigo-50/30">Wks</th>
+                    
+                    <th className="py-1 text-center border-b border-slate-200 bg-slate-50">Start</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-slate-50">ETA</th>
+                </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-[11px]">
+                {modules.length === 0 && (
                     <tr>
-                        <th className="py-3 border-b border-slate-200 bg-slate-50"></th>
-                        <th className="py-3 px-2 border-b border-slate-200 border-r text-left truncate bg-slate-50">Module</th>
-                        <th colSpan={5} className="py-2 px-1 text-center bg-amber-50 border-b border-amber-100 border-r border-slate-200 text-amber-800">Preparation</th>
-                        <th colSpan={4} className="py-2 px-1 text-center bg-blue-50 border-b border-blue-100 border-r border-slate-200 text-blue-800">Front-End</th>
-                        <th colSpan={4} className="py-2 px-1 text-center bg-indigo-50 border-b border-indigo-100 border-r border-slate-200 text-indigo-800">Back-End</th>
-                        <th colSpan={2} className="py-3 px-2 text-center border-b border-slate-200 bg-slate-100">Delivery</th>
+                        <td colSpan={17} className="p-12 text-center text-slate-400 bg-slate-50/30">
+                            <div className="flex flex-col items-center justify-center gap-2">
+                                <Layout className="w-8 h-8 text-slate-300"/>
+                                <p>No modules found.</p>
+                            </div>
+                        </td>
                     </tr>
-                    <tr className="text-[10px] text-slate-500">
-                        <th className="border-b border-slate-200 bg-slate-50"></th>
-                        <th className="border-b border-slate-200 border-r bg-slate-50"></th>
-                        <th className="py-1 px-1 text-center border-b border-slate-200 bg-amber-50/30">L. FP</th>
-                        <th className="py-1 px-1 text-center border-b border-slate-200 bg-amber-50/30">Vel</th>
-                        <th className="py-1 px-1 text-center border-b border-slate-200 bg-amber-50/30">Tm</th>
-                        <th className="py-1 px-1 text-right border-b border-slate-200 bg-amber-50/30">M.D.</th>
-                        <th className="py-1 px-1 text-right border-b border-slate-200 border-r bg-amber-50/30">Wks</th>
-                        <th className="py-1 px-1 text-center border-b border-slate-200 bg-blue-50/30">FE FP</th>
-                        <th className="py-1 px-1 text-center border-b border-slate-200 bg-blue-50/30">Diff</th>
-                        <th className="py-1 px-1 text-right border-b border-slate-200 bg-blue-50/30">M.D.</th>
-                        <th className="py-1 px-1 text-right border-b border-slate-200 border-r bg-blue-50/30">Wks</th>
-                        <th className="py-1 px-1 text-center border-b border-slate-200 bg-indigo-50/30">BE FP</th>
-                        <th className="py-1 px-1 text-center border-b border-slate-200 bg-indigo-50/30">Diff</th>
-                        <th className="py-1 px-1 text-right border-b border-slate-200 bg-indigo-50/30">M.D.</th>
-                        <th className="py-1 px-1 text-right border-b border-slate-200 border-r bg-indigo-50/30">Wks</th>
-                        <th className="py-1 px-1 text-center border-b border-slate-200 bg-slate-100">Start Date</th>
-                        <th className="py-1 px-2 text-right border-b border-slate-200 bg-slate-100 font-bold">ETA</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                    {modules.length === 0 && (
-                        <tr>
-                            <td colSpan={17} className="p-12 text-center text-slate-400">
-                                <div className="flex flex-col items-center justify-center gap-3">
-                                    <div className="p-3 bg-slate-100 rounded-full"><Layout className="w-6 h-6 text-slate-400"/></div>
-                                    <p className="font-medium">No modules found in this project.</p>
-                                    <p className="text-xs">Go to the Planner to add modules and tasks first.</p>
-                                </div>
-                            </td>
-                        </tr>
-                    )}
-                    {modules.map((m, index) => {
-                        const prepVelocity = m.prepVelocity || 10;
-                        const prepTeamSize = m.prepTeamSize || 2;
-                        const prepEffort = Math.ceil((m.legacyFunctionPoints || 0) / prepVelocity);
-                        const prepDuration = Math.ceil(prepEffort / prepTeamSize);
+                )}
+                {modules.map((m, index) => {
+                    const prepVelocity = m.prepVelocity || 10;
+                    const prepTeamSize = m.prepTeamSize || 2;
+                    const prepEffort = Math.ceil((m.legacyFunctionPoints || 0) / prepVelocity);
+                    const prepDuration = Math.ceil(prepEffort / prepTeamSize);
 
-                        const feFP = m.frontendFunctionPoints || 0;
-                        const feComp = m.frontendComplexity || 'Medium';
-                        const feEffort = Math.ceil((feFP / feVelocity) * COMPLEXITY_MULTIPLIERS[feComp]);
-                        const feDuration = Math.ceil(feEffort / feTeamSize);
+                    const feFP = m.frontendFunctionPoints || 0;
+                    const feComp = m.frontendComplexity || 'Medium';
+                    const feEffort = Math.ceil((feFP / feVelocity) * COMPLEXITY_MULTIPLIERS[feComp]);
+                    const feDuration = Math.ceil(feEffort / feTeamSize);
 
-                        const beFP = m.backendFunctionPoints || 0;
-                        const beComp = m.backendComplexity || 'Medium';
-                        const beEffort = Math.ceil((beFP / beVelocity) * COMPLEXITY_MULTIPLIERS[beComp]);
-                        const beDuration = Math.ceil(beEffort / beTeamSize);
+                    const beFP = m.backendFunctionPoints || 0;
+                    const beComp = m.backendComplexity || 'Medium';
+                    const beEffort = Math.ceil((beFP / beVelocity) * COMPLEXITY_MULTIPLIERS[beComp]);
+                    const beDuration = Math.ceil(beEffort / beTeamSize);
 
-                        const totalDuration = prepDuration + Math.max(feDuration, beDuration);
-                        const devDuration = Math.max(feDuration, beDuration);
-                        
-                        let deliveryDate: string | null = null;
-                        
-                        if (m.startDate) {
-                             deliveryDate = calculateEndDate(m.startDate, totalDuration, holidaySet);
-                        } else {
-                            const devStartDate = m.tasks.reduce((min: string | null, task) => {
+                    const totalDuration = prepDuration + Math.max(feDuration, beDuration);
+                    const devDuration = Math.max(feDuration, beDuration);
+                    
+                    let deliveryDate: string | null = null;
+                    if (m.startDate) {
+                            deliveryDate = calculateEndDate(m.startDate, totalDuration, holidaySet);
+                    } else {
+                        // ... simplified calculation logic remains same ...
+                         const devStartDate = m.tasks.reduce((min: string | null, task) => {
                                 const hasDev = task.assignments.some(a => a.role === Role.DEV);
                                 if (!hasDev) return min;
                                 const taskMin = task.assignments
@@ -320,102 +332,102 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                     deliveryDate = calculateEndDate(moduleStartDate, totalDuration, holidaySet);
                                 }
                             }
-                        }
+                    }
 
-                        return (
-                            <tr 
-                                key={m.id}
-                                draggable
-                                onDragStart={(e) => handleDragStart(e, index)}
-                                onDragOver={handleDragOver}
-                                onDrop={(e) => handleDrop(e, index)}
-                                className={`hover:bg-slate-50 transition-colors group ${draggedIndex === index ? 'opacity-40 bg-slate-100' : ''}`}
-                            >
-                                <td className="text-center text-slate-300 cursor-grab active:cursor-grabbing border-b border-slate-100">
-                                    <div className="flex justify-center group-hover:text-slate-500"><GripVertical size={14} /></div>
-                                </td>
-                                <td className="px-2 py-2 border-b border-slate-100 border-r border-slate-200">
-                                    <div className="flex items-center justify-between"><span className="font-medium text-slate-700 truncate block w-full text-xs" title={m.name}>{m.name}</span></div>
-                                </td>
-                                <td className="px-1 py-1 border-b border-slate-100 hover:bg-slate-50 relative group/cell">
-                                    <input type="number" min="0" className="w-full h-full text-center p-1 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-600 text-[11px] transition-colors" value={m.legacyFunctionPoints || 0} onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, parseInt(e.target.value) || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0, prepVelocity, prepTeamSize)} />
-                                </td>
-                                <td className="px-1 py-1 border-b border-slate-100 hover:bg-slate-50 relative">
-                                     <input type="number" min="1" className="w-full h-full text-center p-1 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-500 text-[11px] transition-colors" value={prepVelocity} onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0, parseInt(e.target.value) || 1, prepTeamSize)} />
-                                </td>
-                                <td className="px-1 py-1 border-b border-slate-100 hover:bg-slate-50 relative">
-                                     <input type="number" min="1" className="w-full h-full text-center p-1 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-500 text-[11px] transition-colors" value={prepTeamSize} onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0, prepVelocity, parseInt(e.target.value) || 1)} />
-                                </td>
-                                <td className="px-2 py-1 text-right border-b border-slate-100 font-mono text-[11px] text-slate-400">{prepEffort || '-'}</td>
-                                <td className="px-2 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-[11px] font-medium text-amber-700">{formatWeeks(prepDuration)}</td>
-                                <td className="px-1 py-1 border-b border-slate-100 hover:bg-slate-50 relative group/cell">
-                                    <input type="number" min="0" className="w-full h-full text-center p-1 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-600 text-[11px] transition-colors" value={m.frontendFunctionPoints || 0} onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, parseInt(e.target.value) || 0, m.backendFunctionPoints || 0, prepVelocity, prepTeamSize)} />
-                                </td>
-                                <td className="px-1 py-1 border-b border-slate-100">
-                                    <ComplexitySelect value={feComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'frontend', val)} />
-                                </td>
-                                <td className="px-2 py-1 text-right border-b border-slate-100 font-mono text-[11px] text-slate-400">{feEffort || '-'}</td>
-                                <td className="px-2 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-[11px] font-medium text-blue-700">{formatWeeks(feDuration)}</td>
-                                <td className="px-1 py-1 border-b border-slate-100 hover:bg-slate-50 relative group/cell">
-                                    <input type="number" min="0" className="w-full h-full text-center p-1 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-600 text-[11px] transition-colors" value={m.backendFunctionPoints || 0} onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, parseInt(e.target.value) || 0, prepVelocity, prepTeamSize)} />
-                                </td>
-                                <td className="px-1 py-1 border-b border-slate-100">
-                                    <ComplexitySelect value={beComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'backend', val)} />
-                                </td>
-                                <td className="px-2 py-1 text-right border-b border-slate-100 font-mono text-[11px] text-slate-400">{beEffort || '-'}</td>
-                                <td className="px-2 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-[11px] font-medium text-indigo-700">{formatWeeks(beDuration)}</td>
-                                <td className="px-1 py-1 border-b border-slate-100 bg-slate-50/20 relative">
-                                    <div className={`relative w-full h-full flex items-center justify-center rounded border transition-colors ${m.startDate ? 'bg-indigo-50 border-indigo-200' : 'border-transparent hover:bg-slate-100 hover:border-slate-200'}`}>
-                                        <input type="date" className="w-full h-full opacity-0 absolute inset-0 cursor-pointer z-10" value={m.startDate || ''} onChange={(e) => onUpdateModuleStartDate(selectedProjectId, m.id, e.target.value)} title="Click to pick a start date" />
-                                        {m.startDate ? (
-                                            <span className="text-[10px] font-mono text-indigo-700 font-medium truncate px-1">{new Date(m.startDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                                        ) : (
-                                            <CalendarIcon size={12} className="text-slate-300" />
-                                        )}
+                    return (
+                        <tr 
+                            key={m.id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, index)}
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => handleDrop(e, index)}
+                            className={`hover:bg-slate-50 transition-colors group ${draggedIndex === index ? 'opacity-40 bg-slate-100' : ''}`}
+                        >
+                            <td className="text-center text-slate-300 cursor-grab active:cursor-grabbing border-b border-slate-100">
+                                <div className="flex justify-center group-hover:text-slate-500"><GripVertical size={12} /></div>
+                            </td>
+                            <td className="px-2 py-1.5 border-b border-slate-100 border-r border-slate-200">
+                                <span className="font-medium text-slate-700 truncate block w-full" title={m.name}>{m.name}</span>
+                            </td>
+                            
+                            {/* Prep */}
+                            <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
+                                <input type="number" min="0" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-600" value={m.legacyFunctionPoints || 0} onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, parseInt(e.target.value) || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0, prepVelocity, prepTeamSize)} />
+                            </td>
+                            <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
+                                    <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={prepVelocity} onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0, parseInt(e.target.value) || 1, prepTeamSize)} />
+                            </td>
+                            <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
+                                    <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={prepTeamSize} onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0, prepVelocity, parseInt(e.target.value) || 1)} />
+                            </td>
+                            <td className="px-1 text-center border-b border-slate-100 text-slate-400 font-mono">{prepEffort || '-'}</td>
+                            <td className="px-1 text-center border-b border-slate-100 border-r border-slate-200 text-amber-700 font-medium">{formatWeeks(prepDuration)}</td>
+
+                            {/* FE */}
+                            <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
+                                <input type="number" min="0" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-600" value={m.frontendFunctionPoints || 0} onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, parseInt(e.target.value) || 0, m.backendFunctionPoints || 0, prepVelocity, prepTeamSize)} />
+                            </td>
+                            <td className="p-0 border-b border-slate-100">
+                                <ComplexitySelect value={feComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'frontend', val)} />
+                            </td>
+                            <td className="px-1 text-center border-b border-slate-100 text-slate-400 font-mono">{feEffort || '-'}</td>
+                            <td className="px-1 text-center border-b border-slate-100 border-r border-slate-200 text-blue-700 font-medium">{formatWeeks(feDuration)}</td>
+
+                            {/* BE */}
+                            <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
+                                <input type="number" min="0" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-600" value={m.backendFunctionPoints || 0} onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, parseInt(e.target.value) || 0, prepVelocity, prepTeamSize)} />
+                            </td>
+                            <td className="p-0 border-b border-slate-100">
+                                <ComplexitySelect value={beComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'backend', val)} />
+                            </td>
+                            <td className="px-1 text-center border-b border-slate-100 text-slate-400 font-mono">{beEffort || '-'}</td>
+                            <td className="px-1 text-center border-b border-slate-100 border-r border-slate-200 text-indigo-700 font-medium">{formatWeeks(beDuration)}</td>
+
+                            {/* Delivery */}
+                            <td className="p-0 border-b border-slate-100 bg-slate-50/30">
+                                <div className="relative w-full h-full">
+                                    <input type="date" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" value={m.startDate || ''} onChange={(e) => onUpdateModuleStartDate(selectedProjectId, m.id, e.target.value)} />
+                                    <div className={`w-full h-full flex items-center justify-center text-[10px] ${m.startDate ? 'text-indigo-700 font-medium' : 'text-slate-300'}`}>
+                                        {m.startDate ? new Date(m.startDate).toLocaleDateString(undefined, {month:'numeric', day:'numeric'}) : <CalendarIcon size={12}/>}
                                     </div>
-                                </td>
-                                <td className="px-2 py-2 text-right border-b border-slate-100 bg-slate-50/50 font-mono text-[10px] font-bold text-slate-800">
-                                    {deliveryDate ? (
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-indigo-700 text-xs">{new Date(deliveryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                                            <span className="text-[8px] text-slate-400 font-normal">
-                                                {m.startDate ? `(Fixed: ${formatWeeks(totalDuration)})` : ((m.tasks.some(t => t.assignments.some(a => a.role === Role.DEV))) ? `(Dev: ${formatWeeks(devDuration)})` : `(Total: ${formatWeeks(totalDuration)})`)}
-                                            </span>
-                                        </div>
-                                    ) : (
-                                        <span className="text-slate-400">{totalDuration > 0 ? formatWeeks(totalDuration) : '-'}</span>
-                                    )}
-                                </td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-                <tfoot className="bg-slate-50 font-semibold text-xs border-t-2 border-slate-200 sticky bottom-0 z-20 shadow-[0_-2px_4px_rgba(0,0,0,0.05)]">
-                    <tr>
-                        <td colSpan={2} className="px-2 py-2 text-right text-slate-500 uppercase text-[10px]">Totals</td>
-                        <td className="px-1 py-2 text-center text-slate-700 text-[11px]">{totals.legacyFP}</td>
-                        <td colSpan={2} className="px-1 py-2 text-center text-slate-400 text-[11px]">-</td>
-                        <td className="px-2 py-2 text-right text-slate-700 text-[11px]">{totals.prepEffort}</td>
-                        <td className="px-2 py-2 text-right text-amber-700 border-r border-slate-300 text-[11px]">{formatWeeks(totals.prepDuration)}</td>
-                        <td className="px-1 py-2 text-center text-slate-700 text-[11px]">{totals.feFP}</td>
-                        <td className="px-1 py-2 text-center text-slate-400 text-[11px]">-</td>
-                        <td className="px-2 py-2 text-right text-slate-700 text-[11px]">{totals.feEffort}</td>
-                        <td className="px-2 py-2 text-right text-blue-700 border-r border-slate-300 text-[11px]">{formatWeeks(totals.feDuration)}</td>
-                        <td className="px-1 py-2 text-center text-slate-700 text-[11px]">{totals.beFP}</td>
-                        <td className="px-1 py-2 text-center text-slate-400 text-[11px]">-</td>
-                        <td className="px-2 py-2 text-right text-slate-700 text-[11px]">{totals.beEffort}</td>
-                        <td className="px-2 py-2 text-right text-indigo-700 border-r border-slate-300 text-[11px]">{formatWeeks(totals.beDuration)}</td>
-                        <td colSpan={2} className="px-4 py-2 text-right text-slate-900 text-sm"></td>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-        <div className="mt-4 text-[10px] text-slate-400 text-right space-y-1">
-            <p>* Front-End and Back-End development are assumed to run in parallel.</p>
-            <p>* Delivery date prioritizes Manual Start Date if set.</p>
-            <p>* If no manual date, it looks for scheduled 'EP Dev Team' tasks. If found, adds Development Duration to that start date.</p>
-            <p>* Otherwise, it adds (Prep + Development) duration to the earliest module activity found in the planner.</p>
-        </div>
+                                </div>
+                            </td>
+                            <td className="px-2 border-b border-slate-100 bg-slate-50/50 text-right">
+                                {deliveryDate ? (
+                                    <div className="flex flex-col items-end leading-none py-1">
+                                        <span className="text-indigo-700 font-bold text-[10px]">{new Date(deliveryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                    </div>
+                                ) : <span className="text-slate-300">-</span>}
+                            </td>
+                        </tr>
+                    );
+                })}
+            </tbody>
+            <tfoot className="bg-slate-50 font-semibold text-[10px] border-t border-slate-200 sticky bottom-0 z-20 shadow-[0_-2px_4px_rgba(0,0,0,0.05)]">
+                 <tr>
+                    <td colSpan={2} className="px-2 py-2 text-right text-slate-500 uppercase">Totals</td>
+                    <td className="text-center text-slate-700">{totals.legacyFP}</td>
+                    <td colSpan={2} className="text-center text-slate-300">-</td>
+                    <td className="text-center text-slate-700">{totals.prepEffort}</td>
+                    <td className="text-center text-amber-700 border-r border-slate-300">{formatWeeks(totals.prepDuration)}</td>
+                    <td className="text-center text-slate-700">{totals.feFP}</td>
+                    <td className="text-center text-slate-300">-</td>
+                    <td className="text-center text-slate-700">{totals.feEffort}</td>
+                    <td className="text-center text-blue-700 border-r border-slate-300">{formatWeeks(totals.feDuration)}</td>
+                    <td className="text-center text-slate-700">{totals.beFP}</td>
+                    <td className="text-center text-slate-300">-</td>
+                    <td className="text-center text-slate-700">{totals.beEffort}</td>
+                    <td className="text-center text-indigo-700 border-r border-slate-300">{formatWeeks(totals.beDuration)}</td>
+                    <td colSpan={2}></td>
+                </tr>
+            </tfoot>
+        </table>
+      </div>
+      
+      {/* Footer Info */}
+      <div className="bg-slate-50 border-t border-slate-200 p-2 text-[10px] text-slate-400 text-center flex justify-between items-center px-4">
+          <span>* FE/BE in parallel</span>
+          <span>* Auto-calculates based on planner if date not set</span>
       </div>
     </div>
   );
