@@ -90,9 +90,42 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   saveStatus,
   isRefreshing,
 }) => {
-  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
-  const [collapsedModules, setCollapsedModules] = useState<Record<string, boolean>>({});
-  const [collapsedTasks, setCollapsedTasks] = useState<Record<string, boolean>>({});
+  // --- Persistent State Initialization ---
+  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>(() => {
+    try {
+        const saved = localStorage.getItem('oms_collapsed_projects');
+        return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+  });
+
+  const [collapsedModules, setCollapsedModules] = useState<Record<string, boolean>>(() => {
+    try {
+        const saved = localStorage.getItem('oms_collapsed_modules');
+        return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+  });
+
+  const [collapsedTasks, setCollapsedTasks] = useState<Record<string, boolean>>(() => {
+    try {
+        const saved = localStorage.getItem('oms_collapsed_tasks');
+        return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+  });
+
+  // --- Persistence Effects ---
+  useEffect(() => {
+    localStorage.setItem('oms_collapsed_projects', JSON.stringify(collapsedProjects));
+  }, [collapsedProjects]);
+
+  useEffect(() => {
+    localStorage.setItem('oms_collapsed_modules', JSON.stringify(collapsedModules));
+  }, [collapsedModules]);
+
+  useEffect(() => {
+    localStorage.setItem('oms_collapsed_tasks', JSON.stringify(collapsedTasks));
+  }, [collapsedTasks]);
+
+
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
@@ -109,7 +142,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const isResizingDetails = useRef(false);
   
   const [showToggleMenu, setShowToggleMenu] = useState(false);
-  const [hasInitializedCollapse, setHasInitializedCollapse] = useState(false);
 
   const [contextMenu, setContextMenu] = useState<{ 
     x: number; 
@@ -124,16 +156,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const importInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const toggleButtonRef = useRef<HTMLButtonElement>(null);
-
-  // Initialize task collapse state (Resources Only Mode) on load
-  useEffect(() => {
-    if (!hasInitializedCollapse && projects.length > 0) {
-        const allTaskIds = projects.flatMap(p => p.modules.flatMap(m => m.tasks.map(t => t.id)));
-        const newCollapsedState = allTaskIds.reduce((acc, id) => ({ ...acc, [id]: true }), {});
-        setCollapsedTasks(newCollapsedState);
-        setHasInitializedCollapse(true);
-    }
-  }, [projects, hasInitializedCollapse]);
 
   useEffect(() => {
     if (editingId && editInputRef.current) {
