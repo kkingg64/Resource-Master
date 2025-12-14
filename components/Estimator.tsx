@@ -6,7 +6,7 @@ import { calculateEndDate, formatDateForInput } from '../constants';
 interface EstimatorProps {
   projects: Project[];
   holidays: Holiday[];
-  onUpdateFunctionPoints: (projectId: string, moduleId: string, legacyFp: number, frontendFp: number, backendFp: number) => void;
+  onUpdateFunctionPoints: (projectId: string, moduleId: string, legacyFp: number, frontendFp: number, backendFp: number, prepVelocity: number, prepTeamSize: number) => void;
   onUpdateModuleComplexity: (projectId: string, moduleId: string, type: 'frontend' | 'backend', complexity: ComplexityLevel) => void;
   onReorderModules: (projectId: string, startIndex: number, endIndex: number) => void;
 }
@@ -50,15 +50,11 @@ const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: Compl
 };
 
 export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateFunctionPoints, onUpdateModuleComplexity, onReorderModules }) => {
-  // Phase 1: Preparation
-  const [prepVelocity, setPrepVelocity] = useState<number>(10);
-  const [prepTeamSize, setPrepTeamSize] = useState<number>(2);
-
-  // Phase 2: Front-End
+  // Phase 2: Front-End (Still global)
   const [feVelocity, setFeVelocity] = useState<number>(5);
   const [feTeamSize, setFeTeamSize] = useState<number>(2);
 
-  // Phase 3: Back-End
+  // Phase 3: Back-End (Still global)
   const [beVelocity, setBeVelocity] = useState<number>(5);
   const [beTeamSize, setBeTeamSize] = useState<number>(2);
 
@@ -92,8 +88,10 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
     let totalBeDuration = 0;
 
     modules.forEach(m => {
-        // Prep
+        // Prep - Per module config
         totalLegacyFP += (m.legacyFunctionPoints || 0);
+        const prepVelocity = m.prepVelocity || 10;
+        const prepTeamSize = m.prepTeamSize || 2;
         const prepEffort = Math.ceil((m.legacyFunctionPoints || 0) / prepVelocity);
         totalPrepEffort += prepEffort;
         totalPrepDuration += Math.ceil(prepEffort / prepTeamSize);
@@ -125,13 +123,9 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         prepDuration: totalPrepDuration,
         feDuration: totalFeDuration,
         beDuration: totalBeDuration,
-        // Assume FE and BE run in parallel to each other, but after Prep? 
-        // Or strictly sequential: Prep -> (FE || BE).
-        // For simple estimation: Prep + Max(FE, BE) if parallel, or Prep + FE + BE if sequential.
-        // Let's assume sequential Development phases for the conservative estimate.
         totalDuration: totalPrepDuration + Math.max(totalFeDuration, totalBeDuration) // Parallel dev
     };
-  }, [modules, prepVelocity, prepTeamSize, feVelocity, feTeamSize, beVelocity, beTeamSize]);
+  }, [modules, feVelocity, feTeamSize, beVelocity, beTeamSize]);
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.setData("text/plain", index.toString());
@@ -183,23 +177,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         {/* Global Settings Grouped by Phase */}
         <div className="flex flex-col md:flex-row gap-4 overflow-x-auto pb-2 xl:pb-0">
             
-            {/* Prep Settings */}
-            <div className="flex items-center gap-3 bg-amber-50/50 p-2 rounded-lg border border-amber-100 min-w-max">
-                <div className="px-2 border-r border-amber-200 flex items-center gap-1">
-                    <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Prep</span>
-                </div>
-                <div className="flex flex-col">
-                    <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">Vel.</label>
-                    <input type="number" min="1" value={prepVelocity} onChange={(e) => setPrepVelocity(Math.max(1, parseInt(e.target.value) || 1))} className="w-10 p-1 text-xs border border-amber-200 rounded"/>
-                </div>
-                <div className="flex flex-col">
-                    <label className="text-[10px] text-slate-500 uppercase">Team</label>
-                    <input type="number" min="1" value={prepTeamSize} onChange={(e) => setPrepTeamSize(Math.max(1, parseInt(e.target.value) || 1))} className="w-10 p-1 text-xs border border-amber-200 rounded"/>
-                </div>
-            </div>
-
-            <ArrowRight className="text-slate-300 hidden md:block self-center flex-shrink-0" size={16} />
-
             {/* FE Settings */}
             <div className="flex items-center gap-3 bg-blue-50/50 p-2 rounded-lg border border-blue-100 min-w-max">
                 <div className="px-2 border-r border-blue-200 flex items-center gap-1">
@@ -247,8 +224,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         <th className="py-3 px-4 border-b border-slate-200 border-r text-left w-1/4">Module</th>
                         
                         {/* Preparation */}
-                        <th colSpan={3} className="py-2 px-4 text-center bg-amber-50 border-b border-amber-100 border-r border-slate-200 text-amber-800">
-                            Preparation
+                        <th colSpan={5} className="py-2 px-4 text-center bg-amber-50 border-b border-amber-100 border-r border-slate-200 text-amber-800">
+                            Preparation (Configurable)
                         </th>
                         
                         {/* Front-End */}
@@ -269,6 +246,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         
                         {/* Prep Subs */}
                         <th className="py-2 px-2 text-right border-b border-slate-200 bg-amber-50/30">Legacy FP</th>
+                        <th className="py-2 px-2 text-center border-b border-slate-200 bg-amber-50/30" title="Preparation Velocity">Vel.</th>
+                        <th className="py-2 px-2 text-center border-b border-slate-200 bg-amber-50/30" title="Team Size">Team</th>
                         <th className="py-2 px-2 text-right border-b border-slate-200 bg-amber-50/30">Effort</th>
                         <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-amber-50/30">Dur.</th>
 
@@ -290,13 +269,15 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                 <tbody className="divide-y divide-slate-100">
                     {modules.length === 0 && (
                         <tr>
-                            <td colSpan={14} className="p-8 text-center text-slate-400 italic">
+                            <td colSpan={16} className="p-8 text-center text-slate-400 italic">
                                 No modules found. Go to Planner to add modules.
                             </td>
                         </tr>
                     )}
                     {modules.map((m, index) => {
                         // Phase 1
+                        const prepVelocity = m.prepVelocity || 10;
+                        const prepTeamSize = m.prepTeamSize || 2;
                         const prepEffort = Math.ceil((m.legacyFunctionPoints || 0) / prepVelocity);
                         const prepDuration = Math.ceil(prepEffort / prepTeamSize);
 
@@ -313,18 +294,12 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         const beDuration = Math.ceil(beEffort / beTeamSize);
 
                         // Total Duration (Prep + Parallel Dev)
-                        // Used for total effort estimation but not necessarily for timeline start offset if dev task is explicitly scheduled.
                         const totalDuration = prepDuration + Math.max(feDuration, beDuration);
                         const devDuration = Math.max(feDuration, beDuration);
-
-                        // Find Start Date
-                        // Logic: Look for the earliest start date of a 'Dev Team' (Role.DEV) task.
-                        // If found, Delivery Date = DevStart + DevDuration (Parallel FE/BE).
-                        // If not found, Fallback to Earliest Module Start + Prep + DevDuration.
                         
                         let deliveryDate: string | null = null;
                         
-                        // 1. Try to find a scheduled "Dev Team" task to anchor the build phase
+                        // 1. Try to find a scheduled "EP Dev Team" task to anchor the build phase
                         const devStartDate = m.tasks.reduce((min: string | null, task) => {
                             const hasDev = task.assignments.some(a => a.role === Role.DEV);
                             if (!hasDev) return min;
@@ -387,7 +362,23 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                     <input 
                                         type="number" min="0" className="w-full h-full text-right p-2 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-600 text-xs transition-colors"
                                         value={m.legacyFunctionPoints || 0}
-                                        onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, parseInt(e.target.value) || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0)}
+                                        onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, parseInt(e.target.value) || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0, prepVelocity, prepTeamSize)}
+                                    />
+                                </td>
+                                <td className="px-1 py-1 border-b border-slate-100 hover:bg-slate-50 relative">
+                                     <input 
+                                        type="number" min="1" className="w-full h-full text-center p-1 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-500 text-xs transition-colors"
+                                        value={prepVelocity}
+                                        onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0, parseInt(e.target.value) || 1, prepTeamSize)}
+                                        title="Prep Velocity"
+                                    />
+                                </td>
+                                <td className="px-1 py-1 border-b border-slate-100 hover:bg-slate-50 relative">
+                                     <input 
+                                        type="number" min="1" className="w-full h-full text-center p-1 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-500 text-xs transition-colors"
+                                        value={prepTeamSize}
+                                        onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0, prepVelocity, parseInt(e.target.value) || 1)}
+                                        title="Prep Team Size"
                                     />
                                 </td>
                                 <td className="px-2 py-1 text-right border-b border-slate-100 font-mono text-xs text-slate-400">{prepEffort || '-'}</td>
@@ -398,7 +389,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                     <input 
                                         type="number" min="0" className="w-full h-full text-right p-2 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-600 text-xs transition-colors"
                                         value={m.frontendFunctionPoints || 0}
-                                        onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, parseInt(e.target.value) || 0, m.backendFunctionPoints || 0)}
+                                        onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, parseInt(e.target.value) || 0, m.backendFunctionPoints || 0, prepVelocity, prepTeamSize)}
                                     />
                                 </td>
                                 <td className="px-1 py-1 border-b border-slate-100">
@@ -412,7 +403,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                     <input 
                                         type="number" min="0" className="w-full h-full text-right p-2 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-600 text-xs transition-colors"
                                         value={m.backendFunctionPoints || 0}
-                                        onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, parseInt(e.target.value) || 0)}
+                                        onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, parseInt(e.target.value) || 0, prepVelocity, prepTeamSize)}
                                     />
                                 </td>
                                 <td className="px-1 py-1 border-b border-slate-100">
@@ -444,6 +435,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         
                         {/* Prep Totals */}
                         <td className="px-2 py-3 text-right text-slate-700">{totals.legacyFP}</td>
+                        <td colSpan={2} className="px-2 py-3 text-center text-slate-400">-</td>
                         <td className="px-2 py-3 text-right text-slate-700">{totals.prepEffort}</td>
                         <td className="px-2 py-3 text-right text-amber-700 border-r border-slate-300">{formatWeeks(totals.prepDuration)}</td>
 
@@ -466,7 +458,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         </div>
         <div className="mt-4 text-[10px] text-slate-400 text-right space-y-1">
             <p>* Front-End and Back-End development are assumed to run in parallel.</p>
-            <p>* Delivery date prioritizes scheduled 'Dev Team' tasks. If found, adds Development Duration to that start date.</p>
+            <p>* Delivery date prioritizes scheduled 'EP Dev Team' tasks. If found, adds Development Duration to that start date.</p>
             <p>* Otherwise, it adds (Prep + Development) duration to the earliest module activity.</p>
         </div>
       </div>

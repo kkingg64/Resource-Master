@@ -80,12 +80,15 @@ const structureProjectsData = (
       complexity: m.complexity || 'Medium', // Default to Medium if undefined
       
       // Default FE/BE FP to the main function_points if they are not explicitly set (null)
-      // This ensures they start "same" as requested.
       frontendFunctionPoints: m.frontend_function_points ?? m.function_points ?? 0,
       backendFunctionPoints: m.backend_function_points ?? m.function_points ?? 0,
       
       frontendComplexity: m.frontend_complexity || m.complexity || 'Medium',
       backendComplexity: m.backend_complexity || m.complexity || 'Medium',
+
+      // New Prep fields
+      prepVelocity: m.prep_velocity || 10,
+      prepTeamSize: m.prep_team_size || 2,
 
       sort_order: m.sort_order,
       tasks: moduleTasks,
@@ -335,26 +338,29 @@ const App: React.FC = () => {
     else setLoading(false);
   };
   
-  const updateFunctionPoints = async (projectId: string, moduleId: string, legacyFp: number, frontendFp: number, backendFp: number) => {
+  const updateFunctionPoints = async (projectId: string, moduleId: string, legacyFp: number, frontendFp: number, backendFp: number, prepVelocity: number, prepTeamSize: number) => {
      const previousState = deepClone(projects);
      const module = projects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId);
      if (module) {
         module.legacyFunctionPoints = legacyFp;
         module.frontendFunctionPoints = frontendFp;
         module.backendFunctionPoints = backendFp;
-        // Calculate total for legacy view
         module.functionPoints = frontendFp + backendFp;
+        module.prepVelocity = prepVelocity;
+        module.prepTeamSize = prepTeamSize;
         setProjects(deepClone(projects));
      }
      
      const { error } = await callSupabase(
-        'UPDATE function points', 
-        { id: moduleId, legacyFp, frontendFp, backendFp }, 
+        'UPDATE function points & prep', 
+        { id: moduleId, legacyFp, frontendFp, backendFp, prepVelocity, prepTeamSize }, 
         supabase.from('modules').update({ 
             legacy_function_points: legacyFp, 
             frontend_function_points: frontendFp,
             backend_function_points: backendFp,
-            function_points: frontendFp + backendFp
+            function_points: frontendFp + backendFp,
+            prep_velocity: prepVelocity,
+            prep_team_size: prepTeamSize
         }).eq('id', moduleId)
     );
      if (error) { setProjects(previousState); alert("Failed to update function points."); }

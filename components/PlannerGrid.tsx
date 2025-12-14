@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2 } from 'lucide-react';
+import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface PlannerGridProps {
@@ -107,6 +107,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [isDetailsFrozen, setIsDetailsFrozen] = useState(true);
   const isResizingSidebar = useRef(false);
   const isResizingDetails = useRef(false);
+  
+  const [showToggleMenu, setShowToggleMenu] = useState(false);
 
   const [contextMenu, setContextMenu] = useState<{ 
     x: number; 
@@ -120,6 +122,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   
   const importInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
+  const toggleButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (editingId && editInputRef.current) {
@@ -132,7 +135,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   }, [editingId]);
 
   useEffect(() => {
-    const handleClick = () => setContextMenu(null);
+    const handleClick = () => {
+        setContextMenu(null);
+        setShowToggleMenu(false);
+    };
     window.addEventListener('click', handleClick);
     return () => window.removeEventListener('click', handleClick);
   }, []);
@@ -141,11 +147,19 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const toggleModule = (id: string) => setCollapsedModules(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleTask = (id: string) => setCollapsedTasks(prev => ({ ...prev, [id]: !prev[id] }));
 
-  const handleToggleAll = () => {
+  const handleToggleModules = () => {
     const allModuleIds = projects.flatMap(p => p.modules.map(m => m.id));
     const areSomeCollapsed = allModuleIds.some(id => collapsedModules[id]);
     const newCollapsedState = areSomeCollapsed ? {} : allModuleIds.reduce((acc, id) => ({ ...acc, [id]: true }), {});
     setCollapsedModules(newCollapsedState);
+  };
+
+  const handleToggleResources = () => {
+    // Resources are children of tasks. Collapsing tasks hides resources.
+    const allTaskIds = projects.flatMap(p => p.modules.flatMap(m => m.tasks.map(t => t.id)));
+    const areSomeCollapsed = allTaskIds.some(id => collapsedTasks[id]);
+    const newCollapsedState = areSomeCollapsed ? {} : allTaskIds.reduce((acc, id) => ({ ...acc, [id]: true }), {});
+    setCollapsedTasks(newCollapsedState);
   };
   
   const startSidebarResize = (e: React.MouseEvent) => {
@@ -439,14 +453,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const getRoleColorClass = (role: Role) => {
     switch (role) {
-      case Role.DEV: return 'border-l-blue-500';
+      case Role.DEV: return 'border-l-blue-500'; // Now EP Dev Team
       case Role.BRAND_SOLUTIONS: return 'border-l-orange-500';
       case Role.PLM_D365: return 'border-l-green-500';
       case Role.BA: return 'border-l-purple-500';
       case Role.APP_SUPPORT: return 'border-l-red-500';
       case Role.DM: return 'border-l-yellow-500';
       case Role.COE: return 'border-l-cyan-500';
-      case Role.EA: return 'border-l-pink-500';
+      case Role.EA: return 'border-l-pink-500'; // Now Enterprise Architecture
       case Role.PREP_DEV: return 'border-l-teal-500';
       default: return 'border-l-slate-400';
     }
@@ -642,9 +656,32 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
               <span className="text-sm font-semibold text-slate-700">Timeline</span>
             </div>
             
-            <button onClick={handleToggleAll} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors" title="Collapse/Expand All Modules">
-              <ChevronsDownUp size={14} /> Toggle Modules
-            </button>
+             <div className="relative">
+                <button 
+                  ref={toggleButtonRef}
+                  onClick={(e) => { e.stopPropagation(); setShowToggleMenu(!showToggleMenu); }}
+                  className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors"
+                >
+                  <Eye size={14} /> View Options <ChevronDown size={12} />
+                </button>
+                
+                {showToggleMenu && (
+                  <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50 py-1 animate-in fade-in zoom-in-95 duration-200">
+                    <button 
+                      onClick={() => { handleToggleModules(); setShowToggleMenu(false); }}
+                      className="w-full text-left px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 flex items-center gap-2"
+                    >
+                      <ChevronsDownUp size={14} /> Toggle All Modules
+                    </button>
+                    <button 
+                       onClick={() => { handleToggleResources(); setShowToggleMenu(false); }}
+                       className="w-full text-left px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 flex items-center gap-2"
+                    >
+                      <EyeOff size={14} /> Toggle Resources Only
+                    </button>
+                  </div>
+                )}
+            </div>
 
             <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden">
               <button onClick={() => onExtendTimeline('start')} className="px-2 py-1 hover:bg-slate-100 text-xs text-slate-600 border-r border-slate-200" title="Add Month to Start">

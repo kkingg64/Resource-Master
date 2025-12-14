@@ -2,9 +2,9 @@ export enum Role {
   CNF = 'CNF',
   BRAND_SOLUTIONS = 'Brand Solutions',
   COE = 'COE',
-  EA = 'EA',
+  EA = 'Enterprise Architecture',
   DM = 'DM',
-  DEV = 'Dev Consultant',
+  DEV = 'EP Dev Team',
   PREP_DEV = 'Preparation & Development',
   PLM_D365 = 'PLM & D365',
   BA = 'BA',
@@ -56,6 +56,10 @@ export interface ProjectModule {
   backendFunctionPoints?: number;
   frontendComplexity?: ComplexityLevel;
   backendComplexity?: ComplexityLevel;
+
+  // New Per-Module Prep Config
+  prepVelocity?: number;
+  prepTeamSize?: number;
 
   tasks: ProjectTask[];
   sort_order?: number;
