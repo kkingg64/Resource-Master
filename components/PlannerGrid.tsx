@@ -981,7 +981,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     let moduleLatestEndDate: Date | null = null;
                     let moduleTotalDuration = 0;
 
-                    if (isModuleCollapsed) {
+                    // Calculate dates regardless of collapse state for Gantt view
+                    {
                       const allAssignments = module.tasks.flatMap(t => t.assignments);
                       if (allAssignments.length > 0) {
                           let earliestDate: Date | null = null;
@@ -1100,7 +1101,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             let isModuleStart = false;
                             let isModuleEnd = false;
 
-                            if (isModuleCollapsed && moduleEarliestStartDate && moduleLatestEndDate) {
+                            if (moduleEarliestStartDate && moduleLatestEndDate) {
                                 const modStart = new Date(moduleEarliestStartDate.replace(/-/g, '/'));
                                 const modEnd = moduleLatestEndDate;
 
@@ -1140,8 +1141,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                             return (
                                 <div key={col.id} className={`flex-shrink-0 border-r border-slate-200/50 flex items-center justify-center bg-indigo-50 relative ${isCurrent ? 'bg-indigo-50/80' : ''}`} style={{ width: `${colWidth}px` }}>
-                                  {isInModuleRange && displayMode === 'allocation' && (
-                                      <div className={`absolute inset-y-1 inset-x-0 bg-indigo-200 ${isModuleStart ? 'rounded-l-md ml-1' : ''} ${isModuleEnd ? 'rounded-r-md mr-1' : ''} pointer-events-none`}></div>
+                                  {isInModuleRange && (
+                                      <div className={`absolute pointer-events-none ${
+                                          displayMode === 'gantt' 
+                                              ? 'top-1/2 -translate-y-1/2 h-2 bg-indigo-400 opacity-60 rounded' 
+                                              : 'inset-y-1 inset-x-0 bg-indigo-200'
+                                      } ${isModuleStart ? 'rounded-l-md ml-1' : ''} ${isModuleEnd ? 'rounded-r-md mr-1' : ''}`}></div>
                                   )}
                                   {total > 0 && displayMode === 'allocation' && (
                                     <span className="text-[10px] font-bold text-indigo-900 relative z-10">{formatValue(total)}</span>
@@ -1160,7 +1165,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           let latestEndDate: Date | null = null;
                           let totalDuration = 0;
 
-                          if (isTaskCollapsed && task.assignments.length > 0) {
+                          // Calculate dates regardless of collapse state for Gantt view
+                          if (task.assignments.length > 0) {
                               let earliestDate: Date | null = null;
                               
                               const taskHolidays = new Set<string>();
@@ -1275,7 +1281,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   let isTaskStart = false;
                                   let isTaskEnd = false;
 
-                                  if (isTaskCollapsed && earliestStartDate && latestEndDate) {
+                                  if (earliestStartDate && latestEndDate) {
                                       const tStart = new Date(earliestStartDate.replace(/-/g, '/'));
                                       const tEnd = latestEndDate;
 
@@ -1315,8 +1321,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                                   return (
                                     <div key={`th-${task.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 flex items-center justify-center bg-slate-50 relative ${isCurrent ? 'bg-slate-50' : ''}`} style={{ width: `${colWidth}px` }}>
-                                      {isInTaskRange && displayMode === 'allocation' && (
-                                          <div className={`absolute inset-y-1 inset-x-0 bg-slate-200 ${isTaskStart ? 'rounded-l-md ml-1' : ''} ${isTaskEnd ? 'rounded-r-md mr-1' : ''} pointer-events-none`}></div>
+                                      {isInTaskRange && (
+                                          <div className={`absolute pointer-events-none ${
+                                              displayMode === 'gantt' 
+                                              ? 'top-1/2 -translate-y-1/2 h-2 bg-slate-400 opacity-60 rounded' 
+                                              : 'inset-y-1 inset-x-0 bg-slate-200'
+                                          } ${isTaskStart ? 'rounded-l-md ml-1' : ''} ${isTaskEnd ? 'rounded-r-md mr-1' : ''}`}></div>
                                       )}
                                       {total > 0 && displayMode === 'allocation' && (
                                         <span className="text-[10px] font-semibold text-slate-600 relative z-10">{formatValue(total)}</span>

@@ -349,6 +349,75 @@ const App: React.FC = () => {
     if (isRefresh) setIsRefreshing(false);
     else setLoading(false);
   };
+
+  const propagateScheduleChanges = async (currentProjects: Project[], startAssignmentId: string) => {
+    const assignmentMap = new Map<string, TaskAssignment>();
+    const dependencyMap = new Map<string, string[]>();
+
+    currentProjects.forEach(p => {
+        p.modules.forEach(m => {
+            m.tasks.forEach(t => {
+                t.assignments.forEach(a => {
+                    assignmentMap.set(a.id, a);
+                    if (a.parentAssignmentId) {
+                        if (!dependencyMap.has(a.parentAssignmentId)) {
+                            dependencyMap.set(a.parentAssignmentId, []);
+                        }
+                        dependencyMap.get(a.parentAssignmentId)!.push(a.id);
+                    }
+                });
+            });
+        });
+    });
+
+    const updates: { id: string, start_date: string }[] = [];
+    const queue = [startAssignmentId];
+    const visited = new Set<string>();
+
+    while (queue.length > 0) {
+        const parentId = queue.shift()!;
+        if (visited.has(parentId)) continue;
+        visited.add(parentId);
+
+        const parent = assignmentMap.get(parentId);
+        if (!parent || !parent.startDate) continue;
+
+        const children = dependencyMap.get(parentId) || [];
+        
+        // Helper to get holidays for a specific resource
+        const getHolidays = (resName: string) => {
+             const res = resources.find(r => r.name === resName);
+             // Default to HK if unassigned or no region, to be safe
+             const regional = res?.holiday_region ? holidays.filter(h => h.country === res.holiday_region) : holidays.filter(h => h.country === 'HK');
+             const individual = res?.individual_holidays || [];
+             return new Set([...regional, ...individual].map(h => h.date));
+        };
+
+        const parentHolidays = getHolidays(parent.resourceName || 'Unassigned');
+        const parentEndDate = calculateEndDate(parent.startDate, parent.duration || 1, parentHolidays);
+
+        for (const childId of children) {
+            const child = assignmentMap.get(childId);
+            if (!child) continue;
+
+            const childHolidays = getHolidays(child.resourceName || 'Unassigned');
+            // Child starts the next working day AFTER parent finishes
+            const newStartDate = findNextWorkingDay(parentEndDate, childHolidays);
+
+            if (child.startDate !== newStartDate) {
+                child.startDate = newStartDate;
+                updates.push({ id: child.id, start_date: newStartDate });
+                queue.push(child.id);
+            }
+        }
+    }
+
+    if (updates.length > 0) {
+        await Promise.all(updates.map(u => 
+            supabase.from('task_assignments').update({ start_date: u.start_date }).eq('id', u.id)
+        ));
+    }
+  };
   
   const updateFunctionPoints = async (
       projectId: string, 
@@ -623,6 +692,11 @@ const App: React.FC = () => {
     const selectedResource = resources.find(r => r.name === name);
     let newRole = assignment.role;
     if (selectedResource) { newRole = selectedResource.category; assignment.role = newRole; }
+    
+    // Changing resource might affect duration/dates if holidays differ, but for now we keep dates unless dependency recalculation is needed.
+    // Ideally we should propagate if this assignment is a parent to others, as its holidays might change end date.
+    await propagateScheduleChanges(updatedProjects, assignmentId);
+
     setProjects(updatedProjects);
     const updatePayload = { resource_name: name, role: newRole };
     const { error } = await callSupabase('UPDATE assignment resource & role', { id: assignmentId, ...updatePayload }, supabase.from('task_assignments').update(updatePayload).eq('id', assignmentId));
@@ -658,7 +732,10 @@ const App: React.FC = () => {
         if (found) break;
     }
     
-    if (found) setProjects(updatedProjects);
+    if (found) {
+        await propagateScheduleChanges(updatedProjects, assignmentId);
+        setProjects(updatedProjects);
+    }
     
     const { error } = await callSupabase(
         'UPDATE assignment schedule',
@@ -709,29 +786,61 @@ const App: React.FC = () => {
   const updateAssignmentDependency = async (assignmentId: string, parentAssignmentId: string | null) => {
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
-    let found = false;
+    let targetAssignment = null;
 
     for (const p of updatedProjects) {
         for (const m of p.modules) {
             for (const t of m.tasks) {
                 const assignment = t.assignments.find(a => a.id === assignmentId);
                 if (assignment) {
-                    assignment.parentAssignmentId = parentAssignmentId || undefined;
-                    found = true;
+                    targetAssignment = assignment;
                     break;
                 }
             }
-            if (found) break;
+            if (targetAssignment) break;
         }
-        if (found) break;
+        if (targetAssignment) break;
     }
 
-    if (found) setProjects(updatedProjects);
+    if (targetAssignment) {
+        targetAssignment.parentAssignmentId = parentAssignmentId || undefined;
+        
+        // Immediate update if parent is set
+        if (parentAssignmentId) {
+             let parentAssignment = null;
+             // Find parent to get initial date
+             for (const p of updatedProjects) {
+                for (const m of p.modules) {
+                    for (const t of m.tasks) {
+                        const pa = t.assignments.find(a => a.id === parentAssignmentId);
+                        if (pa) { parentAssignment = pa; break; }
+                    }
+                    if (parentAssignment) break;
+                }
+                if (parentAssignment) break;
+             }
+
+             if (parentAssignment && parentAssignment.startDate) {
+                 const getHolidays = (resName: string) => {
+                     const res = resources.find(r => r.name === resName);
+                     const regional = res?.holiday_region ? holidays.filter(h => h.country === res.holiday_region) : holidays.filter(h => h.country === 'HK');
+                     const individual = res?.individual_holidays || [];
+                     return new Set([...regional, ...individual].map(h => h.date));
+                 };
+                 const parentEndDate = calculateEndDate(parentAssignment.startDate, parentAssignment.duration || 1, getHolidays(parentAssignment.resourceName || 'Unassigned'));
+                 const myHolidays = getHolidays(targetAssignment.resourceName || 'Unassigned');
+                 targetAssignment.startDate = findNextWorkingDay(parentEndDate, myHolidays);
+             }
+        }
+
+        await propagateScheduleChanges(updatedProjects, assignmentId);
+        setProjects(updatedProjects);
+    }
 
     const { error } = await callSupabase(
         'UPDATE assignment dependency',
         { assignmentId, parentAssignmentId },
-        supabase.from('task_assignments').update({ parent_assignment_id: parentAssignmentId }).eq('id', assignmentId)
+        supabase.from('task_assignments').update({ parent_assignment_id: parentAssignmentId, start_date: targetAssignment?.startDate }).eq('id', assignmentId)
     );
 
     if (error) {
