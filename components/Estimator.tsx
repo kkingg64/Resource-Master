@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, ProjectModule, ComplexityLevel, Holiday, Role } from '../types';
 import { Calculator, GripVertical, ArrowRight, Layout, Server, ChevronDown, Calendar as CalendarIcon, Link2, Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { calculateEndDate, formatDateForInput } from '../constants';
+import { calculateEndDate, formatDateForInput, calculateWorkingDaysBetween } from '../constants';
 
 interface EstimatorProps {
   projects: Project[];
@@ -88,8 +88,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         const feFP = m.frontendFunctionPoints || 0;
         const beFP = m.backendFunctionPoints || 0;
         
-        // Preparation reference is now based on max(FE, BE) instead of Legacy
-        const prepBase = Math.max(feFP, beFP);
+        // Use edited legacyFunctionPoints as the Reference FP
+        const prepBase = m.legacyFunctionPoints || 0;
         totalRefFP += prepBase;
 
         const prepVelocity = m.prepVelocity || 10;
@@ -258,9 +258,10 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                 <col className="w-12" />  {/* MD */}
                 <col className="w-12" />  {/* Wks */}
 
-                {/* Delivery: 2 cols */}
-                <col className="w-28" />  {/* Start */}
+                {/* Delivery: 3 cols */}
+                <col className="w-24" />  {/* Start */}
                 <col className="w-28" />  {/* ETA / Delivery Task */}
+                <col className="w-20" />  {/* Variance */}
             </colgroup>
             <thead className="bg-slate-50 text-slate-600 text-[10px] uppercase tracking-wider sticky top-0 z-20 shadow-sm font-semibold">
                 <tr>
@@ -269,7 +270,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     <th colSpan={5} className="py-1 px-1 text-center bg-amber-50/80 border-b border-amber-100 border-r border-slate-200 text-amber-800">Preparation</th>
                     <th colSpan={6} className="py-1 px-1 text-center bg-blue-50/80 border-b border-blue-100 border-r border-slate-200 text-blue-800">Front-End</th>
                     <th colSpan={6} className="py-1 px-1 text-center bg-indigo-50/80 border-b border-indigo-100 border-r border-slate-200 text-indigo-800">Back-End</th>
-                    <th colSpan={2} className="py-2 px-2 text-center border-b border-slate-200 bg-slate-50">Delivery</th>
+                    <th colSpan={3} className="py-2 px-2 text-center border-b border-slate-200 bg-slate-50">Delivery</th>
                 </tr>
                 <tr className="text-[9px] text-slate-500">
                     <th className="border-b border-slate-200 bg-slate-50"></th>
@@ -296,13 +297,14 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     <th className="py-1 text-center border-b border-slate-200 border-r bg-indigo-50/30">Wks</th>
                     
                     <th className="py-1 text-center border-b border-slate-200 bg-slate-50">Start</th>
-                    <th className="py-1 text-center border-b border-slate-200 bg-slate-50">Plan vs Est</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-slate-50">Dates</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-slate-50">Var</th>
                 </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-[11px]">
                 {modules.length === 0 && (
                     <tr>
-                        <td colSpan={21} className="p-12 text-center text-slate-400 bg-slate-50/30">
+                        <td colSpan={22} className="p-12 text-center text-slate-400 bg-slate-50/30">
                             <div className="flex flex-col items-center justify-center gap-2">
                                 <Layout className="w-8 h-8 text-slate-300"/>
                                 <p>No modules found.</p>
@@ -314,8 +316,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     const feFP = m.frontendFunctionPoints || 0;
                     const beFP = m.backendFunctionPoints || 0;
                     
-                    // Preparation now based on MAX(FE, BE)
-                    const prepBase = Math.max(feFP, beFP);
+                    // Use manually entered Reference FP
+                    const prepBase = m.legacyFunctionPoints || 0;
                     const prepVelocity = m.prepVelocity || 10;
                     const prepTeamSize = m.prepTeamSize || 2;
                     const prepEffort = Math.ceil(prepBase / prepVelocity);
@@ -364,10 +366,24 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     const plannerDateObj = getModuleLatestEndDate(m);
                     const plannerDateStr = plannerDateObj ? formatDateForInput(plannerDateObj) : null;
 
-                    // 5. Compare
+                    // 5. Compare & Variance Calculation
                     let varianceStatus: 'safe' | 'risk' | 'unknown' = 'unknown';
+                    let varianceText = '-';
+                    let varianceClass = 'text-slate-300';
+
                     if (estimatedDateStr && plannerDateStr) {
-                        varianceStatus = estimatedDateStr > plannerDateStr ? 'risk' : 'safe';
+                        if (estimatedDateStr <= plannerDateStr) {
+                             varianceStatus = 'safe';
+                             const diff = calculateWorkingDaysBetween(estimatedDateStr, plannerDateStr, holidaySet) - 1;
+                             varianceText = `+${Math.max(0, diff)}d`; // Ensure non-negative if same day
+                             varianceClass = 'text-green-600 font-bold';
+                             if(estimatedDateStr === plannerDateStr) varianceText = '0d';
+                        } else {
+                             varianceStatus = 'risk';
+                             const diff = calculateWorkingDaysBetween(plannerDateStr, estimatedDateStr, holidaySet) - 1;
+                             varianceText = `-${Math.max(0, diff)}d`;
+                             varianceClass = 'text-red-600 font-bold';
+                        }
                     }
 
                     const updateParams = (
@@ -417,8 +433,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                             </td>
                             
                             {/* Prep */}
-                            <td className="px-1 text-center border-b border-slate-100 text-slate-500 font-mono bg-slate-50/50">
-                                {prepBase}
+                            <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
+                                <input type="number" min="0" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-600" value={m.legacyFunctionPoints || 0} onChange={(e) => updateParams(parseInt(e.target.value) || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
                                     <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={prepVelocity} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, parseInt(e.target.value) || 1, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
@@ -520,7 +536,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                 </div>
                             </td>
 
-                            {/* Delivery (Pure Comparison) */}
+                            {/* Delivery (Dates Comparison) */}
                             <td className={`px-1 border-b border-slate-100 text-right align-middle ${cellBgClass}`}>
                                 <div className="flex flex-col gap-0.5 py-1 px-1 h-full justify-center">
                                      {/* Estimated Date */}
@@ -547,6 +563,13 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                      </div>
                                 </div>
                             </td>
+
+                             {/* Variance */}
+                            <td className={`px-1 border-b border-slate-100 text-center align-middle border-r border-slate-200 ${cellBgClass}`}>
+                                <span className={`text-[10px] font-mono ${varianceClass}`}>
+                                    {varianceText}
+                                </span>
+                            </td>
                         </tr>
                     );
                 })}
@@ -566,7 +589,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     <td colSpan={3} className="text-center text-slate-300">-</td>
                     <td className="text-center text-slate-700">{totals.beEffort}</td>
                     <td className="text-center text-indigo-700 border-r border-slate-300">{formatWeeks(totals.beDuration)}</td>
-                    <td colSpan={2}></td>
+                    <td colSpan={3}></td>
                 </tr>
             </tfoot>
         </table>
