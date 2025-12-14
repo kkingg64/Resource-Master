@@ -61,6 +61,9 @@ export interface ProjectModule {
   prepVelocity?: number;
   prepTeamSize?: number;
 
+  // Manual Start Date Override
+  startDate?: string;
+
   tasks: ProjectTask[];
   sort_order?: number;
 }

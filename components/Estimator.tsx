@@ -8,6 +8,7 @@ interface EstimatorProps {
   holidays: Holiday[];
   onUpdateFunctionPoints: (projectId: string, moduleId: string, legacyFp: number, frontendFp: number, backendFp: number, prepVelocity: number, prepTeamSize: number) => void;
   onUpdateModuleComplexity: (projectId: string, moduleId: string, type: 'frontend' | 'backend', complexity: ComplexityLevel) => void;
+  onUpdateModuleStartDate: (projectId: string, moduleId: string, startDate: string | null) => void;
   onReorderModules: (projectId: string, startIndex: number, endIndex: number) => void;
 }
 
@@ -49,7 +50,7 @@ const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: Compl
     );
 };
 
-export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateFunctionPoints, onUpdateModuleComplexity, onReorderModules }) => {
+export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateFunctionPoints, onUpdateModuleComplexity, onUpdateModuleStartDate, onReorderModules }) => {
   // Phase 2: Front-End (Still global)
   const [feVelocity, setFeVelocity] = useState<number>(5);
   const [feTeamSize, setFeTeamSize] = useState<number>(2);
@@ -238,7 +239,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                             Back-End Dev
                         </th>
 
-                        <th className="py-3 px-4 text-center border-b border-slate-200 bg-slate-100 w-32">Delivery</th>
+                        <th colSpan={2} className="py-3 px-4 text-center border-b border-slate-200 bg-slate-100 w-48">Delivery</th>
                     </tr>
                     <tr className="text-[10px] text-slate-500">
                         <th className="border-b border-slate-200 bg-slate-50"></th>
@@ -262,14 +263,15 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         <th className="py-2 px-2 text-center border-b border-slate-200 bg-indigo-50/30 w-16">Diff</th>
                         <th className="py-2 px-2 text-right border-b border-slate-200 bg-indigo-50/30">Effort</th>
                         <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-indigo-50/30">Dur.</th>
-
-                        <th className="py-2 px-4 text-right border-b border-slate-200 bg-slate-100 w-32 font-bold">Est. Date</th>
+                        
+                        <th className="py-2 px-2 text-center border-b border-slate-200 bg-slate-100 w-24">Start Date</th>
+                        <th className="py-2 px-4 text-right border-b border-slate-200 bg-slate-100 w-24 font-bold">Est. Date</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                     {modules.length === 0 && (
                         <tr>
-                            <td colSpan={16} className="p-8 text-center text-slate-400 italic">
+                            <td colSpan={17} className="p-8 text-center text-slate-400 italic">
                                 No modules found. Go to Planner to add modules.
                             </td>
                         </tr>
@@ -299,41 +301,46 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         
                         let deliveryDate: string | null = null;
                         
-                        // 1. Try to find a scheduled "EP Dev Team" task to anchor the build phase
-                        const devStartDate = m.tasks.reduce((min: string | null, task) => {
-                            const hasDev = task.assignments.some(a => a.role === Role.DEV);
-                            if (!hasDev) return min;
-                            
-                            const taskMin = task.assignments
-                                .filter(a => a.role === Role.DEV)
-                                .reduce((tMin: string | null, assign) => {
-                                    if (!assign.startDate) return tMin;
-                                    if (!tMin || assign.startDate < tMin) return assign.startDate;
-                                    return tMin;
-                                }, null);
-                                
-                            if (!taskMin) return min;
-                            if (!min || taskMin < min) return taskMin;
-                            return min;
-                        }, null);
-
-                        if (devStartDate && devDuration > 0) {
-                             deliveryDate = calculateEndDate(devStartDate, devDuration, holidaySet);
+                        if (m.startDate) {
+                             // Override logic: if Start Date is set in Estimator, calculate based on that
+                             deliveryDate = calculateEndDate(m.startDate, totalDuration, holidaySet);
                         } else {
-                            // 2. Fallback: Find earliest start of any task (likely Prep/Discovery)
-                            const moduleStartDate = m.tasks.reduce((min: string | null, task) => {
-                                const taskMin = task.assignments.reduce((tMin: string | null, assign) => {
-                                    if (!assign.startDate) return tMin;
-                                    if (!tMin || assign.startDate < tMin) return assign.startDate;
-                                    return tMin;
-                                }, null);
+                            // Fallback logic 1. Try to find a scheduled "EP Dev Team" task to anchor the build phase
+                            const devStartDate = m.tasks.reduce((min: string | null, task) => {
+                                const hasDev = task.assignments.some(a => a.role === Role.DEV);
+                                if (!hasDev) return min;
+                                
+                                const taskMin = task.assignments
+                                    .filter(a => a.role === Role.DEV)
+                                    .reduce((tMin: string | null, assign) => {
+                                        if (!assign.startDate) return tMin;
+                                        if (!tMin || assign.startDate < tMin) return assign.startDate;
+                                        return tMin;
+                                    }, null);
+                                    
                                 if (!taskMin) return min;
                                 if (!min || taskMin < min) return taskMin;
                                 return min;
                             }, null);
 
-                            if (moduleStartDate && totalDuration > 0) {
-                                deliveryDate = calculateEndDate(moduleStartDate, totalDuration, holidaySet);
+                            if (devStartDate && devDuration > 0) {
+                                deliveryDate = calculateEndDate(devStartDate, devDuration, holidaySet);
+                            } else {
+                                // Fallback logic 2. Find earliest start of any task (likely Prep/Discovery)
+                                const moduleStartDate = m.tasks.reduce((min: string | null, task) => {
+                                    const taskMin = task.assignments.reduce((tMin: string | null, assign) => {
+                                        if (!assign.startDate) return tMin;
+                                        if (!tMin || assign.startDate < tMin) return assign.startDate;
+                                        return tMin;
+                                    }, null);
+                                    if (!taskMin) return min;
+                                    if (!min || taskMin < min) return taskMin;
+                                    return min;
+                                }, null);
+
+                                if (moduleStartDate && totalDuration > 0) {
+                                    deliveryDate = calculateEndDate(moduleStartDate, totalDuration, holidaySet);
+                                }
                             }
                         }
 
@@ -411,6 +418,17 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                 </td>
                                 <td className="px-2 py-1 text-right border-b border-slate-100 font-mono text-xs text-slate-400">{beEffort || '-'}</td>
                                 <td className="px-2 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-xs font-medium text-indigo-700">{beDuration || '-'}</td>
+                                
+                                {/* Start Date Input */}
+                                <td className="px-1 py-1 border-b border-slate-100 bg-slate-50/30">
+                                    <input 
+                                        type="date" 
+                                        className="w-full h-full text-center p-1 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded text-xs text-slate-600"
+                                        value={m.startDate || ''}
+                                        onChange={(e) => onUpdateModuleStartDate(selectedProjectId, m.id, e.target.value)}
+                                        title="Override Start Date"
+                                    />
+                                </td>
 
                                 {/* Delivery */}
                                 <td className="px-4 py-2 text-right border-b border-slate-100 bg-slate-50/50 font-mono text-xs font-bold text-slate-800">
@@ -418,7 +436,9 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                         <div className="flex flex-col items-end">
                                             <span className="text-indigo-700">{new Date(deliveryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
                                             <span className="text-[9px] text-slate-400 font-normal">
-                                                {devStartDate ? `(Dev: ${formatWeeks(devDuration)})` : `(Total: ${formatWeeks(totalDuration)})`}
+                                                {m.startDate ? `(Manual: ${formatWeeks(totalDuration)})` : (
+                                                    (m.tasks.some(t => t.assignments.some(a => a.role === Role.DEV))) ? `(Dev: ${formatWeeks(devDuration)})` : `(Total: ${formatWeeks(totalDuration)})`
+                                                )}
                                             </span>
                                         </div>
                                     ) : (
@@ -451,15 +471,16 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         <td className="px-2 py-3 text-right text-slate-700">{totals.beEffort}</td>
                         <td className="px-2 py-3 text-right text-indigo-700 border-r border-slate-300">{formatWeeks(totals.beDuration)}</td>
 
-                        <td className="px-4 py-3 text-right text-slate-900 text-sm"></td>
+                        <td colSpan={2} className="px-4 py-3 text-right text-slate-900 text-sm"></td>
                     </tr>
                 </tfoot>
             </table>
         </div>
         <div className="mt-4 text-[10px] text-slate-400 text-right space-y-1">
             <p>* Front-End and Back-End development are assumed to run in parallel.</p>
-            <p>* Delivery date prioritizes scheduled 'EP Dev Team' tasks. If found, adds Development Duration to that start date.</p>
-            <p>* Otherwise, it adds (Prep + Development) duration to the earliest module activity.</p>
+            <p>* Delivery date prioritizes Manual Start Date if set.</p>
+            <p>* If no manual date, it looks for scheduled 'EP Dev Team' tasks. If found, adds Development Duration to that start date.</p>
+            <p>* Otherwise, it adds (Prep + Development) duration to the earliest module activity found in the planner.</p>
         </div>
       </div>
     </div>

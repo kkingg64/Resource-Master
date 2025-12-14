@@ -90,6 +90,8 @@ const structureProjectsData = (
       prepVelocity: m.prep_velocity || 10,
       prepTeamSize: m.prep_team_size || 2,
 
+      startDate: m.start_date, // New Start Date field
+
       sort_order: m.sort_order,
       tasks: moduleTasks,
     });
@@ -234,6 +236,7 @@ const App: React.FC = () => {
 
     projects.forEach(project => {
         project.modules.forEach(module => {
+            if (module.startDate) processDate(module.startDate);
             module.tasks.forEach(task => {
                 task.assignments.forEach(assignment => {
                     if (assignment.startDate) {
@@ -384,6 +387,18 @@ const App: React.FC = () => {
 
     const { error } = await callSupabase('UPDATE complexity', { id: moduleId, type, complexity }, supabase.from('modules').update(updatePayload).eq('id', moduleId));
     if (error) { setProjects(previousState); alert("Failed to update module complexity."); }
+  };
+
+  const updateModuleStartDate = async (projectId: string, moduleId: string, startDate: string | null) => {
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const module = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId);
+    if (module) {
+        module.startDate = startDate || undefined;
+        setProjects(updatedProjects);
+    }
+    const { error } = await callSupabase('UPDATE module start date', { id: moduleId, startDate }, supabase.from('modules').update({ start_date: startDate }).eq('id', moduleId));
+    if (error) { setProjects(previousState); alert("Failed to update module start date."); }
   };
 
   const updateAllocation = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, value: number, dayDate?: string) => {
@@ -819,6 +834,7 @@ const App: React.FC = () => {
                                 onUpdateFunctionPoints={updateFunctionPoints}
                                 onReorderModules={reorderModules}
                                 onUpdateModuleComplexity={updateModuleComplexity}
+                                onUpdateModuleStartDate={updateModuleStartDate}
                             />
                         </div>
                     )}
