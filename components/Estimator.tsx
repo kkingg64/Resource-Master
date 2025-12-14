@@ -133,9 +133,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
             
             {/* Prep Settings */}
             <div className="flex items-center gap-3 bg-amber-50/50 p-2 rounded-lg border border-amber-100">
-                <div className="px-2 border-r border-amber-200">
-                    <span className="text-xs font-bold text-amber-700 uppercase tracking-wider block">Phase 1</span>
-                    <span className="text-[10px] text-amber-600 font-medium">Preparation</span>
+                <div className="px-2 border-r border-amber-200 flex items-center">
+                    <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Preparation</span>
                 </div>
                 <div className="flex flex-col">
                     <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
@@ -171,9 +170,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
 
             {/* Dev Settings */}
             <div className="flex items-center gap-3 bg-indigo-50/50 p-2 rounded-lg border border-indigo-100">
-                <div className="px-2 border-r border-indigo-200">
-                    <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider block">Phase 2</span>
-                    <span className="text-[10px] text-indigo-600 font-medium">Development</span>
+                <div className="px-2 border-r border-indigo-200 flex items-center">
+                    <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Development</span>
                 </div>
                 <div className="flex flex-col">
                     <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
@@ -217,14 +215,14 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
                         <th className="w-10 py-3 border-b border-slate-200"></th>
                         <th className="py-3 px-4 border-b border-slate-200 border-r text-left min-w-[200px]">Module</th>
                         
-                        {/* Phase 1 Header */}
+                        {/* Preparation Header */}
                         <th colSpan={3} className="py-2 px-4 text-center bg-amber-50 border-b border-amber-100 border-r border-slate-200 text-amber-800">
-                            Phase 1: Preparation
+                            Preparation
                         </th>
                         
-                        {/* Phase 2 Header */}
+                        {/* Development Header */}
                         <th colSpan={4} className="py-2 px-4 text-center bg-indigo-50 border-b border-indigo-100 border-r border-slate-200 text-indigo-800">
-                            Phase 2: Development
+                            Development
                         </th>
 
                         <th className="py-3 px-4 text-center border-b border-slate-200 bg-slate-100">Total</th>
@@ -233,12 +231,12 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
                         <th className="border-b border-slate-200 bg-slate-50"></th>
                         <th className="border-b border-slate-200 border-r bg-slate-50"></th>
                         
-                        {/* Phase 1 Subheaders */}
+                        {/* Preparation Subheaders */}
                         <th className="py-2 px-2 text-right border-b border-slate-200 bg-amber-50/30 w-32">Legacy FP</th>
                         <th className="py-2 px-2 text-right border-b border-slate-200 bg-amber-50/30 w-28" title="Man-Days">Effort</th>
                         <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-amber-50/30 w-28" title="Calendar Time">Duration</th>
 
-                        {/* Phase 2 Subheaders */}
+                        {/* Development Subheaders */}
                         <th className="py-2 px-2 text-right border-b border-slate-200 bg-indigo-50/30 w-32">MVP FP</th>
                         <th className="py-2 px-2 text-center border-b border-slate-200 bg-indigo-50/30 w-40">Difficulty</th>
                         <th className="py-2 px-2 text-right border-b border-slate-200 bg-indigo-50/30 w-28" title="Man-Days (Calculated with Difficulty)">Effort</th>
@@ -288,7 +286,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
                                     </div>
                                 </td>
                                 
-                                {/* Phase 1: Inputs & Outputs */}
+                                {/* Preparation: Inputs & Outputs */}
                                 <td className="px-2 py-1 border-b border-slate-100 bg-amber-50/10">
                                     <input 
                                         type="number" 
@@ -306,7 +304,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
                                     {prepDuration > 0 ? `${prepDuration}d` : '-'}
                                 </td>
 
-                                {/* Phase 2: Inputs & Outputs */}
+                                {/* Development: Inputs & Outputs */}
                                 <td className="px-2 py-1 border-b border-slate-100 bg-indigo-50/10">
                                     <input 
                                         type="number" 
@@ -371,7 +369,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, onUpdateFunction
             </table>
         </div>
         <div className="mt-4 text-[10px] text-slate-400 text-right">
-            * Duration estimates assume Phase 1 and Phase 2 run sequentially (Prep → Dev) per module, but parallel across the team. <br/>
+            * Duration estimates assume Preparation and Development run sequentially per module, but parallel across the team. <br/>
             * Development Effort includes difficulty multiplier.
         </div>
       </div>
