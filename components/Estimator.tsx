@@ -72,7 +72,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
   const modules = selectedProject ? selectedProject.modules : [];
 
   const totals = useMemo(() => {
-    let totalLegacyFP = 0;
+    let totalRefFP = 0;
     let totalFeFP = 0;
     let totalBeFP = 0;
     
@@ -85,14 +85,19 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
     let totalBeDuration = 0;
 
     modules.forEach(m => {
-        totalLegacyFP += (m.legacyFunctionPoints || 0);
+        const feFP = m.frontendFunctionPoints || 0;
+        const beFP = m.backendFunctionPoints || 0;
+        
+        // Preparation reference is now based on max(FE, BE) instead of Legacy
+        const prepBase = Math.max(feFP, beFP);
+        totalRefFP += prepBase;
+
         const prepVelocity = m.prepVelocity || 10;
         const prepTeamSize = m.prepTeamSize || 2;
-        const prepEffort = Math.ceil((m.legacyFunctionPoints || 0) / prepVelocity);
+        const prepEffort = Math.ceil(prepBase / prepVelocity);
         totalPrepEffort += prepEffort;
         totalPrepDuration += Math.ceil(prepEffort / prepTeamSize);
 
-        const feFP = m.frontendFunctionPoints || 0;
         const feVel = m.frontendVelocity || 5;
         const feTeam = m.frontendTeamSize || 2;
         const feComp = m.frontendComplexity || 'Medium';
@@ -102,7 +107,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         totalFeEffort += feEffort;
         totalFeDuration += feDuration;
 
-        const beFP = m.backendFunctionPoints || 0;
         const beVel = m.backendVelocity || 5;
         const beTeam = m.backendTeamSize || 2;
         const beComp = m.backendComplexity || 'Medium';
@@ -114,7 +118,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
     });
 
     return {
-        legacyFP: totalLegacyFP,
+        refFP: totalRefFP,
         feFP: totalFeFP,
         beFP: totalBeFP,
         prepEffort: totalPrepEffort,
@@ -232,7 +236,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                 <col className="w-48" />  {/* Module Name */}
                 
                 {/* Prep: 5 cols */}
-                <col className="w-14" />  {/* L.FP */}
+                <col className="w-14" />  {/* Ref FP */}
                 <col className="w-10" />  {/* Vel */}
                 <col className="w-10" />  {/* Team */}
                 <col className="w-12" />  {/* MD */}
@@ -271,7 +275,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     <th className="border-b border-slate-200 bg-slate-50"></th>
                     <th className="border-b border-slate-200 border-r bg-slate-50"></th>
                     
-                    <th className="py-1 text-center border-b border-slate-200 bg-amber-50/30">Legacy</th>
+                    <th className="py-1 text-center border-b border-slate-200 bg-amber-50/30">Ref FP</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-amber-50/30">Vel</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-amber-50/30">Team</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-amber-50/30">M.D.</th>
@@ -307,19 +311,22 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     </tr>
                 )}
                 {modules.map((m, index) => {
+                    const feFP = m.frontendFunctionPoints || 0;
+                    const beFP = m.backendFunctionPoints || 0;
+                    
+                    // Preparation now based on MAX(FE, BE)
+                    const prepBase = Math.max(feFP, beFP);
                     const prepVelocity = m.prepVelocity || 10;
                     const prepTeamSize = m.prepTeamSize || 2;
-                    const prepEffort = Math.ceil((m.legacyFunctionPoints || 0) / prepVelocity);
+                    const prepEffort = Math.ceil(prepBase / prepVelocity);
                     const prepDuration = Math.ceil(prepEffort / prepTeamSize);
 
-                    const feFP = m.frontendFunctionPoints || 0;
                     const feVel = m.frontendVelocity || 5;
                     const feTeam = m.frontendTeamSize || 2;
                     const feComp = m.frontendComplexity || 'Medium';
                     const feEffort = Math.ceil((feFP / feVel) * COMPLEXITY_MULTIPLIERS[feComp]);
                     const feDuration = Math.ceil(feEffort / feTeam);
 
-                    const beFP = m.backendFunctionPoints || 0;
                     const beVel = m.backendVelocity || 5;
                     const beTeam = m.backendTeamSize || 2;
                     const beComp = m.backendComplexity || 'Medium';
@@ -330,7 +337,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     const totalDuration = prepDuration + Math.max(feDuration, beDuration);
                     
                     // 2. Determine Base Start Date
-                    // Priority: Manual Override (startDate) > Task Start (startTaskId) > Auto Planner Earliest
                     let baseStartDate = m.startDate || null;
                     let isTaskBased = false;
                     let startTaskName = '';
@@ -359,9 +365,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     const plannerDateStr = plannerDateObj ? formatDateForInput(plannerDateObj) : null;
 
                     // 5. Compare
-                    // Logic: 
-                    // If Est > Plan => Plan is earlier than Est => Aggressive / Risk (Red).
-                    // If Est <= Plan => Plan is later or equal to Est => Safe / Buffer (Green).
                     let varianceStatus: 'safe' | 'risk' | 'unknown' = 'unknown';
                     if (estimatedDateStr && plannerDateStr) {
                         varianceStatus = estimatedDateStr > plannerDateStr ? 'risk' : 'safe';
@@ -414,8 +417,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                             </td>
                             
                             {/* Prep */}
-                            <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <input type="number" min="0" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-600" value={m.legacyFunctionPoints || 0} onChange={(e) => updateParams(parseInt(e.target.value) || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
+                            <td className="px-1 text-center border-b border-slate-100 text-slate-500 font-mono bg-slate-50/50">
+                                {prepBase}
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
                                     <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={prepVelocity} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, parseInt(e.target.value) || 1, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
@@ -551,7 +554,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
             <tfoot className="bg-slate-50 font-semibold text-[10px] border-t border-slate-200 sticky bottom-0 z-20 shadow-[0_-2px_4px_rgba(0,0,0,0.05)]">
                  <tr>
                     <td colSpan={2} className="px-2 py-2 text-right text-slate-500 uppercase">Totals</td>
-                    <td className="text-center text-slate-700">{totals.legacyFP}</td>
+                    <td className="text-center text-slate-700">{totals.refFP}</td>
                     <td colSpan={2} className="text-center text-slate-300">-</td>
                     <td className="text-center text-slate-700">{totals.prepEffort}</td>
                     <td className="text-center text-amber-700 border-r border-slate-300">{formatWeeks(totals.prepDuration)}</td>

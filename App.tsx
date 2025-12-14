@@ -782,7 +782,15 @@ const App: React.FC = () => {
   const updateResourceCategory = async (id: string, category: Role) => { const { error } = await callSupabase('UPDATE resource category', { id, category }, supabase.from('resources').update({ category }).eq('id', id)); if (error) alert("Failed to update resource category."); else fetchData(true); };
   const updateResourceRegion = async (id: string, region: string | null) => { const { error } = await callSupabase('UPDATE resource region', { id, region }, supabase.from('resources').update({ holiday_region: region }).eq('id', id)); if (error) alert("Failed to update resource region."); else fetchData(true); };
   const updateResourceType = async (id: string, type: 'Internal' | 'External') => { const { error } = await callSupabase('UPDATE resource type', { id, type }, supabase.from('resources').update({ type }).eq('id', id)); if (error) alert("Failed to update resource type."); else fetchData(true); };
-  const addIndividualHoliday = async (resourceId: string, date: string, name: string) => { const { error } = await callSupabase('ADD individual holiday', { resourceId, date }, supabase.from('individual_holidays').insert({ resource_id: resourceId, date, name, user_id: session!.user.id })); if (error) alert("Failed to add holiday."); else fetchData(true); };
+  
+  // Updated to accept an array of holidays for bulk insertion
+  const addIndividualHolidays = async (resourceId: string, items: { date: string, name: string }[]) => { 
+      const toInsert = items.map(item => ({ resource_id: resourceId, date: item.date, name: item.name, user_id: session!.user.id }));
+      const { error } = await callSupabase('ADD individual holidays', { count: toInsert.length }, supabase.from('individual_holidays').insert(toInsert)); 
+      if (error) alert("Failed to add holidays."); 
+      else fetchData(true); 
+  };
+  
   const deleteIndividualHoliday = async (holidayId: string) => { const { error } = await callSupabase('DELETE individual holiday', { id: holidayId }, supabase.from('individual_holidays').delete().eq('id', holidayId)); if (error) alert("Failed to delete holiday."); else fetchData(true); };
   const addHoliday = async (holidays: Omit<Holiday, 'id'>[]) => { const toInsert = holidays.map(h => ({ ...h, user_id: session!.user.id })); const { error } = await callSupabase('ADD holidays', { count: toInsert.length }, supabase.from('holidays').insert(toInsert)); if (error) alert("Failed to add holidays."); else fetchData(true); };
   const deleteHoliday = async (id: string) => { const { error } = await callSupabase('DELETE holiday', { id }, supabase.from('holidays').delete().eq('id', id)); if (error) alert("Failed to delete holiday."); else fetchData(true); };
@@ -902,7 +910,7 @@ const App: React.FC = () => {
                               onUpdateResourceCategory={updateResourceCategory}
                               onUpdateResourceRegion={updateResourceRegion}
                               onUpdateResourceType={updateResourceType}
-                              onAddIndividualHoliday={addIndividualHoliday}
+                              onAddIndividualHoliday={addIndividualHolidays}
                               onDeleteIndividualHoliday={deleteIndividualHoliday}
                            />
                         </div>

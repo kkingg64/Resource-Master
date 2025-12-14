@@ -10,25 +10,47 @@ interface ResourcesProps {
   onUpdateResourceCategory: (id: string, category: Role) => Promise<void>;
   onUpdateResourceRegion: (id: string, region: string | null) => Promise<void>;
   onUpdateResourceType: (id: string, type: 'Internal' | 'External') => Promise<void>;
-  onAddIndividualHoliday: (resourceId: string, date: string, name: string) => Promise<void>;
+  onAddIndividualHoliday: (resourceId: string, items: { date: string, name: string }[]) => Promise<void>;
   onDeleteIndividualHoliday: (holidayId: string) => Promise<void>;
 }
 
 const IndividualHolidayManager: React.FC<{
   resource: Resource;
-  onAdd: (date: string, name: string) => Promise<void>;
+  onAdd: (items: { date: string, name: string }[]) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }> = ({ resource, onAdd, onDelete }) => {
-  const [date, setDate] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [name, setName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
 
   const handleAddHoliday = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!date || !name.trim()) return;
+    if (!startDate || !name.trim()) return;
     setIsAdding(true);
-    await onAdd(date, name.trim());
-    setDate('');
+
+    const items: { date: string, name: string }[] = [];
+    const current = new Date(startDate);
+    const end = endDate ? new Date(endDate) : new Date(startDate);
+    
+    // Normalize to noon to avoid timezone shift issues during loop
+    current.setUTCHours(12,0,0,0);
+    end.setUTCHours(12,0,0,0);
+
+    while (current <= end) {
+        items.push({
+            date: current.toISOString().split('T')[0],
+            name: name.trim()
+        });
+        current.setUTCDate(current.getUTCDate() + 1);
+    }
+
+    if (items.length > 0) {
+        await onAdd(items);
+    }
+    
+    setStartDate('');
+    setEndDate('');
     setName('');
     setIsAdding(false);
   };
@@ -43,10 +65,21 @@ const IndividualHolidayManager: React.FC<{
   return (
     <div className="bg-slate-100 p-4 rounded-b-lg border-t border-slate-200">
        <h4 className="text-xs font-bold text-slate-600 mb-3">Manage Individual Holidays</h4>
-      <form onSubmit={handleAddHoliday} className="flex gap-2 mb-4">
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} required className="p-2 border border-slate-300 rounded-lg text-sm w-40"/>
-        <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Annual Leave" required className="flex-1 p-2 border border-slate-300 rounded-lg text-sm"/>
-        <button type="submit" disabled={isAdding} className="px-3 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50">Add</button>
+      <form onSubmit={handleAddHoliday} className="grid gap-2 mb-4">
+        <div className="flex gap-2">
+            <div className="flex flex-col gap-1 w-32">
+                <label className="text-[10px] font-bold text-slate-500 uppercase">From</label>
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} required className="p-2 border border-slate-300 rounded-lg text-sm"/>
+            </div>
+            <div className="flex flex-col gap-1 w-32">
+                <label className="text-[10px] font-bold text-slate-500 uppercase">To (Optional)</label>
+                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="p-2 border border-slate-300 rounded-lg text-sm"/>
+            </div>
+        </div>
+        <div className="flex gap-2">
+            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Annual Leave" required className="flex-1 p-2 border border-slate-300 rounded-lg text-sm"/>
+            <button type="submit" disabled={isAdding} className="px-3 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50">Add</button>
+        </div>
       </form>
       
       <div className="max-h-48 overflow-y-auto space-y-1 pr-2 custom-scrollbar">
@@ -201,7 +234,7 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
                               {expandedResourceId === resource.id && (
                                 <IndividualHolidayManager
                                   resource={resource}
-                                  onAdd={(date, name) => onAddIndividualHoliday(resource.id, date, name)}
+                                  onAdd={(items) => onAddIndividualHoliday(resource.id, items)}
                                   onDelete={onDeleteIndividualHoliday}
                                 />
                               )}
