@@ -422,11 +422,24 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
 
                             {/* Delivery */}
                             <td className="p-0 border-b border-slate-100 bg-slate-50/30">
-                                <div className="relative w-full h-full">
+                                <div className="relative w-full h-full group/start">
                                     <input type="date" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" value={m.startDate || ''} onChange={(e) => onUpdateModuleStartDate(selectedProjectId, m.id, e.target.value)} />
-                                    <div className={`w-full h-full flex items-center justify-center text-[10px] ${m.startDate ? 'text-indigo-700 font-medium' : 'text-slate-300'}`}>
-                                        {m.startDate ? new Date(m.startDate).toLocaleDateString(undefined, {month:'numeric', day:'numeric'}) : <CalendarIcon size={12}/>}
+                                    <div className={`w-full h-full flex items-center justify-center text-[10px] ${m.startDate ? 'text-indigo-700 font-bold' : 'text-slate-400'}`}>
+                                        {baseStartDate ? (
+                                            <div className="flex items-center gap-1">
+                                                <span>{new Date(baseStartDate).toLocaleDateString(undefined, {month:'numeric', day:'numeric'})}</span>
+                                                {!m.startDate && <span className="text-[8px] text-slate-300">A</span>}
+                                            </div>
+                                        ) : (
+                                            <CalendarIcon size={12} className="text-slate-300"/>
+                                        )}
                                     </div>
+                                     {/* Tooltip for Auto vs Manual */}
+                                     {!m.startDate && baseStartDate && (
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover/start:block bg-slate-800 text-white text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap z-20">
+                                            Auto-detected from Planner
+                                        </div>
+                                     )}
                                 </div>
                             </td>
                             <td className="px-1 border-b border-slate-100 bg-white text-right relative group/delivery align-middle">
