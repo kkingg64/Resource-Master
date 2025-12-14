@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, ProjectModule, ComplexityLevel, Holiday, Role } from '../types';
 import { Calculator, GripVertical, ArrowRight, Layout, Server, ChevronDown, Calendar as CalendarIcon, Link2, Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
@@ -84,6 +85,9 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
     let totalFeDuration = 0;
     let totalBeDuration = 0;
 
+    let projectMaxEstDate: Date | null = null;
+    let projectMaxPlanDate: Date | null = null;
+
     modules.forEach(m => {
         const feFP = m.frontendFunctionPoints || 0;
         const beFP = m.backendFunctionPoints || 0;
@@ -115,6 +119,63 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         totalBeFP += beFP;
         totalBeEffort += beEffort;
         totalBeDuration += beDuration;
+
+        // --- Date Calculation for Totals ---
+        const totalDuration = Math.ceil(prepEffort / prepTeamSize) + Math.max(feDuration, beDuration);
+
+        // 1. Determine Base Start Date
+        let baseStartDate = m.startDate || null;
+        if (!baseStartDate && m.startTaskId) {
+            const task = m.tasks.find(t => t.id === m.startTaskId);
+            if (task) {
+                let minStart: string | null = null;
+                task.assignments.forEach(a => {
+                    if (a.startDate && (!minStart || a.startDate < minStart)) {
+                        minStart = a.startDate;
+                    }
+                });
+                baseStartDate = minStart;
+            }
+        }
+        if (!baseStartDate) {
+             let minDate: string | null = null;
+             m.tasks.forEach(task => {
+                 task.assignments.forEach(a => {
+                     if (a.startDate && (!minDate || a.startDate < minDate)) {
+                         minDate = a.startDate;
+                     }
+                 });
+             });
+             baseStartDate = minDate;
+        }
+
+        // 2. Calculate Estimated Date
+        if (baseStartDate && totalDuration > 0) {
+            const estDateStr = calculateEndDate(baseStartDate, totalDuration, holidaySet);
+            const estDate = new Date(estDateStr.replace(/-/g, '/'));
+            if (!projectMaxEstDate || estDate > projectMaxEstDate) {
+                projectMaxEstDate = estDate;
+            }
+        }
+
+        // 3. Calculate Planned Date (Planner Latest End Date)
+        let modMaxEndDate: Date | null = null;
+        m.tasks.forEach(task => {
+            task.assignments.forEach(a => {
+                if (a.startDate && a.duration) {
+                    const endDateStr = calculateEndDate(a.startDate, a.duration, holidaySet);
+                    const endDate = new Date(endDateStr.replace(/-/g, '/'));
+                    if (!modMaxEndDate || endDate > modMaxEndDate) {
+                        modMaxEndDate = endDate;
+                    }
+                }
+            });
+        });
+        if (modMaxEndDate) {
+            if (!projectMaxPlanDate || modMaxEndDate > projectMaxPlanDate) {
+                projectMaxPlanDate = modMaxEndDate;
+            }
+        }
     });
 
     return {
@@ -127,8 +188,10 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         prepDuration: totalPrepDuration,
         feDuration: totalFeDuration,
         beDuration: totalBeDuration,
+        projectMaxEstDate,
+        projectMaxPlanDate
     };
-  }, [modules]);
+  }, [modules, holidaySet]);
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.setData("text/plain", index.toString());
@@ -589,7 +652,47 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     <td colSpan={3} className="text-center text-slate-300">-</td>
                     <td className="text-center text-slate-700">{totals.beEffort}</td>
                     <td className="text-center text-indigo-700 border-r border-slate-300">{formatWeeks(totals.beDuration)}</td>
-                    <td colSpan={3}></td>
+                    <td className="text-center text-slate-400 border-b border-slate-200 bg-slate-50">-</td>
+                    <td className="px-1 py-1 border-b border-slate-200 bg-slate-50 text-right">
+                        <div className="flex flex-col gap-0.5 justify-center h-full">
+                             <div className="flex items-center justify-between gap-2 text-[9px] text-slate-400 border-b border-slate-200/50 pb-0.5">
+                                <span>Est:</span>
+                                <span className="font-mono">
+                                    {totals.projectMaxEstDate ? totals.projectMaxEstDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}
+                                </span>
+                             </div>
+                             <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-slate-700">
+                                <span>Plan:</span>
+                                <span className="font-mono">
+                                    {totals.projectMaxPlanDate ? totals.projectMaxPlanDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}
+                                </span>
+                             </div>
+                        </div>
+                    </td>
+                    <td className="px-1 border-b border-slate-200 bg-slate-50 text-center">
+                       {(() => {
+                           if (!totals.projectMaxEstDate || !totals.projectMaxPlanDate) return <span className="text-slate-300">-</span>;
+                           
+                           const estStr = formatDateForInput(totals.projectMaxEstDate);
+                           const planStr = formatDateForInput(totals.projectMaxPlanDate);
+                           
+                           let varianceClass = 'text-slate-300';
+                           let varianceText = '-';
+
+                           if (estStr <= planStr) {
+                               const diff = calculateWorkingDaysBetween(estStr, planStr, holidaySet) - 1;
+                               varianceText = `+${Math.max(0, diff)}d`;
+                               varianceClass = 'text-green-600 font-bold';
+                               if (estStr === planStr) varianceText = '0d';
+                           } else {
+                               const diff = calculateWorkingDaysBetween(planStr, estStr, holidaySet) - 1;
+                               varianceText = `-${Math.max(0, diff)}d`;
+                               varianceClass = 'text-red-600 font-bold';
+                           }
+
+                           return <span className={`text-[10px] font-mono ${varianceClass}`}>{varianceText}</span>;
+                       })()}
+                    </td>
                 </tr>
             </tfoot>
         </table>
