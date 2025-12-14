@@ -58,6 +58,22 @@ const SaveStatusIndicator: React.FC<{ status: PlannerGridProps['saveStatus'] }> 
   );
 };
 
+// Explicit Color Map to prevent Tailwind purging
+const ROLE_STYLES: Record<string, { border: string, bg: string, bar: string, fill: string }> = {
+  [Role.DEV]: { border: 'border-l-blue-500', bg: 'bg-blue-50', bar: 'bg-blue-200', fill: 'bg-blue-600' },
+  [Role.BRAND_SOLUTIONS]: { border: 'border-l-orange-500', bg: 'bg-orange-50', bar: 'bg-orange-200', fill: 'bg-orange-600' },
+  [Role.PLM_D365]: { border: 'border-l-green-500', bg: 'bg-green-50', bar: 'bg-green-200', fill: 'bg-green-600' },
+  [Role.BA]: { border: 'border-l-purple-500', bg: 'bg-purple-50', bar: 'bg-purple-200', fill: 'bg-purple-600' },
+  [Role.APP_SUPPORT]: { border: 'border-l-red-500', bg: 'bg-red-50', bar: 'bg-red-200', fill: 'bg-red-600' },
+  [Role.DM]: { border: 'border-l-yellow-500', bg: 'bg-yellow-50', bar: 'bg-yellow-200', fill: 'bg-yellow-600' },
+  [Role.COE]: { border: 'border-l-cyan-500', bg: 'bg-cyan-50', bar: 'bg-cyan-200', fill: 'bg-cyan-600' },
+  [Role.EA]: { border: 'border-l-pink-500', bg: 'bg-pink-50', bar: 'bg-pink-200', fill: 'bg-pink-600' },
+  [Role.PREP_DEV]: { border: 'border-l-teal-500', bg: 'bg-teal-50', bar: 'bg-teal-200', fill: 'bg-teal-600' },
+  [Role.CNF]: { border: 'border-l-slate-500', bg: 'bg-slate-50', bar: 'bg-slate-200', fill: 'bg-slate-600' },
+  'default': { border: 'border-l-slate-400', bg: 'bg-slate-50', bar: 'bg-slate-200', fill: 'bg-slate-500' }
+};
+
+const getRoleStyle = (role: Role) => ROLE_STYLES[role] || ROLE_STYLES['default'];
 
 export const PlannerGrid: React.FC<PlannerGridProps> = ({ 
   projects, 
@@ -490,33 +506,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   }, [timeline]);
 
   const getRoleColorClass = (role: Role) => {
-    switch (role) {
-      case Role.DEV: return 'border-l-blue-500'; // Now EP Dev Team
-      case Role.BRAND_SOLUTIONS: return 'border-l-orange-500';
-      case Role.PLM_D365: return 'border-l-green-500';
-      case Role.BA: return 'border-l-purple-500';
-      case Role.APP_SUPPORT: return 'border-l-red-500';
-      case Role.DM: return 'border-l-yellow-500';
-      case Role.COE: return 'border-l-cyan-500';
-      case Role.EA: return 'border-l-pink-500'; // Now Enterprise Architecture
-      case Role.PREP_DEV: return 'border-l-teal-500';
-      default: return 'border-l-slate-400';
-    }
-  };
-
-  const getRoleBgColor = (role: Role) => {
-    switch (role) {
-      case Role.DEV: return 'bg-blue-500'; 
-      case Role.BRAND_SOLUTIONS: return 'bg-orange-500';
-      case Role.PLM_D365: return 'bg-green-500';
-      case Role.BA: return 'bg-purple-500';
-      case Role.APP_SUPPORT: return 'bg-red-500';
-      case Role.DM: return 'bg-yellow-500';
-      case Role.COE: return 'bg-cyan-500';
-      case Role.EA: return 'bg-pink-500'; 
-      case Role.PREP_DEV: return 'bg-teal-500';
-      default: return 'bg-slate-400';
-    }
+    const style = getRoleStyle(role);
+    return style.border;
   };
 
   const getRawCellValue = (assignment: TaskAssignment, col: TimelineColumn): number => {
@@ -1270,6 +1261,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 }, {} as Record<string, typeof possibleParents>);
 
                                 const isEditingDuration = editingId === `duration::${assignment.id}`;
+                                const roleStyle = getRoleStyle(assignment.role);
 
                                 return (
                                 <div 
@@ -1286,7 +1278,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   }}
                                 >
                                   <div 
-                                    className={`flex-shrink-0 py-0.5 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-10 flex items-center justify-between border-l-[3px] ${getRoleColorClass(assignment.role)} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`}
+                                    className={`flex-shrink-0 py-0.5 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-10 flex items-center justify-between border-l-[3px] ${roleStyle.border} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`}
                                     style={stickyStyle}
                                   >
                                     <div className="flex-1 overflow-hidden flex items-center gap-2 pl-12">
@@ -1428,6 +1420,22 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                                 isStart = col.id === startWeekId;
                                                 isEnd = col.id === endWeekId;
                                             }
+                                        } else if (viewMode === 'month') {
+                                            if (col.weekIds && col.weekIds.length > 0) {
+                                                const startWeek = col.weekIds[0];
+                                                const endWeek = col.weekIds[col.weekIds.length - 1];
+                                                
+                                                const [y1, w1] = startWeek.split('-').map(Number);
+                                                const mStart = getDateFromWeek(y1, w1);
+                                                
+                                                const [y2, w2] = endWeek.split('-').map(Number);
+                                                const mEnd = new Date(getDateFromWeek(y2, w2));
+                                                mEnd.setDate(mEnd.getDate() + 6);
+                                                
+                                                isInRange = (assignmentStartDate <= mEnd) && (assignmentEndDate >= mStart);
+                                                isStart = assignmentStartDate >= mStart && assignmentStartDate <= mEnd; 
+                                                isEnd = assignmentEndDate >= mStart && assignmentEndDate <= mEnd;
+                                            }
                                         }
 
                                         const progress = assignment.progress || 0;
@@ -1440,12 +1448,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             >
                                                 {isInRange && (
                                                     <div 
-                                                        className={`absolute top-1 bottom-1 left-0 right-0 ${getRoleColorClass(assignment.role).replace('border-l-', 'bg-').replace('500', '200')} ${isStart ? 'rounded-l-md ml-1' : ''} ${isEnd ? 'rounded-r-md mr-1' : ''} flex items-center overflow-hidden`}
+                                                        className={`absolute top-1 bottom-1 left-0 right-0 ${roleStyle.bar} ${isStart ? 'rounded-l-md ml-1' : ''} ${isEnd ? 'rounded-r-md mr-1' : ''} flex items-center overflow-hidden`}
                                                         title={`${assignment.role} - ${assignment.resourceName || 'Unassigned'} (${progress}%)`}
                                                     >
                                                         {/* Progress Fill */}
                                                         <div 
-                                                            className={`h-full opacity-30 ${getRoleColorClass(assignment.role).replace('border-l-', 'bg-').replace('500', '600')}`}
+                                                            className={`h-full opacity-30 ${roleStyle.fill}`}
                                                             style={{ width: `${progress}%` }}
                                                         ></div>
 
