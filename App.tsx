@@ -258,7 +258,7 @@ const App: React.FC = () => {
     });
 
     if (minPoint && maxPoint) {
-        setTimelineStart(addWeeksToPoint(minPoint, -4));
+        setTimelineStart(addWeeksToPoint(minPoint, -1));
         setTimelineEnd(addWeeksToPoint(maxPoint, 4));
         timelineInitialized.current = true;
     } else if (projects.length > 0) {

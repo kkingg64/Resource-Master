@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Project, ProjectModule, ComplexityLevel, Holiday } from '../types';
+import { Project, ProjectModule, ComplexityLevel, Holiday, Role } from '../types';
 import { Calculator, GripVertical, BarChart3, Users, HelpCircle, ArrowRight, Gauge, CalendarDays, Code, Layout, Server, ChevronDown } from 'lucide-react';
 import { calculateEndDate, formatDateForInput } from '../constants';
 
@@ -312,24 +312,55 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         const beEffort = Math.ceil((beFP / beVelocity) * COMPLEXITY_MULTIPLIERS[beComp]);
                         const beDuration = Math.ceil(beEffort / beTeamSize);
 
-                        // Total (Prep + Parallel Dev)
+                        // Total Duration (Prep + Parallel Dev)
+                        // Used for total effort estimation but not necessarily for timeline start offset if dev task is explicitly scheduled.
                         const totalDuration = prepDuration + Math.max(feDuration, beDuration);
+                        const devDuration = Math.max(feDuration, beDuration);
 
-                        // Find Earliest Planner Start Date
-                        const earliestStart = m.tasks.reduce((min: string | null, task) => {
-                            const taskMin = task.assignments.reduce((tMin: string | null, assign) => {
-                                if (!assign.startDate) return tMin;
-                                if (!tMin || assign.startDate < tMin) return assign.startDate;
-                                return tMin;
-                            }, null);
+                        // Find Start Date
+                        // Logic: Look for the earliest start date of a 'Dev Team' (Role.DEV) task.
+                        // If found, Delivery Date = DevStart + DevDuration (Parallel FE/BE).
+                        // If not found, Fallback to Earliest Module Start + Prep + DevDuration.
+                        
+                        let deliveryDate: string | null = null;
+                        
+                        // 1. Try to find a scheduled "Dev Team" task to anchor the build phase
+                        const devStartDate = m.tasks.reduce((min: string | null, task) => {
+                            const hasDev = task.assignments.some(a => a.role === Role.DEV);
+                            if (!hasDev) return min;
+                            
+                            const taskMin = task.assignments
+                                .filter(a => a.role === Role.DEV)
+                                .reduce((tMin: string | null, assign) => {
+                                    if (!assign.startDate) return tMin;
+                                    if (!tMin || assign.startDate < tMin) return assign.startDate;
+                                    return tMin;
+                                }, null);
+                                
                             if (!taskMin) return min;
                             if (!min || taskMin < min) return taskMin;
                             return min;
                         }, null);
 
-                        const deliveryDate = earliestStart && totalDuration > 0
-                             ? calculateEndDate(earliestStart, totalDuration, holidaySet)
-                             : null;
+                        if (devStartDate && devDuration > 0) {
+                             deliveryDate = calculateEndDate(devStartDate, devDuration, holidaySet);
+                        } else {
+                            // 2. Fallback: Find earliest start of any task (likely Prep/Discovery)
+                            const moduleStartDate = m.tasks.reduce((min: string | null, task) => {
+                                const taskMin = task.assignments.reduce((tMin: string | null, assign) => {
+                                    if (!assign.startDate) return tMin;
+                                    if (!tMin || assign.startDate < tMin) return assign.startDate;
+                                    return tMin;
+                                }, null);
+                                if (!taskMin) return min;
+                                if (!min || taskMin < min) return taskMin;
+                                return min;
+                            }, null);
+
+                            if (moduleStartDate && totalDuration > 0) {
+                                deliveryDate = calculateEndDate(moduleStartDate, totalDuration, holidaySet);
+                            }
+                        }
 
                         return (
                             <tr 
@@ -395,7 +426,9 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                     {deliveryDate ? (
                                         <div className="flex flex-col items-end">
                                             <span className="text-indigo-700">{new Date(deliveryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                                            <span className="text-[9px] text-slate-400 font-normal">{formatWeeks(totalDuration)}</span>
+                                            <span className="text-[9px] text-slate-400 font-normal">
+                                                {devStartDate ? `(Dev: ${formatWeeks(devDuration)})` : `(Total: ${formatWeeks(totalDuration)})`}
+                                            </span>
                                         </div>
                                     ) : (
                                         <span className="text-slate-400">{totalDuration > 0 ? formatWeeks(totalDuration) : '-'}</span>
@@ -433,7 +466,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         </div>
         <div className="mt-4 text-[10px] text-slate-400 text-right space-y-1">
             <p>* Front-End and Back-End development are assumed to run in parallel.</p>
-            <p>* Delivery date assumes sequential workflow: Prep &rarr; (Front-End || Back-End).</p>
+            <p>* Delivery date prioritizes scheduled 'Dev Team' tasks. If found, adds Development Duration to that start date.</p>
+            <p>* Otherwise, it adds (Prep + Development) duration to the earliest module activity.</p>
         </div>
       </div>
     </div>

@@ -39,7 +39,7 @@ const LogItem: React.FC<{ entry: LogEntry }> = ({ entry }) => {
 
 
 export const DebugLog: React.FC<DebugLogProps> = ({ entries, setEntries }) => {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
 
   if (!isOpen) {
     return (
