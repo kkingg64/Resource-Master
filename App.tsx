@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel } from './types';
@@ -47,6 +48,7 @@ const structureProjectsData = (
       startDate: a.start_date, // New day-based field
       startWeekId: a.start_week_id, // Keep for backward compatibility
       duration: a.duration,
+      progress: a.progress || 0, // NEW: Progress field
       parentAssignmentId: a.parent_assignment_id,
       sort_order: a.sort_order,
       allocations: allocationsByAssignment.get(a.id) || [],
@@ -670,6 +672,40 @@ const App: React.FC = () => {
     }
   };
 
+  const updateAssignmentProgress = async (assignmentId: string, progress: number) => {
+      const previousState = deepClone(projects);
+      const updatedProjects = deepClone(projects);
+      let found = false;
+
+      for (const p of updatedProjects) {
+          for (const m of p.modules) {
+              for (const t of m.tasks) {
+                  const assignment = t.assignments.find(a => a.id === assignmentId);
+                  if (assignment) {
+                      assignment.progress = progress;
+                      found = true;
+                      break;
+                  }
+              }
+              if (found) break;
+          }
+          if (found) break;
+      }
+
+      if (found) setProjects(updatedProjects);
+
+      const { error } = await callSupabase(
+          'UPDATE assignment progress',
+          { assignmentId, progress },
+          supabase.from('task_assignments').update({ progress }).eq('id', assignmentId)
+      );
+
+      if (error) {
+          setProjects(previousState);
+          alert("Failed to update progress.");
+      }
+  };
+
   const updateAssignmentDependency = async (assignmentId: string, parentAssignmentId: string | null) => {
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
@@ -870,6 +906,7 @@ const App: React.FC = () => {
                                 onReorderAssignments={reorderAssignments}
                                 onShiftTask={onShiftTask}
                                 onUpdateAssignmentSchedule={updateAssignmentSchedule}
+                                onUpdateAssignmentProgress={updateAssignmentProgress}
                                 onAddProject={addProject}
                                 onAddModule={addModule}
                                 onUpdateProjectName={updateProjectName}

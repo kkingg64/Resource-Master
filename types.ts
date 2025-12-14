@@ -1,3 +1,4 @@
+
 export enum Role {
   CNF = 'CNF',
   BRAND_SOLUTIONS = 'Brand Solutions',
@@ -32,6 +33,7 @@ export interface TaskAssignment {
   startDate?: string; // YYYY-MM-DD Auto-scheduler start
   startWeekId?: string; // DEPRECATED: Auto-scheduler start
   duration?: number;    // Auto-scheduler duration in DAYS
+  progress?: number;    // 0 to 100 percentage
   parentAssignmentId?: string; // ID of the task this one depends on
   sort_order?: number;
 }

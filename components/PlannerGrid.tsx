@@ -1,7 +1,8 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye } from 'lucide-react';
+import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface PlannerGridProps {
@@ -22,6 +23,7 @@ interface PlannerGridProps {
   onReorderAssignments: (projectId: string, moduleId: string, taskId: string, startIndex: number, endIndex: number) => void;
   onShiftTask: (projectId: string, moduleId: string, taskId: string, direction: 'left' | 'right') => void;
   onUpdateAssignmentSchedule: (assignmentId: string, startDate: string, duration: number) => void;
+  onUpdateAssignmentProgress?: (assignmentId: string, progress: number) => void;
   onAddProject: () => void;
   onAddModule: (projectId: string) => void;
   onUpdateProjectName: (projectId: string, name: string) => void;
@@ -75,6 +77,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   onReorderAssignments,
   onShiftTask,
   onUpdateAssignmentSchedule,
+  onUpdateAssignmentProgress,
   onAddProject,
   onAddModule,
   onUpdateProjectName,
@@ -127,6 +130,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
 
   const [viewMode, setViewMode] = useState<ViewMode>('day');
+  const [displayMode, setDisplayMode] = useState<'allocation' | 'gantt'>('allocation');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   
@@ -500,6 +504,21 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }
   };
 
+  const getRoleBgColor = (role: Role) => {
+    switch (role) {
+      case Role.DEV: return 'bg-blue-500'; 
+      case Role.BRAND_SOLUTIONS: return 'bg-orange-500';
+      case Role.PLM_D365: return 'bg-green-500';
+      case Role.BA: return 'bg-purple-500';
+      case Role.APP_SUPPORT: return 'bg-red-500';
+      case Role.DM: return 'bg-yellow-500';
+      case Role.COE: return 'bg-cyan-500';
+      case Role.EA: return 'bg-pink-500'; 
+      case Role.PREP_DEV: return 'bg-teal-500';
+      default: return 'bg-slate-400';
+    }
+  };
+
   const getRawCellValue = (assignment: TaskAssignment, col: TimelineColumn): number => {
     // Default to 'Unassigned' holidays if resourceName is not set or not in map
     const resourceName = assignment.resourceName || 'Unassigned';
@@ -716,6 +735,25 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   </div>
                 )}
             </div>
+            
+            <div className="flex items-center gap-2 bg-slate-200 rounded-lg p-1">
+                <button
+                    onClick={() => setDisplayMode('allocation')}
+                    className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'allocation' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
+                    title="Grid View (Allocations)"
+                >
+                    <LayoutList size={14} /> Grid
+                </button>
+                <button
+                    onClick={() => setDisplayMode('gantt')}
+                    className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'gantt' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
+                    title="Gantt View (Timeline Bars)"
+                >
+                    <CalendarRange size={14} /> Gantt
+                </button>
+            </div>
+
+            <div className="h-4 w-px bg-slate-300"></div>
 
             <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden">
               <button onClick={() => onExtendTimeline('start')} className="px-2 py-1 hover:bg-slate-100 text-xs text-slate-600 border-r border-slate-200" title="Add Month to Start">
@@ -935,7 +973,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                       const isCurrent = isCurrentColumn(col);
                       return (
                           <div key={col.id} className={`flex-shrink-0 border-r border-slate-600 flex items-center justify-center bg-slate-700 ${isCurrent ? 'bg-slate-600 ring-1 ring-inset ring-amber-400/50' : ''}`} style={{ width: `${colWidth}px` }}>
-                            {total > 0 && (
+                            {total > 0 && displayMode === 'allocation' && (
                               <span className="text-[10px] font-bold text-slate-200">{formatValue(total)}</span>
                             )}
                           </div>
@@ -1066,7 +1104,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             const isCurrent = isCurrentColumn(col);
                             return (
                                 <div key={col.id} className={`flex-shrink-0 border-r border-slate-200/50 flex items-center justify-center bg-indigo-50 ${isCurrent ? 'bg-indigo-50/80' : ''}`} style={{ width: `${colWidth}px` }}>
-                                  {total > 0 && (
+                                  {total > 0 && displayMode === 'allocation' && (
                                     <span className="text-[10px] font-bold text-indigo-900">{formatValue(total)}</span>
                                   )}
                                 </div>
@@ -1195,7 +1233,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   const isCurrent = isCurrentColumn(col);
                                   return (
                                     <div key={`th-${task.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 flex items-center justify-center bg-slate-50 ${isCurrent ? 'bg-slate-50' : ''}`} style={{ width: `${colWidth}px` }}>
-                                      {total > 0 && (
+                                      {total > 0 && displayMode === 'allocation' && (
                                         <span className="text-[10px] font-semibold text-slate-600">{formatValue(total)}</span>
                                       )}
                                     </div>
@@ -1204,7 +1242,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               </div>
 
                               {!isTaskCollapsed && task.assignments.map((assignment, assignmentIndex) => {
-                                let assignmentStartDate;
+                                let assignmentStartDate: Date;
                                 if (assignment.startDate) {
                                     assignmentStartDate = new Date(assignment.startDate.replace(/-/g, '/'));
                                 } else if (assignment.startWeekId) {
@@ -1215,7 +1253,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                                 const resourceName = assignment.resourceName || 'Unassigned';
                                 const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned');
+                                const assignmentHolidays = resourceHolidayData?.dateSet || new Set<string>();
                                 
+                                // Calculate end date based on duration and holidays for Gantt view
+                                const endDateStr = calculateEndDate(formatDateForInput(assignmentStartDate), assignment.duration || 1, assignmentHolidays);
+                                const assignmentEndDate = new Date(endDateStr.replace(/-/g, '/'));
+
                                 const possibleParents = allAssignmentsForDependencies.filter(
                                   parent => parent.id !== assignment.id && !isCircularDependency(assignment.id, parent.id)
                                 );
@@ -1320,39 +1363,107 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   </div>
                                   
                                   {timeline.map(col => {
-                                    const raw = getRawCellValue(assignment, col);
-                                    const display = formatValue(raw);
-                                    const hasValue = raw > 0;
-                                    const isCurrent = isCurrentColumn(col);
-                                    
+                                    // Common calculations
                                     const dateStr = col.date ? formatDateForInput(col.date) : '';
                                     const isHol = viewMode === 'day' && !!(resourceHolidayData && resourceHolidayData.dateSet.has(dateStr));
                                     const holidayInfo = isHol ? resourceHolidayData!.holidays.find(h => h.date === dateStr) : undefined;
+                                    const isCurrent = isCurrentColumn(col);
 
-                                    return (
-                                      <div 
-                                        key={`${assignment.id}-${col.id}`} 
-                                        className={`flex-shrink-0 border-r border-slate-100 relative ${isHol ? 'bg-[repeating-linear-gradient(45deg,theme(colors.red.50),theme(colors.red.50)_5px,theme(colors.red.100)_5px,theme(colors.red.100)_10px)]' : isCurrent ? 'bg-amber-50/50' : ''}`} 
-                                        style={{ width: `${colWidth}px` }}
-                                        title={holidayInfo?.name}
-                                      >
-                                        {isHol && holidayInfo ? (
-                                          <div className="flex items-center justify-center h-full text-xs font-bold text-red-700 select-none">
-                                            {'country' in holidayInfo ? holidayInfo.country : 'AL'}
+                                    // Allocation View Logic
+                                    if (displayMode === 'allocation') {
+                                        const raw = getRawCellValue(assignment, col);
+                                        const display = formatValue(raw);
+                                        const hasValue = raw > 0;
+                                        
+                                        return (
+                                          <div 
+                                            key={`${assignment.id}-${col.id}`} 
+                                            className={`flex-shrink-0 border-r border-slate-100 relative ${isHol ? 'bg-[repeating-linear-gradient(45deg,theme(colors.red.50),theme(colors.red.50)_5px,theme(colors.red.100)_5px,theme(colors.red.100)_10px)]' : isCurrent ? 'bg-amber-50/50' : ''}`} 
+                                            style={{ width: `${colWidth}px` }}
+                                            title={holidayInfo?.name}
+                                          >
+                                            {isHol && holidayInfo ? (
+                                              <div className="flex items-center justify-center h-full text-xs font-bold text-red-700 select-none">
+                                                {'country' in holidayInfo ? holidayInfo.country : 'AL'}
+                                              </div>
+                                            ) : (
+                                              <input 
+                                                type="text"
+                                                className={`w-full h-full text-center text-xs focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors
+                                                    ${hasValue ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50'}
+                                                `}
+                                                value={display}
+                                                placeholder={'-'}
+                                                onChange={(e) => handleCellUpdate(project.id, module.id, task.id, assignment.id, col, e.target.value)}
+                                              />
+                                            )}
                                           </div>
-                                        ) : (
-                                          <input 
-                                            type="text"
-                                            className={`w-full h-full text-center text-xs focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors
-                                                ${hasValue ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50'}
-                                            `}
-                                            value={display}
-                                            placeholder={'-'}
-                                            onChange={(e) => handleCellUpdate(project.id, module.id, task.id, assignment.id, col, e.target.value)}
-                                          />
-                                        )}
-                                      </div>
-                                    );
+                                        );
+                                    } else {
+                                        // Gantt View Logic
+                                        let isInRange = false;
+                                        let isStart = false;
+                                        let isEnd = false;
+                                        
+                                        if (viewMode === 'day' && col.date) {
+                                            isInRange = col.date >= assignmentStartDate && col.date <= assignmentEndDate;
+                                            isStart = col.date.getTime() === assignmentStartDate.getTime();
+                                            isEnd = col.date.getTime() === assignmentEndDate.getTime();
+                                            // Handle case where start and end are same day
+                                            if (formatDateForInput(col.date) === formatDateForInput(assignmentStartDate)) isStart = true;
+                                            if (formatDateForInput(col.date) === formatDateForInput(assignmentEndDate)) isEnd = true;
+                                        } else if (viewMode === 'week') {
+                                            // Simplified week logic: check if week falls within range
+                                            const [y, w] = col.id.split('-').map(Number);
+                                            const colDate = getDateFromWeek(y, w);
+                                            const colEnd = new Date(colDate);
+                                            colEnd.setDate(colEnd.getDate() + 6);
+                                            
+                                            // Check overlap
+                                            isInRange = (assignmentStartDate <= colEnd) && (assignmentEndDate >= colDate);
+                                            // Approximation for visuals
+                                            if (isInRange) {
+                                                const startWeekId = getWeekIdFromDate(assignmentStartDate);
+                                                const endWeekId = getWeekIdFromDate(assignmentEndDate);
+                                                isStart = col.id === startWeekId;
+                                                isEnd = col.id === endWeekId;
+                                            }
+                                        }
+
+                                        const progress = assignment.progress || 0;
+                                        
+                                        return (
+                                            <div 
+                                                key={`${assignment.id}-${col.id}`} 
+                                                className={`flex-shrink-0 border-r border-slate-100 relative ${isCurrent ? 'bg-amber-50/30' : ''}`}
+                                                style={{ width: `${colWidth}px` }}
+                                            >
+                                                {isInRange && (
+                                                    <div 
+                                                        className={`absolute top-1 bottom-1 left-0 right-0 ${getRoleColorClass(assignment.role).replace('border-l-', 'bg-').replace('500', '200')} ${isStart ? 'rounded-l-md ml-1' : ''} ${isEnd ? 'rounded-r-md mr-1' : ''} flex items-center overflow-hidden`}
+                                                        title={`${assignment.role} - ${assignment.resourceName || 'Unassigned'} (${progress}%)`}
+                                                    >
+                                                        {/* Progress Fill */}
+                                                        <div 
+                                                            className={`h-full opacity-30 ${getRoleColorClass(assignment.role).replace('border-l-', 'bg-').replace('500', '600')}`}
+                                                            style={{ width: `${progress}%` }}
+                                                        ></div>
+
+                                                        {isStart && (
+                                                            <span className="absolute left-2 text-[9px] font-bold text-slate-700 whitespace-nowrap truncate z-10 pointer-events-none">
+                                                                {assignment.resourceName || 'Unassigned'}
+                                                            </span>
+                                                        )}
+                                                        {isEnd && progress > 0 && (
+                                                            <span className="absolute right-2 text-[8px] font-bold text-slate-600 z-10 pointer-events-none bg-white/50 px-0.5 rounded">
+                                                                {progress}%
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    }
                                   })}
                                 </div>
                               )})}
@@ -1380,7 +1491,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                 
                 return (
                   <div key={`total-${col.id}`} className={`flex-shrink-0 border-r border-slate-700 flex items-center justify-center text-xs font-mono font-bold ${isCurrent ? 'bg-slate-700 ring-1 ring-inset ring-amber-400/50' : ''}`} style={{ width: `${colWidth}px` }}>
-                    {total > 0 ? formatValue(total) : ''}
+                    {total > 0 && displayMode === 'allocation' ? formatValue(total) : ''}
                   </div>
                 );
               })}
@@ -1452,6 +1563,24 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
               >
                 <Copy size={12} /> Duplicate Assignment
               </button>
+              
+              {onUpdateAssignmentProgress && (
+                  <div className="px-3 py-1.5 text-xs flex items-center gap-2 text-slate-700">
+                      <Percent size={12} />
+                      <span>Progress</span>
+                      <input 
+                        type="range" 
+                        min="0" 
+                        max="100" 
+                        step="10"
+                        className="w-20 accent-indigo-600"
+                        onClick={(e) => e.stopPropagation()}
+                        defaultValue={projects.find(p => p.id === contextMenu.projectId)?.modules.find(m => m.id === contextMenu.moduleId)?.tasks.find(t => t.id === contextMenu.taskId)?.assignments.find(a => a.id === contextMenu.assignmentId)?.progress || 0}
+                        onChange={(e) => onUpdateAssignmentProgress(contextMenu.assignmentId!, parseInt(e.target.value))}
+                      />
+                  </div>
+              )}
+
               <div className="h-px bg-slate-100 my-1"></div>
               <button
                 onClick={() => { onDeleteAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }}
