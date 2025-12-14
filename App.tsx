@@ -79,9 +79,11 @@ const structureProjectsData = (
       functionPoints: m.function_points,
       complexity: m.complexity || 'Medium', // Default to Medium if undefined
       
-      // Fallback logic for existing data
-      frontendFunctionPoints: m.frontend_function_points || 0,
-      backendFunctionPoints: m.backend_function_points || m.function_points || 0,
+      // Default FE/BE FP to the main function_points if they are not explicitly set (null)
+      // This ensures they start "same" as requested.
+      frontendFunctionPoints: m.frontend_function_points ?? m.function_points ?? 0,
+      backendFunctionPoints: m.backend_function_points ?? m.function_points ?? 0,
+      
       frontendComplexity: m.frontend_complexity || m.complexity || 'Medium',
       backendComplexity: m.backend_complexity || m.complexity || 'Medium',
 
@@ -340,7 +342,7 @@ const App: React.FC = () => {
         module.legacyFunctionPoints = legacyFp;
         module.frontendFunctionPoints = frontendFp;
         module.backendFunctionPoints = backendFp;
-        // Keep legacy functionPoints updated as sum for consistency if needed, or just leave it
+        // Calculate total for legacy view
         module.functionPoints = frontendFp + backendFp;
         setProjects(deepClone(projects));
      }
@@ -352,7 +354,7 @@ const App: React.FC = () => {
             legacy_function_points: legacyFp, 
             frontend_function_points: frontendFp,
             backend_function_points: backendFp,
-            function_points: frontendFp + backendFp // Sync legacy column
+            function_points: frontendFp + backendFp
         }).eq('id', moduleId)
     );
      if (error) { setProjects(previousState); alert("Failed to update function points."); }
@@ -365,14 +367,14 @@ const App: React.FC = () => {
         if (type === 'frontend') module.frontendComplexity = complexity;
         else module.backendComplexity = complexity;
         
-        // Update legacy complexity to match backend or frontend just to have a value
+        // Sync legacy column with backend complexity as a default
         module.complexity = complexity;
         setProjects(deepClone(projects));
     }
 
     const updatePayload = type === 'frontend' 
         ? { frontend_complexity: complexity } 
-        : { backend_complexity: complexity, complexity: complexity }; // Sync legacy column with backend
+        : { backend_complexity: complexity, complexity: complexity };
 
     const { error } = await callSupabase('UPDATE complexity', { id: moduleId, type, complexity }, supabase.from('modules').update(updatePayload).eq('id', moduleId));
     if (error) { setProjects(previousState); alert("Failed to update module complexity."); }

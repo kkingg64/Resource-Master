@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, ProjectModule, ComplexityLevel, Holiday } from '../types';
-import { Calculator, GripVertical, BarChart3, Users, HelpCircle, ArrowRight, Gauge, CalendarDays, Code, Layout, Server } from 'lucide-react';
+import { Calculator, GripVertical, BarChart3, Users, HelpCircle, ArrowRight, Gauge, CalendarDays, Code, Layout, Server, ChevronDown } from 'lucide-react';
 import { calculateEndDate, formatDateForInput } from '../constants';
 
 interface EstimatorProps {
@@ -20,9 +20,9 @@ const COMPLEXITY_MULTIPLIERS: Record<ComplexityLevel, number> = {
 
 const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: ComplexityLevel) => void }> = ({ value, onChange }) => {
     return (
-        <div className="relative w-full h-full flex items-center justify-center">
+        <div className="relative w-full h-full flex items-center justify-center group cursor-pointer bg-white border border-transparent hover:border-slate-300 rounded px-1 transition-colors">
             {/* Display Layer */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+            <div className="flex items-center gap-1 pointer-events-none z-0">
                 <span className={`text-xs font-bold ${
                     value === 'Low' ? 'text-green-600' :
                     value === 'Medium' ? 'text-blue-600' :
@@ -31,12 +31,13 @@ const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: Compl
                 }`}>
                     {value.charAt(0)}
                 </span>
+                <ChevronDown size={10} className="text-slate-300 group-hover:text-slate-500" />
             </div>
             {/* Interaction Layer - Invisible Select */}
             <select
                 value={value}
                 onChange={(e) => onChange(e.target.value as ComplexityLevel)}
-                className="w-full h-full opacity-0 cursor-pointer z-10 appearance-none absolute inset-0"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 appearance-none"
                 title={`Current: ${value} (${COMPLEXITY_MULTIPLIERS[value]}x)`}
             >
                 <option value="Low">Low (1x)</option>
@@ -238,12 +239,12 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
 
       {/* Main Content: Spreadsheet View */}
       <div className="flex-1 overflow-auto p-6">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <table className="w-full text-sm text-left border-collapse">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden w-full">
+            <table className="w-full text-sm text-left border-collapse table-fixed">
                 <thead className="bg-slate-50 text-slate-600 font-semibold text-xs uppercase tracking-wider">
                     <tr>
                         <th className="w-10 py-3 border-b border-slate-200"></th>
-                        <th className="py-3 px-4 border-b border-slate-200 border-r text-left min-w-[180px]">Module</th>
+                        <th className="py-3 px-4 border-b border-slate-200 border-r text-left w-1/4">Module</th>
                         
                         {/* Preparation */}
                         <th colSpan={3} className="py-2 px-4 text-center bg-amber-50 border-b border-amber-100 border-r border-slate-200 text-amber-800">
@@ -260,28 +261,28 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                             Back-End Dev
                         </th>
 
-                        <th className="py-3 px-4 text-center border-b border-slate-200 bg-slate-100">Delivery</th>
+                        <th className="py-3 px-4 text-center border-b border-slate-200 bg-slate-100 w-32">Delivery</th>
                     </tr>
                     <tr className="text-[10px] text-slate-500">
                         <th className="border-b border-slate-200 bg-slate-50"></th>
                         <th className="border-b border-slate-200 border-r bg-slate-50"></th>
                         
                         {/* Prep Subs */}
-                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-amber-50/30 w-20">Legacy FP</th>
-                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-amber-50/30 w-16">Effort</th>
-                        <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-amber-50/30 w-16">Dur.</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-amber-50/30">Legacy FP</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-amber-50/30">Effort</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-amber-50/30">Dur.</th>
 
                         {/* FE Subs */}
-                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-blue-50/30 w-16">FE FP</th>
-                        <th className="py-2 px-2 text-center border-b border-slate-200 bg-blue-50/30 w-12">Diff</th>
-                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-blue-50/30 w-16">Effort</th>
-                        <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-blue-50/30 w-16">Dur.</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-blue-50/30">FE FP</th>
+                        <th className="py-2 px-2 text-center border-b border-slate-200 bg-blue-50/30 w-16">Diff</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-blue-50/30">Effort</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-blue-50/30">Dur.</th>
 
                          {/* BE Subs */}
-                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-indigo-50/30 w-16">BE FP</th>
-                        <th className="py-2 px-2 text-center border-b border-slate-200 bg-indigo-50/30 w-12">Diff</th>
-                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-indigo-50/30 w-16">Effort</th>
-                        <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-indigo-50/30 w-16">Dur.</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-indigo-50/30">BE FP</th>
+                        <th className="py-2 px-2 text-center border-b border-slate-200 bg-indigo-50/30 w-16">Diff</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 bg-indigo-50/30">Effort</th>
+                        <th className="py-2 px-2 text-right border-b border-slate-200 border-r bg-indigo-50/30">Dur.</th>
 
                         <th className="py-2 px-4 text-right border-b border-slate-200 bg-slate-100 w-32 font-bold">Est. Date</th>
                     </tr>
@@ -346,51 +347,51 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                 </td>
                                 <td className="px-4 py-2 border-b border-slate-100 border-r border-slate-200">
                                     <div className="flex items-center justify-between">
-                                        <span className="font-medium text-slate-700 truncate max-w-[150px]" title={m.name}>{m.name}</span>
+                                        <span className="font-medium text-slate-700 truncate block w-full" title={m.name}>{m.name}</span>
                                     </div>
                                 </td>
                                 
                                 {/* Preparation */}
-                                <td className="px-1 py-1 border-b border-slate-100 bg-amber-50/10">
+                                <td className="px-1 py-1 border-b border-slate-100 hover:bg-slate-50 relative group/cell">
                                     <input 
-                                        type="number" min="0" className="w-full text-right p-1 bg-transparent border border-transparent hover:border-amber-200 focus:border-amber-500 focus:bg-white rounded font-mono text-slate-600 text-xs"
+                                        type="number" min="0" className="w-full h-full text-right p-2 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-600 text-xs transition-colors"
                                         value={m.legacyFunctionPoints || 0}
                                         onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, parseInt(e.target.value) || 0, m.frontendFunctionPoints || 0, m.backendFunctionPoints || 0)}
                                     />
                                 </td>
-                                <td className="px-1 py-1 text-right border-b border-slate-100 font-mono text-xs text-slate-400 bg-amber-50/10">{prepEffort || '-'}</td>
-                                <td className="px-1 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-xs font-medium text-amber-700 bg-amber-50/10">{prepDuration || '-'}</td>
+                                <td className="px-2 py-1 text-right border-b border-slate-100 font-mono text-xs text-slate-400">{prepEffort || '-'}</td>
+                                <td className="px-2 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-xs font-medium text-amber-700">{prepDuration || '-'}</td>
 
                                 {/* Front-End */}
-                                <td className="px-1 py-1 border-b border-slate-100 bg-blue-50/10">
+                                <td className="px-1 py-1 border-b border-slate-100 hover:bg-slate-50 relative group/cell">
                                     <input 
-                                        type="number" min="0" className="w-full text-right p-1 bg-transparent border border-transparent hover:border-blue-200 focus:border-blue-500 focus:bg-white rounded font-mono text-slate-600 text-xs"
+                                        type="number" min="0" className="w-full h-full text-right p-2 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-600 text-xs transition-colors"
                                         value={m.frontendFunctionPoints || 0}
                                         onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, parseInt(e.target.value) || 0, m.backendFunctionPoints || 0)}
                                     />
                                 </td>
-                                <td className="px-1 py-1 border-b border-slate-100 bg-blue-50/10">
+                                <td className="px-1 py-1 border-b border-slate-100">
                                     <ComplexitySelect value={feComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'frontend', val)} />
                                 </td>
-                                <td className="px-1 py-1 text-right border-b border-slate-100 font-mono text-xs text-slate-400 bg-blue-50/10">{feEffort || '-'}</td>
-                                <td className="px-1 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-xs font-medium text-blue-700 bg-blue-50/10">{feDuration || '-'}</td>
+                                <td className="px-2 py-1 text-right border-b border-slate-100 font-mono text-xs text-slate-400">{feEffort || '-'}</td>
+                                <td className="px-2 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-xs font-medium text-blue-700">{feDuration || '-'}</td>
 
                                 {/* Back-End */}
-                                <td className="px-1 py-1 border-b border-slate-100 bg-indigo-50/10">
+                                <td className="px-1 py-1 border-b border-slate-100 hover:bg-slate-50 relative group/cell">
                                     <input 
-                                        type="number" min="0" className="w-full text-right p-1 bg-transparent border border-transparent hover:border-indigo-200 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-600 text-xs"
+                                        type="number" min="0" className="w-full h-full text-right p-2 bg-transparent border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white rounded font-mono text-slate-600 text-xs transition-colors"
                                         value={m.backendFunctionPoints || 0}
                                         onChange={(e) => onUpdateFunctionPoints(selectedProjectId, m.id, m.legacyFunctionPoints || 0, m.frontendFunctionPoints || 0, parseInt(e.target.value) || 0)}
                                     />
                                 </td>
-                                <td className="px-1 py-1 border-b border-slate-100 bg-indigo-50/10">
+                                <td className="px-1 py-1 border-b border-slate-100">
                                     <ComplexitySelect value={beComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'backend', val)} />
                                 </td>
-                                <td className="px-1 py-1 text-right border-b border-slate-100 font-mono text-xs text-slate-400 bg-indigo-50/10">{beEffort || '-'}</td>
-                                <td className="px-1 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-xs font-medium text-indigo-700 bg-indigo-50/10">{beDuration || '-'}</td>
+                                <td className="px-2 py-1 text-right border-b border-slate-100 font-mono text-xs text-slate-400">{beEffort || '-'}</td>
+                                <td className="px-2 py-1 text-right border-b border-slate-100 border-r border-slate-200 font-mono text-xs font-medium text-indigo-700">{beDuration || '-'}</td>
 
                                 {/* Delivery */}
-                                <td className="px-4 py-2 text-right border-b border-slate-100 bg-slate-50 font-mono text-xs font-bold text-slate-800">
+                                <td className="px-4 py-2 text-right border-b border-slate-100 bg-slate-50/50 font-mono text-xs font-bold text-slate-800">
                                     {deliveryDate ? (
                                         <div className="flex flex-col items-end">
                                             <span className="text-indigo-700">{new Date(deliveryDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
@@ -409,21 +410,21 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         <td colSpan={2} className="px-4 py-3 text-right text-slate-500 uppercase">Totals</td>
                         
                         {/* Prep Totals */}
-                        <td className="px-1 py-3 text-right text-slate-700">{totals.legacyFP}</td>
-                        <td className="px-1 py-3 text-right text-slate-700">{totals.prepEffort}</td>
-                        <td className="px-1 py-3 text-right text-amber-700 border-r border-slate-300">{formatWeeks(totals.prepDuration)}</td>
+                        <td className="px-2 py-3 text-right text-slate-700">{totals.legacyFP}</td>
+                        <td className="px-2 py-3 text-right text-slate-700">{totals.prepEffort}</td>
+                        <td className="px-2 py-3 text-right text-amber-700 border-r border-slate-300">{formatWeeks(totals.prepDuration)}</td>
 
                         {/* FE Totals */}
-                        <td className="px-1 py-3 text-right text-slate-700">{totals.feFP}</td>
-                        <td className="px-1 py-3 text-center text-slate-400">-</td>
-                        <td className="px-1 py-3 text-right text-slate-700">{totals.feEffort}</td>
-                        <td className="px-1 py-3 text-right text-blue-700 border-r border-slate-300">{formatWeeks(totals.feDuration)}</td>
+                        <td className="px-2 py-3 text-right text-slate-700">{totals.feFP}</td>
+                        <td className="px-2 py-3 text-center text-slate-400">-</td>
+                        <td className="px-2 py-3 text-right text-slate-700">{totals.feEffort}</td>
+                        <td className="px-2 py-3 text-right text-blue-700 border-r border-slate-300">{formatWeeks(totals.feDuration)}</td>
 
                          {/* BE Totals */}
-                        <td className="px-1 py-3 text-right text-slate-700">{totals.beFP}</td>
-                        <td className="px-1 py-3 text-center text-slate-400">-</td>
-                        <td className="px-1 py-3 text-right text-slate-700">{totals.beEffort}</td>
-                        <td className="px-1 py-3 text-right text-indigo-700 border-r border-slate-300">{formatWeeks(totals.beDuration)}</td>
+                        <td className="px-2 py-3 text-right text-slate-700">{totals.beFP}</td>
+                        <td className="px-2 py-3 text-center text-slate-400">-</td>
+                        <td className="px-2 py-3 text-right text-slate-700">{totals.beEffort}</td>
+                        <td className="px-2 py-3 text-right text-indigo-700 border-r border-slate-300">{formatWeeks(totals.beDuration)}</td>
 
                         <td className="px-4 py-3 text-right text-slate-900 text-sm"></td>
                     </tr>
