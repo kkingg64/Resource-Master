@@ -375,9 +375,12 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     const plannerDateStr = plannerDateObj ? formatDateForInput(plannerDateObj) : null;
 
                     // 5. Compare
-                    let varianceStatus: 'ok' | 'late' | 'unknown' = 'unknown';
+                    // Logic: 
+                    // If Est > Plan => Plan is earlier than Est => Aggressive / Risk (Red).
+                    // If Est <= Plan => Plan is later or equal to Est => Safe / Buffer (Green).
+                    let varianceStatus: 'safe' | 'risk' | 'unknown' = 'unknown';
                     if (estimatedDateStr && plannerDateStr) {
-                        varianceStatus = plannerDateStr <= estimatedDateStr ? 'ok' : 'late';
+                        varianceStatus = estimatedDateStr > plannerDateStr ? 'risk' : 'safe';
                     }
 
                     return (
@@ -501,13 +504,13 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
 
                                      {/* Planner Date */}
                                      <div className={`flex items-center justify-between gap-2 text-[10px] font-bold ${
-                                         varianceStatus === 'ok' ? 'text-green-600' : 
-                                         varianceStatus === 'late' ? 'text-red-600' : 'text-slate-600'
+                                         varianceStatus === 'safe' ? 'text-green-600' : 
+                                         varianceStatus === 'risk' ? 'text-red-600' : 'text-slate-600'
                                      }`}>
                                         <div className="flex items-center gap-1">
                                             <span>Plan:</span>
-                                            {varianceStatus === 'late' && <AlertCircle size={8} />}
-                                            {varianceStatus === 'ok' && <CheckCircle2 size={8} />}
+                                            {varianceStatus === 'risk' && <AlertCircle size={8} />}
+                                            {varianceStatus === 'safe' && <CheckCircle2 size={8} />}
                                         </div>
                                         <span className="font-mono" title="Latest task end date">
                                             {plannerDateStr ? new Date(plannerDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}
@@ -544,8 +547,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
       <div className="bg-slate-50 border-t border-slate-200 p-2 text-[10px] text-slate-400 text-center flex justify-between items-center px-4">
           <span>* FE/BE in parallel</span>
           <div className="flex gap-4">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> On Track</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Delayed</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Safe Plan (Plan &ge; Est)</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Aggressive Plan (Plan &lt; Est)</span>
           </div>
       </div>
     </div>

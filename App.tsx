@@ -143,6 +143,7 @@ const App: React.FC = () => {
   }, []);
 
   const [isDebugLogEnabled, setIsDebugLogEnabled] = useState(false);
+  const [isAIEnabled, setIsAIEnabled] = useState(false);
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const nextLogId = useRef(0);
   
@@ -894,7 +895,12 @@ const App: React.FC = () => {
                     )}
                     {activeTab === 'settings' && (
                         <div className="max-w-4xl mx-auto h-full overflow-y-auto custom-scrollbar">
-                           <Settings isDebugLogEnabled={isDebugLogEnabled} setIsDebugLogEnabled={setIsDebugLogEnabled} />
+                           <Settings 
+                                isDebugLogEnabled={isDebugLogEnabled} 
+                                setIsDebugLogEnabled={setIsDebugLogEnabled} 
+                                isAIEnabled={isAIEnabled}
+                                setIsAIEnabled={setIsAIEnabled}
+                           />
                         </div>
                     )}
                 </div>
@@ -902,7 +908,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Floating Components */}
-        <DebugLog entries={logEntries} setEntries={setLogEntries} />
+        {isDebugLogEnabled && <DebugLog entries={logEntries} setEntries={setLogEntries} />}
         {showHistory && (
             <VersionHistory 
                 onClose={() => setShowHistory(false)} 
@@ -910,12 +916,12 @@ const App: React.FC = () => {
                 onSaveCurrent={saveCurrentVersion}
             />
         )}
-        <AIAssistant 
+        {isAIEnabled && <AIAssistant 
             projects={projects}
             resources={resources}
             onAddTask={addTask}
             onAssignResource={updateAssignmentResourceName}
-        />
+        />}
     </div>
   );
 };
