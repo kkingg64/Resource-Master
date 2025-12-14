@@ -48,8 +48,14 @@ export interface ProjectModule {
   id: string;
   name: string;
   legacyFunctionPoints: number; // Total legacy system size (for Fact Findings)
-  functionPoints: number; // Target MVP size (for Build)
-  complexity?: ComplexityLevel; // Multiplier for effort
+  functionPoints: number; // Target MVP size (Legacy field, now split)
+  complexity?: ComplexityLevel; // Legacy field
+  
+  frontendFunctionPoints?: number;
+  backendFunctionPoints?: number;
+  frontendComplexity?: ComplexityLevel;
+  backendComplexity?: ComplexityLevel;
+
   tasks: ProjectTask[];
   sort_order?: number;
 }
