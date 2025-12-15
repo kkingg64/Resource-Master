@@ -51,11 +51,67 @@ const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: Compl
     );
 };
 
+// --- Improved Input Component ---
+interface EstimatorNumberInputProps {
+    value: number;
+    onChange: (val: number) => void;
+    min?: number;
+    className?: string;
+    onNavigate: (dir: string, r: number, c: number) => void;
+    rowIndex: number;
+    colIndex: number;
+}
+
+const EstimatorNumberInput: React.FC<EstimatorNumberInputProps> = ({ value, onChange, min = 0, className, onNavigate, rowIndex, colIndex }) => {
+    const [localValue, setLocalValue] = useState(String(value));
+    const [isEditing, setIsEditing] = useState(false);
+
+    useEffect(() => {
+        if (!isEditing) {
+            setLocalValue(String(value));
+        }
+    }, [value, isEditing]);
+
+    const commit = () => {
+        let num = parseFloat(localValue);
+        if (isNaN(num)) num = min;
+        if (num < min) num = min;
+        onChange(num);
+        setIsEditing(false);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            e.preventDefault();
+            commit();
+            onNavigate(e.key, rowIndex, colIndex);
+        }
+        if (e.key === 'Enter') {
+            e.currentTarget.blur();
+        }
+    };
+
+    return (
+        <input 
+            type="text" 
+            data-r={rowIndex}
+            data-c={colIndex}
+            data-grid="estimator"
+            className={className}
+            value={localValue}
+            onChange={(e) => setLocalValue(e.target.value)}
+            onBlur={commit}
+            onFocus={(e) => { setIsEditing(true); e.target.select(); }}
+            onKeyDown={handleKeyDown}
+        />
+    );
+};
+
+
 export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateFunctionPoints, onUpdateModuleComplexity, onUpdateModuleStartDate, onUpdateModuleDeliveryTask, onUpdateModuleStartTask, onReorderModules }) => {
   const [selectedProjectId, setSelectedProjectId] = useState<string>(projects[0]?.id || '');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   
-  // Strict HK Working Day Calculation: Only filter holidays where country is 'HK'
   const holidaySet = useMemo(() => new Set(
     holidays
         .filter(h => h.country === 'HK')
@@ -76,15 +132,12 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
     let totalRefFP = 0;
     let totalFeFP = 0;
     let totalBeFP = 0;
-    
     let totalPrepEffort = 0;
     let totalFeEffort = 0;
     let totalBeEffort = 0;
-
     let totalPrepDuration = 0;
     let totalFeDuration = 0;
     let totalBeDuration = 0;
-
     let projectMaxEstDate: Date | null = null;
     let projectMaxPlanDate: Date | null = null;
     let totalVarianceDays = 0;
@@ -94,7 +147,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         const beFP = m.backendFunctionPoints || 0;
         const hasFP = feFP > 0 || beFP > 0;
         
-        // Use edited legacyFunctionPoints as the Reference FP
         const prepBase = m.legacyFunctionPoints || 0;
         totalRefFP += prepBase;
 
@@ -122,10 +174,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         totalBeEffort += beEffort;
         totalBeDuration += beDuration;
 
-        // --- Date Calculation for Totals ---
         const moduleTotalDuration = Math.max(feDuration, beDuration);
-
-        // 1. Determine Base Start Date for this Module
         let baseStartDate = m.startDate || null;
         if (!baseStartDate && m.startTaskId) {
             const task = m.tasks.find(t => t.id === m.startTaskId);
@@ -151,7 +200,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
              baseStartDate = minDate;
         }
 
-        // 2. Calculate Estimated End Date for Module
         let estDate: Date | null = null;
         if (hasFP && baseStartDate) {
             if (moduleTotalDuration > 0) {
@@ -160,13 +208,11 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
             } else {
                 estDate = new Date(baseStartDate.replace(/-/g, '/'));
             }
-            
             if (estDate && (!projectMaxEstDate || estDate > projectMaxEstDate)) {
                 projectMaxEstDate = estDate;
             }
         }
 
-        // 3. Calculate Planned End Date from Planner (Actual Assignments)
         let modMaxEndDate: Date | null = null;
         m.tasks.forEach(task => {
             task.assignments.forEach(a => {
@@ -186,136 +232,67 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
             }
         }
 
-        // 4. Calculate Individual Variance Contribution
         if (estDate && modMaxEndDate) {
             const estStr = formatDateForInput(estDate);
             const planStr = formatDateForInput(modMaxEndDate);
-            
             let days = 0;
             if (estStr === planStr) {
                 days = 0;
             } else if (estStr < planStr) {
-                // Est is earlier than Plan (Saved time). Negative.
                 days = - (calculateWorkingDaysBetween(estStr, planStr, holidaySet) - 1);
             } else {
-                // Est is later than Plan (Need more time). Positive.
                 days = calculateWorkingDaysBetween(planStr, estStr, holidaySet) - 1;
             }
             totalVarianceDays += days;
         }
     });
 
-    return {
-        refFP: totalRefFP,
-        feFP: totalFeFP,
-        beFP: totalBeFP,
-        prepEffort: totalPrepEffort,
-        feEffort: totalFeEffort,
-        beEffort: totalBeEffort,
-        prepDuration: totalPrepDuration,
-        feDuration: totalFeDuration,
-        beDuration: totalBeDuration,
-        projectMaxEstDate,
-        projectMaxPlanDate,
-        totalVarianceDays
-    };
+    return { refFP: totalRefFP, feFP: totalFeFP, beFP: totalBeFP, prepEffort: totalPrepEffort, feEffort: totalFeEffort, beEffort: totalBeEffort, prepDuration: totalPrepDuration, feDuration: totalFeDuration, beDuration: totalBeDuration, projectMaxEstDate, projectMaxPlanDate, totalVarianceDays };
   }, [modules, holidaySet]);
 
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    e.dataTransfer.setData("text/plain", index.toString());
-    setDraggedIndex(index);
-  };
+  const handleDragStart = (e: React.DragEvent, index: number) => { e.dataTransfer.setData("text/plain", index.toString()); setDraggedIndex(index); };
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); };
+  const handleDrop = (e: React.DragEvent, index: number) => { e.preventDefault(); const startIndex = parseInt(e.dataTransfer.getData("text/plain"), 10); if (!isNaN(startIndex) && startIndex !== index) { onReorderModules(selectedProjectId, startIndex, index); } setDraggedIndex(null); };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
+  const formatWeeks = (days: number) => { if (!days || isNaN(days)) return '0.0w'; const weeks = (days / 5).toFixed(1); return `${weeks}w`; };
+  const getTaskStartDate = (module: ProjectModule, taskId: string): string | null => { const task = module.tasks.find(t => t.id === taskId); if (!task) return null; let minStart: string | null = null; task.assignments.forEach(a => { if (a.startDate) { if (!minStart || a.startDate < minStart) { minStart = a.startDate; } } }); return minStart; };
+  const getModuleLatestEndDate = (module: ProjectModule): Date | null => { let maxEndDate: Date | null = null; module.tasks.forEach(task => { task.assignments.forEach(a => { if (a.startDate && a.duration) { const endDateStr = calculateEndDate(a.startDate, a.duration, holidaySet); const endDate = new Date(endDateStr.replace(/-/g, '/')); if (!maxEndDate || endDate > maxEndDate) { maxEndDate = endDate; } } }); }); return maxEndDate; }
+  const getModuleEarliestStartDate = (module: ProjectModule): string | null => { let minDate: string | null = null; module.tasks.forEach(task => { task.assignments.forEach(a => { if (a.startDate) { if (!minDate || a.startDate < minDate) { minDate = a.startDate; } } }); }); return minDate; }
 
-  const handleDrop = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    const startIndex = parseInt(e.dataTransfer.getData("text/plain"), 10);
-    if (!isNaN(startIndex) && startIndex !== index) {
-      onReorderModules(selectedProjectId, startIndex, index);
+  // --- Estimator Navigation ---
+  const handleNavigate = (direction: string, currentRow: number, currentCol: number) => {
+    let targetRow = currentRow;
+    let targetCol = currentCol;
+
+    if (direction === 'ArrowUp') targetRow--;
+    if (direction === 'ArrowDown') targetRow++;
+    if (direction === 'ArrowLeft') targetCol--;
+    if (direction === 'ArrowRight') targetCol++;
+
+    const selector = `input[data-grid="estimator"][data-r="${targetRow}"][data-c="${targetCol}"]`;
+    const el = document.querySelector(selector) as HTMLInputElement;
+    if (el) {
+        el.focus();
+        el.select();
     }
-    setDraggedIndex(null);
   };
-
-  const formatWeeks = (days: number) => {
-    if (!days || isNaN(days)) return '0.0w';
-    const weeks = (days / 5).toFixed(1);
-    return `${weeks}w`;
-  };
-
-  const getTaskStartDate = (module: ProjectModule, taskId: string): string | null => {
-      const task = module.tasks.find(t => t.id === taskId);
-      if (!task) return null;
-      let minStart: string | null = null;
-      task.assignments.forEach(a => {
-          if (a.startDate) {
-              if (!minStart || a.startDate < minStart) {
-                  minStart = a.startDate;
-              }
-          }
-      });
-      return minStart;
-  };
-
-  const getModuleLatestEndDate = (module: ProjectModule): Date | null => {
-      let maxEndDate: Date | null = null;
-      module.tasks.forEach(task => {
-          task.assignments.forEach(a => {
-              if (a.startDate && a.duration) {
-                  const endDateStr = calculateEndDate(a.startDate, a.duration, holidaySet);
-                  const endDate = new Date(endDateStr.replace(/-/g, '/'));
-                  if (!maxEndDate || endDate > maxEndDate) {
-                      maxEndDate = endDate;
-                  }
-              }
-          });
-      });
-      return maxEndDate;
-  }
-
-  const getModuleEarliestStartDate = (module: ProjectModule): string | null => {
-      let minDate: string | null = null;
-      module.tasks.forEach(task => {
-          task.assignments.forEach(a => {
-              if (a.startDate) {
-                  if (!minDate || a.startDate < minDate) {
-                      minDate = a.startDate;
-                  }
-              }
-          });
-      });
-      return minDate;
-  }
 
 
   return (
     <div className="flex flex-col h-full bg-slate-50 border border-slate-200 rounded-lg overflow-hidden">
-      {/* Header */}
       <div className="bg-white border-b border-slate-200 px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-4 flex-shrink-0">
         <div>
-            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                <Calculator className="w-4 h-4 text-indigo-600" />
-                Effort Estimator
-            </h2>
+            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2"><Calculator className="w-4 h-4 text-indigo-600" />Effort Estimator</h2>
             <div className="flex items-center gap-2 mt-1.5">
                 <span className="text-[10px] text-slate-500 uppercase tracking-wide">Project:</span>
-                <select 
-                    className="text-xs border-slate-300 rounded focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 border py-1 pl-2 pr-6 h-7"
-                    value={selectedProjectId}
-                    onChange={(e) => setSelectedProjectId(e.target.value)}
-                >
-                    {projects.map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
+                <select className="text-xs border-slate-300 rounded focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 border py-1 pl-2 pr-6 h-7" value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
+                    {projects.map(p => (<option key={p.id} value={p.id}>{p.name}</option>))}
                 </select>
                 <span className="text-[10px] text-slate-400 ml-2">(Est. based on HK Holidays)</span>
             </div>
         </div>
       </div>
 
-      {/* Table Container */}
       <div className="flex-1 overflow-auto bg-white relative">
         <table className="w-full text-left border-collapse table-fixed">
             <colgroup>
@@ -354,27 +331,23 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                 <tr className="text-[9px] text-slate-500">
                     <th className="border-b border-slate-200 bg-slate-50"></th>
                     <th className="border-b border-slate-200 border-r bg-slate-50"></th>
-                    
                     <th className="py-1 text-center border-b border-slate-200 bg-amber-50/30">Ref FP</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-amber-50/30">Vel</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-amber-50/30">Team</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-amber-50/30">M.D.</th>
                     <th className="py-1 text-center border-b border-slate-200 border-r bg-amber-50/30">Wks</th>
-
                     <th className="py-1 text-center border-b border-slate-200 bg-blue-50/30">FP</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-blue-50/30">Vel</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-blue-50/30">Team</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-blue-50/30">Cpx</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-blue-50/30">M.D.</th>
                     <th className="py-1 text-center border-b border-slate-200 border-r bg-blue-50/30">Wks</th>
-
                     <th className="py-1 text-center border-b border-slate-200 bg-indigo-50/30">FP</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-indigo-50/30">Vel</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-indigo-50/30">Team</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-indigo-50/30">Cpx</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-indigo-50/30">M.D.</th>
                     <th className="py-1 text-center border-b border-slate-200 border-r bg-indigo-50/30">Wks</th>
-                    
                     <th className="py-1 text-center border-b border-slate-200 bg-slate-50">Start</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-slate-50">Dates</th>
                     <th className="py-1 text-center border-b border-slate-200 bg-slate-50">Var</th>
@@ -382,168 +355,77 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
             </thead>
             <tbody className="divide-y divide-slate-100 text-[11px]">
                 {modules.length === 0 && (
-                    <tr>
-                        <td colSpan={22} className="p-12 text-center text-slate-400 bg-slate-50/30">
-                            <div className="flex flex-col items-center justify-center gap-2">
-                                <Layout className="w-8 h-8 text-slate-300"/>
-                                <p>No modules found.</p>
-                            </div>
-                        </td>
-                    </tr>
+                    <tr><td colSpan={22} className="p-12 text-center text-slate-400 bg-slate-50/30"><div className="flex flex-col items-center justify-center gap-2"><Layout className="w-8 h-8 text-slate-300"/><p>No modules found.</p></div></td></tr>
                 )}
                 {modules.map((m, index) => {
                     const feFP = m.frontendFunctionPoints || 0;
                     const beFP = m.backendFunctionPoints || 0;
                     const hasFP = feFP > 0 || beFP > 0;
-                    
                     const prepBase = m.legacyFunctionPoints || 0;
                     const prepVelocity = m.prepVelocity || 10;
                     const prepTeamSize = m.prepTeamSize || 2;
                     const prepEffort = Math.ceil(prepBase / prepVelocity);
                     const prepDuration = Math.ceil(prepEffort / prepTeamSize);
-
                     const feVel = m.frontendVelocity || 5;
                     const feTeam = m.frontendTeamSize || 2;
                     const feComp = m.frontendComplexity || 'Medium';
                     const feEffort = Math.ceil((feFP / feVel) * COMPLEXITY_MULTIPLIERS[feComp]);
                     const feDuration = Math.ceil(feEffort / feTeam);
-
                     const beVel = m.backendVelocity || 5;
                     const beTeam = m.backendTeamSize || 2;
                     const beComp = m.backendComplexity || 'Medium';
                     const beEffort = Math.ceil((beFP / beVel) * COMPLEXITY_MULTIPLIERS[beComp]);
                     const beDuration = Math.ceil(beEffort / beTeam);
-
                     const totalDuration = Math.max(feDuration, beDuration);
                     
                     let baseStartDate = m.startDate || null;
                     let isTaskBased = false;
                     let startTaskName = '';
+                    if (!baseStartDate && m.startTaskId) { const taskStart = getTaskStartDate(m, m.startTaskId); if (taskStart) { baseStartDate = taskStart; isTaskBased = true; startTaskName = m.tasks.find(t => t.id === m.startTaskId)?.name || ''; } }
+                    if (!baseStartDate) { baseStartDate = getModuleEarliestStartDate(m); }
 
-                    if (!baseStartDate && m.startTaskId) {
-                        const taskStart = getTaskStartDate(m, m.startTaskId);
-                        if (taskStart) {
-                            baseStartDate = taskStart;
-                            isTaskBased = true;
-                            startTaskName = m.tasks.find(t => t.id === m.startTaskId)?.name || '';
-                        }
-                    }
-                    
-                    if (!baseStartDate) {
-                        baseStartDate = getModuleEarliestStartDate(m);
-                    }
-
-                    // Calculate "Estimated" Delivery Date
                     let estimatedDateStr: string | null = null;
-                    if (hasFP) {
-                        if (baseStartDate && totalDuration > 0) {
-                            estimatedDateStr = calculateEndDate(baseStartDate, totalDuration, holidaySet);
-                        } else if (baseStartDate && totalDuration === 0) {
-                            estimatedDateStr = formatDateForInput(new Date(baseStartDate.replace(/-/g, '/')));
-                        }
-                    }
-
-                    // Calculate "Planned" Delivery Date
+                    if (hasFP) { if (baseStartDate && totalDuration > 0) { estimatedDateStr = calculateEndDate(baseStartDate, totalDuration, holidaySet); } else if (baseStartDate && totalDuration === 0) { estimatedDateStr = formatDateForInput(new Date(baseStartDate.replace(/-/g, '/'))); } }
                     const plannerDateObj = getModuleLatestEndDate(m);
                     const plannerDateStr = plannerDateObj ? formatDateForInput(plannerDateObj) : null;
-
-                    // Variance Calculation
                     let varianceStatus: 'safe' | 'risk' | 'unknown' = 'unknown';
                     let varianceText = '-';
                     let varianceClass = 'text-slate-300';
-
-                    if (estimatedDateStr && plannerDateStr) {
-                        if (estimatedDateStr <= plannerDateStr) {
-                             // Est is earlier or same as Plan -> Safe (Negative Variance)
-                             varianceStatus = 'safe';
-                             // calculateWorkingDaysBetween returns total days inclusive.
-                             // Example: 1st to 1st = 1 day -> diff should be 0.
-                             // 1st to 2nd = 2 days -> diff should be 1.
-                             let diff = calculateWorkingDaysBetween(estimatedDateStr, plannerDateStr, holidaySet) - 1;
-                             if(estimatedDateStr === plannerDateStr) diff = 0;
-                             
-                             // Logic: Saved Time = Negative. So we negate the positive diff.
-                             const savedDays = -diff; 
-                             
-                             varianceText = `${savedDays}d`;
-                             varianceClass = 'text-green-600 font-bold';
-                        } else {
-                             // Est is later than Plan -> Risk (Positive Variance)
-                             varianceStatus = 'risk';
-                             const diff = calculateWorkingDaysBetween(plannerDateStr, estimatedDateStr, holidaySet) - 1;
-                             varianceText = `+${diff}d`;
-                             varianceClass = 'text-red-600 font-bold';
-                        }
-                    }
-
-                    const updateParams = (
-                        legacyFP: number, 
-                        feFP: number, 
-                        beFP: number, 
-                        pVel: number, 
-                        pTeam: number,
-                        fVel: number,
-                        fTeam: number,
-                        bVel: number,
-                        bTeam: number
-                    ) => {
-                        onUpdateFunctionPoints(
-                            selectedProjectId, 
-                            m.id, 
-                            legacyFP, 
-                            feFP, 
-                            beFP, 
-                            pVel, 
-                            pTeam,
-                            fVel,
-                            fTeam,
-                            bVel,
-                            bTeam
-                        );
-                    };
-
+                    if (estimatedDateStr && plannerDateStr) { if (estimatedDateStr <= plannerDateStr) { varianceStatus = 'safe'; let diff = calculateWorkingDaysBetween(estimatedDateStr, plannerDateStr, holidaySet) - 1; if(estimatedDateStr === plannerDateStr) diff = 0; const savedDays = -diff; varianceText = `${savedDays}d`; varianceClass = 'text-green-600 font-bold'; } else { varianceStatus = 'risk'; const diff = calculateWorkingDaysBetween(plannerDateStr, estimatedDateStr, holidaySet) - 1; varianceText = `+${diff}d`; varianceClass = 'text-red-600 font-bold'; } }
+                    const updateParams = (legacyFP: number, feFP: number, beFP: number, pVel: number, pTeam: number, fVel: number, fTeam: number, bVel: number, bTeam: number) => { onUpdateFunctionPoints(selectedProjectId, m.id, legacyFP, feFP, beFP, pVel, pTeam, fVel, fTeam, bVel, bTeam); };
                     let cellBgClass = 'bg-white';
                     if (varianceStatus === 'risk') cellBgClass = 'bg-red-50';
                     if (varianceStatus === 'safe') cellBgClass = 'bg-green-50';
 
+                    const baseInputClass = "w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500";
+
                     return (
-                        <tr 
-                            key={m.id}
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, index)}
-                            onDragOver={handleDragOver}
-                            onDrop={(e) => handleDrop(e, index)}
-                            className={`hover:bg-slate-50 transition-colors group ${draggedIndex === index ? 'opacity-40 bg-slate-100' : ''}`}
-                        >
-                            <td className="text-center text-slate-300 cursor-grab active:cursor-grabbing border-b border-slate-100">
-                                <div className="flex justify-center group-hover:text-slate-500"><GripVertical size={12} /></div>
-                            </td>
-                            <td className="px-2 py-1.5 border-b border-slate-100 border-r border-slate-200">
-                                <span className="font-medium text-slate-700 truncate block w-full" title={m.name}>{m.name}</span>
-                            </td>
+                        <tr key={m.id} draggable onDragStart={(e) => handleDragStart(e, index)} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, index)} className={`hover:bg-slate-50 transition-colors group ${draggedIndex === index ? 'opacity-40 bg-slate-100' : ''}`}>
+                            <td className="text-center text-slate-300 cursor-grab active:cursor-grabbing border-b border-slate-100"><div className="flex justify-center group-hover:text-slate-500"><GripVertical size={12} /></div></td>
+                            <td className="px-2 py-1.5 border-b border-slate-100 border-r border-slate-200"><span className="font-medium text-slate-700 truncate block w-full" title={m.name}>{m.name}</span></td>
                             
                             {/* Prep */}
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <input type="number" min="0" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-600" value={m.legacyFunctionPoints || 0} onChange={(e) => updateParams(parseInt(e.target.value) || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={0} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={m.legacyFunctionPoints || 0} onChange={(val) => updateParams(val, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                    <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={prepVelocity} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, parseInt(e.target.value) || 1, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={1} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={prepVelocity} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, val, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                    <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={prepTeamSize} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, parseInt(e.target.value) || 1, feVel, feTeam, beVel, beTeam)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={2} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={prepTeamSize} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, val, feVel, feTeam, beVel, beTeam)} />
                             </td>
                             <td className="px-1 text-center border-b border-slate-100 text-slate-400 font-mono">{prepEffort || '-'}</td>
                             <td className="px-1 text-center border-b border-slate-100 border-r border-slate-200 text-amber-700 font-medium">{formatWeeks(prepDuration)}</td>
 
                             {/* FE */}
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <input type="number" min="0" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-600" value={m.frontendFunctionPoints || 0} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, parseInt(e.target.value) || 0, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={3} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={m.frontendFunctionPoints || 0} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, val, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={feVel} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, parseInt(e.target.value) || 1, feTeam, beVel, beTeam)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={4} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={feVel} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, val, feTeam, beVel, beTeam)} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={feTeam} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, parseInt(e.target.value) || 1, beVel, beTeam)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={5} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={feTeam} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, val, beVel, beTeam)} />
                             </td>
                             <td className="p-0 border-b border-slate-100">
                                 <ComplexitySelect value={feComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'frontend', val)} />
@@ -553,13 +435,13 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
 
                             {/* BE */}
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <input type="number" min="0" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-600" value={m.backendFunctionPoints || 0} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, feFP, parseInt(e.target.value) || 0, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={6} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={m.backendFunctionPoints || 0} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, val, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={beVel} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, parseInt(e.target.value) || 1, beTeam)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={7} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={beVel} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, val, beTeam)} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <input type="number" min="1" className="w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 text-slate-500" value={beTeam} onChange={(e) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, parseInt(e.target.value) || 1)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={8} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={beTeam} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, val)} />
                             </td>
                             <td className="p-0 border-b border-slate-100">
                                 <ComplexitySelect value={beComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'backend', val)} />
@@ -569,97 +451,31 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
 
                             {/* Start */}
                             <td className="p-0 border-b border-slate-100 bg-slate-50/30 relative group/start">
-                                {/* Task/Auto/Manual Selector Overlay */}
                                 <div className="absolute inset-0 opacity-0 group-hover/start:opacity-100 transition-opacity bg-white/95 flex items-center justify-center shadow-sm z-20">
                                     <div className="relative w-full h-full">
-                                        <select 
-                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                            value={m.startTaskId || (m.startDate ? 'manual' : '')}
-                                            onChange={(e) => {
-                                                const val = e.target.value;
-                                                if (val === 'manual' || val === '') {
-                                                    // Clear task selection
-                                                    onUpdateModuleStartTask(selectedProjectId, m.id, null);
-                                                    if(val === '') {
-                                                        // Also clear manual date to go to Auto
-                                                        onUpdateModuleStartDate(selectedProjectId, m.id, null);
-                                                    }
-                                                } else {
-                                                    // Set task selection (this will override manual date logic in UI)
-                                                    onUpdateModuleStartTask(selectedProjectId, m.id, val);
-                                                }
-                                            }}
-                                        >
+                                        <select className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" value={m.startTaskId || (m.startDate ? 'manual' : '')} onChange={(e) => { const val = e.target.value; if (val === 'manual' || val === '') { onUpdateModuleStartTask(selectedProjectId, m.id, null); if(val === '') { onUpdateModuleStartDate(selectedProjectId, m.id, null); } } else { onUpdateModuleStartTask(selectedProjectId, m.id, val); } }}>
                                             <option value="">- Auto (Earliest) -</option>
                                             <option value="manual">- Manual Date -</option>
-                                            <optgroup label="Select Task">
-                                                {m.tasks.map(t => (
-                                                    <option key={t.id} value={t.id}>{t.name}</option>
-                                                ))}
-                                            </optgroup>
+                                            <optgroup label="Select Task">{m.tasks.map(t => (<option key={t.id} value={t.id}>{t.name}</option>))}</optgroup>
                                         </select>
-                                        <div className="w-full h-full flex flex-col items-center justify-center text-[9px] text-indigo-600 pointer-events-none p-1">
-                                            <Link2 size={10} /> 
-                                            <span className="truncate w-full text-center">Change Source</span>
-                                        </div>
+                                        <div className="w-full h-full flex flex-col items-center justify-center text-[9px] text-indigo-600 pointer-events-none p-1"><Link2 size={10} /> <span className="truncate w-full text-center">Change Source</span></div>
                                     </div>
                                 </div>
-
-                                {/* Actual Display Content */}
                                 <div className="w-full h-full flex flex-col items-center justify-center text-[10px] relative z-10 px-1">
-                                    {isTaskBased ? (
-                                        <>
-                                            <span className="text-indigo-700 font-bold truncate w-full text-center" title={`Starts with: ${startTaskName}`}>{startTaskName}</span>
-                                            <span className="text-[9px] text-slate-400">{baseStartDate ? new Date(baseStartDate).toLocaleDateString(undefined, {month:'numeric', day:'numeric'}) : '-'}</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <input 
-                                                type="date" 
-                                                className={`w-full bg-transparent text-center focus:outline-none ${m.startDate ? 'text-indigo-700 font-bold' : 'text-slate-500'}`}
-                                                value={m.startDate || (baseStartDate || '')} 
-                                                onChange={(e) => onUpdateModuleStartDate(selectedProjectId, m.id, e.target.value)}
-                                            />
-                                            {!m.startDate && baseStartDate && <span className="text-[8px] text-slate-300 absolute bottom-0.5 right-1">Auto</span>}
-                                        </>
-                                    )}
+                                    {isTaskBased ? ( <> <span className="text-indigo-700 font-bold truncate w-full text-center" title={`Starts with: ${startTaskName}`}>{startTaskName}</span> <span className="text-[9px] text-slate-400">{baseStartDate ? new Date(baseStartDate).toLocaleDateString(undefined, {month:'numeric', day:'numeric'}) : '-'}</span> </> ) : ( <> <input type="date" className={`w-full bg-transparent text-center focus:outline-none ${m.startDate ? 'text-indigo-700 font-bold' : 'text-slate-500'}`} value={m.startDate || (baseStartDate || '')} onChange={(e) => onUpdateModuleStartDate(selectedProjectId, m.id, e.target.value)} /> {!m.startDate && baseStartDate && <span className="text-[8px] text-slate-300 absolute bottom-0.5 right-1">Auto</span>} </> )}
                                 </div>
                             </td>
 
-                            {/* Delivery (Dates Comparison) */}
+                            {/* Delivery */}
                             <td className={`px-1 border-b border-slate-100 text-right align-middle ${cellBgClass}`}>
                                 <div className="flex flex-col gap-0.5 py-1 px-1 h-full justify-center">
-                                     {/* Estimated Date */}
-                                     <div className="flex items-center justify-between gap-2 text-[9px] text-slate-400 border-b border-slate-200/50 pb-0.5">
-                                        <span>Est:</span>
-                                        <span className="font-mono">
-                                            {estimatedDateStr ? new Date(estimatedDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}
-                                        </span>
-                                     </div>
-
-                                     {/* Planner Date */}
-                                     <div className={`flex items-center justify-between gap-2 text-[10px] font-bold ${
-                                         varianceStatus === 'safe' ? 'text-green-700' : 
-                                         varianceStatus === 'risk' ? 'text-red-700' : 'text-slate-600'
-                                     }`}>
-                                        <div className="flex items-center gap-1">
-                                            <span>Plan:</span>
-                                            {varianceStatus === 'risk' && <AlertCircle size={8} />}
-                                            {varianceStatus === 'safe' && <CheckCircle2 size={8} />}
-                                        </div>
-                                        <span className="font-mono" title="Latest task end date">
-                                            {plannerDateStr ? new Date(plannerDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}
-                                        </span>
-                                     </div>
+                                     <div className="flex items-center justify-between gap-2 text-[9px] text-slate-400 border-b border-slate-200/50 pb-0.5"><span>Est:</span><span className="font-mono">{estimatedDateStr ? new Date(estimatedDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div>
+                                     <div className={`flex items-center justify-between gap-2 text-[10px] font-bold ${varianceStatus === 'safe' ? 'text-green-700' : varianceStatus === 'risk' ? 'text-red-700' : 'text-slate-600'}`}><div className="flex items-center gap-1"><span>Plan:</span>{varianceStatus === 'risk' && <AlertCircle size={8} />}{varianceStatus === 'safe' && <CheckCircle2 size={8} />}</div><span className="font-mono" title="Latest task end date">{plannerDateStr ? new Date(plannerDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div>
                                 </div>
                             </td>
 
                              {/* Variance */}
-                            <td className={`px-1 border-b border-slate-100 text-center align-middle border-r border-slate-200 ${cellBgClass}`}>
-                                <span className={`text-[10px] font-mono ${varianceClass}`}>
-                                    {varianceText}
-                                </span>
-                            </td>
+                            <td className={`px-1 border-b border-slate-100 text-center align-middle border-r border-slate-200 ${cellBgClass}`}><span className={`text-[10px] font-mono ${varianceClass}`}>{varianceText}</span></td>
                         </tr>
                     );
                 })}
@@ -680,55 +496,15 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     <td className="text-center text-slate-700">{totals.beEffort}</td>
                     <td className="text-center text-indigo-700 border-r border-slate-300">{formatWeeks(totals.beDuration)}</td>
                     <td className="text-center text-slate-400 border-b border-slate-200 bg-slate-50">-</td>
-                    <td className="px-1 py-1 border-b border-slate-200 bg-slate-50 text-right">
-                        <div className="flex flex-col gap-0.5 justify-center h-full">
-                             <div className="flex items-center justify-between gap-2 text-[9px] text-slate-400 border-b border-slate-200/50 pb-0.5">
-                                <span>Max Est:</span>
-                                <span className="font-mono">
-                                    {totals.projectMaxEstDate ? totals.projectMaxEstDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}
-                                </span>
-                             </div>
-                             <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-slate-700">
-                                <span>Max Plan:</span>
-                                <span className="font-mono">
-                                    {totals.projectMaxPlanDate ? totals.projectMaxPlanDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}
-                                </span>
-                             </div>
-                        </div>
-                    </td>
+                    <td className="px-1 py-1 border-b border-slate-200 bg-slate-50 text-right"><div className="flex flex-col gap-0.5 justify-center h-full"><div className="flex items-center justify-between gap-2 text-[9px] text-slate-400 border-b border-slate-200/50 pb-0.5"><span>Max Est:</span><span className="font-mono">{totals.projectMaxEstDate ? totals.projectMaxEstDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div><div className="flex items-center justify-between gap-2 text-[10px] font-bold text-slate-700"><span>Max Plan:</span><span className="font-mono">{totals.projectMaxPlanDate ? totals.projectMaxPlanDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div></div></td>
                     <td className="px-1 border-b border-slate-200 bg-slate-50 text-center">
-                       {(() => {
-                           // Total Variance is now the SUM of individual variances, not the variance of the Max dates.
-                           const days = totals.totalVarianceDays;
-                           let varianceClass = 'text-slate-300';
-                           let varianceText = '-';
-
-                           if (days !== 0) {
-                               const sign = days > 0 ? '+' : '';
-                               varianceText = `${sign}${days}d`;
-                               if (days > 0) varianceClass = 'text-red-600 font-bold'; // Positive = Late
-                               else varianceClass = 'text-green-600 font-bold'; // Negative = Early
-                           } else {
-                               varianceText = '0d';
-                               varianceClass = 'text-green-600 font-bold';
-                           }
-
-                           return <span className={`text-[10px] font-mono ${varianceClass}`}>{varianceText}</span>;
-                       })()}
+                       {(() => { const days = totals.totalVarianceDays; let varianceClass = 'text-slate-300'; let varianceText = '-'; if (days !== 0) { const sign = days > 0 ? '+' : ''; varianceText = `${sign}${days}d`; if (days > 0) varianceClass = 'text-red-600 font-bold'; else varianceClass = 'text-green-600 font-bold'; } else { varianceText = '0d'; varianceClass = 'text-green-600 font-bold'; } return <span className={`text-[10px] font-mono ${varianceClass}`}>{varianceText}</span>; })()}
                     </td>
                 </tr>
             </tfoot>
         </table>
       </div>
-      
-      {/* Footer Info */}
-      <div className="bg-slate-50 border-t border-slate-200 p-2 text-[10px] text-slate-400 text-center flex justify-between items-center px-4">
-          <span>* FE/BE in parallel</span>
-          <div className="flex gap-4">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Saved Days (Negative)</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Delays (Positive)</span>
-          </div>
-      </div>
+      <div className="bg-slate-50 border-t border-slate-200 p-2 text-[10px] text-slate-400 text-center flex justify-between items-center px-4"><span>* FE/BE in parallel</span><div className="flex gap-4"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Saved Days (Negative)</span><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Delays (Positive)</span></div></div>
     </div>
   );
 };
