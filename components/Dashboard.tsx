@@ -21,13 +21,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
   // 1. Calculate General Stats
   const stats = useMemo(() => {
     let totalFP = 0;
+    let totalFeFP = 0;
+    let totalBeFP = 0;
     let totalAllocatedDays = 0;
     let unassignedCount = 0;
     const unassignedTasks: { projectName: string, moduleName: string, taskName: string }[] = [];
 
     projects.forEach(p => {
         p.modules.forEach(m => {
-            totalFP += m.functionPoints;
+            totalFP += m.functionPoints || 0;
+            totalFeFP += m.frontendFunctionPoints || 0;
+            totalBeFP += m.backendFunctionPoints || 0;
+            
             m.tasks.forEach(t => {
                 t.assignments.forEach(a => {
                     const isUnassigned = !a.resourceName || a.resourceName === 'Unassigned';
@@ -47,7 +52,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
         });
     });
 
-    return { totalFP, totalAllocatedDays, unassignedCount, unassignedTasks };
+    return { totalFP, totalFeFP, totalBeFP, totalAllocatedDays, unassignedCount, unassignedTasks };
   }, [projects]);
 
   // 2. Resource Utilization Logic
@@ -153,8 +158,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
     });
   }, [projects, GLOBAL_TIMELINE_DATA]);
 
-  // 5. Conflict Detection
-  const conflicts = useMemo(() => {
+  // 5. Conflict Detection (Grouped by Resource)
+  const conflictsByResource = useMemo(() => {
     const usage: Record<string, Record<string, { total: number, modules: Set<string> }>> = {};
     
     projects.forEach(p => {
@@ -175,22 +180,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
         });
     });
 
-    const result: { resource: string, weekId: string, total: number, modules: string[] }[] = [];
+    const result: Record<string, { weekId: string, total: number, modules: string[] }[]> = {};
+    
     Object.entries(usage).forEach(([res, weeks]) => {
         Object.entries(weeks).forEach(([weekId, data]) => {
             // Conflict if allocated more than 5 days OR works on multiple modules
-            if (data.modules.size > 1) {
-                result.push({ 
-                    resource: res, 
-                    weekId, 
-                    total: data.total, 
-                    modules: Array.from(data.modules) 
+            if (data.modules.size > 1 || data.total > 5) {
+                if (!result[res]) result[res] = [];
+                result[res].push({
+                    weekId,
+                    total: data.total,
+                    modules: Array.from(data.modules)
                 });
             }
         });
     });
     
-    return result.sort((a,b) => a.weekId.localeCompare(b.weekId));
+    // Sort weeks for each resource
+    Object.keys(result).forEach(res => {
+        result[res].sort((a, b) => a.weekId.localeCompare(b.weekId));
+    });
+    
+    return result;
   }, [projects]);
 
   // 6. Weekly Pulse (Daily Activity) - Grouped by Task
@@ -297,11 +308,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
                 <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wider">Confirmed Scope</h3>
                 <div className="flex items-baseline gap-1 mt-1">
                     <p className="text-2xl font-bold text-slate-800">{stats.totalFP}</p>
-                    <span className="text-xs text-slate-400">Function Points</span>
+                    <span className="text-xs text-slate-400">Total FP</span>
                 </div>
             </div>
-             <div className="mt-4 text-xs text-orange-600 font-medium bg-orange-50 px-2 py-1 rounded w-fit">
-                Est. Size
+             <div className="mt-4 flex gap-2">
+                 <div className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-1 rounded w-fit flex items-center gap-1" title="Frontend Function Points">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> FE: {stats.totalFeFP}
+                </div>
+                 <div className="text-xs font-medium bg-indigo-50 text-indigo-700 px-2 py-1 rounded w-fit flex items-center gap-1" title="Backend Function Points">
+                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span> BE: {stats.totalBeFP}
+                </div>
             </div>
         </div>
       </div>
@@ -437,7 +453,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
       {/* Resource Conflict & Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* Conflict Detection Card */}
+        {/* Conflict Detection Card (Grouped by Resource) */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-80">
              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
@@ -446,38 +462,41 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
                 </h3>
             </div>
             <div className="flex-1 overflow-auto custom-scrollbar">
-                 {conflicts.length === 0 ? (
+                 {Object.keys(conflictsByResource).length === 0 ? (
                      <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
                         <CheckCircle2 size={32} className="text-green-500 mb-2" />
                         <p className="text-sm">No cross-module conflicts detected.</p>
                     </div>
                  ) : (
-                     <table className="w-full text-sm text-left">
-                        <thead className="bg-white text-slate-500 font-medium border-b border-slate-100">
-                            <tr>
-                                <th className="px-4 py-2">Resource</th>
-                                <th className="px-4 py-2">Week</th>
-                                <th className="px-4 py-2">Total Load</th>
-                                <th className="px-4 py-2">Conflicts</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {conflicts.map((c, idx) => (
-                                <tr key={idx} className="hover:bg-red-50/50">
-                                    <td className="px-4 py-3 font-medium text-slate-700">{c.resource}</td>
-                                    <td className="px-4 py-3 font-mono text-xs text-slate-500">{c.weekId}</td>
-                                    <td className={`px-4 py-3 font-bold ${c.total > 5 ? 'text-red-600' : 'text-orange-600'}`}>{c.total.toFixed(1)}d</td>
-                                    <td className="px-4 py-3">
-                                        <div className="flex flex-col gap-1">
-                                            {c.modules.map(m => (
-                                                <span key={m} className="text-[10px] bg-red-100 text-red-800 px-1.5 py-0.5 rounded w-fit truncate max-w-[150px]" title={m}>{m}</span>
-                                            ))}
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                     </table>
+                     <div className="divide-y divide-slate-100">
+                        {Object.entries(conflictsByResource).map(([resource, weeks]) => (
+                            <div key={resource} className="bg-white p-0">
+                                <div className="bg-slate-50/50 px-4 py-2 border-b border-slate-100 flex justify-between items-center">
+                                    <span className="font-bold text-sm text-slate-700">{resource}</span>
+                                    <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">{weeks.length} Weeks</span>
+                                </div>
+                                <table className="w-full text-sm text-left">
+                                    <tbody className="divide-y divide-slate-50">
+                                        {weeks.map((c, idx) => (
+                                            <tr key={`${resource}-${c.weekId}`} className="hover:bg-red-50/20">
+                                                <td className="px-4 py-2 w-24 font-mono text-xs text-slate-500 border-r border-slate-50">{c.weekId}</td>
+                                                <td className="px-4 py-2">
+                                                    <div className="flex flex-col gap-1">
+                                                        {c.modules.map(m => (
+                                                            <span key={m} className="text-[10px] bg-red-50 text-red-700 px-1.5 py-0.5 rounded w-fit truncate max-w-[200px]" title={m}>{m}</span>
+                                                        ))}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-2 text-right">
+                                                    <span className={`font-bold text-xs ${c.total > 5 ? 'text-red-600' : 'text-orange-600'}`}>{c.total.toFixed(1)}d</span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ))}
+                     </div>
                  )}
             </div>
         </div>

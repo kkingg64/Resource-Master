@@ -1,6 +1,7 @@
+
 import React, { useState, useMemo } from 'react';
 import { Resource, Role, IndividualHoliday } from '../types';
-import { Users, Plus, Trash2, Calendar, ChevronDown } from 'lucide-react';
+import { Users, Plus, Trash2, Calendar, ChevronDown, Edit2, Check, X } from 'lucide-react';
 import { GOV_HOLIDAYS_DB } from '../constants';
 
 interface ResourcesProps {
@@ -10,6 +11,7 @@ interface ResourcesProps {
   onUpdateResourceCategory: (id: string, category: Role) => Promise<void>;
   onUpdateResourceRegion: (id: string, region: string | null) => Promise<void>;
   onUpdateResourceType: (id: string, type: 'Internal' | 'External') => Promise<void>;
+  onUpdateResourceName: (id: string, name: string) => Promise<void>;
   onAddIndividualHoliday: (resourceId: string, items: { date: string, name: string }[]) => Promise<void>;
   onDeleteIndividualHoliday: (holidayId: string) => Promise<void>;
 }
@@ -104,13 +106,17 @@ const IndividualHolidayManager: React.FC<{
 };
 
 
-export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, onDeleteResource, onUpdateResourceCategory, onUpdateResourceRegion, onUpdateResourceType, onAddIndividualHoliday, onDeleteIndividualHoliday }) => {
+export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, onDeleteResource, onUpdateResourceCategory, onUpdateResourceRegion, onUpdateResourceType, onUpdateResourceName, onAddIndividualHoliday, onDeleteIndividualHoliday }) => {
   const [newResourceName, setNewResourceName] = useState('');
   const [newResourceCategory, setNewResourceCategory] = useState<Role>(Role.EA);
   const [newResourceRegion, setNewResourceRegion] = useState<string>('HK');
   const [newResourceType, setNewResourceType] = useState<'Internal' | 'External'>('Internal');
   const [isAdding, setIsAdding] = useState(false);
   const [expandedResourceId, setExpandedResourceId] = useState<string | null>(null);
+  
+  // Name Editing State
+  const [editingResourceId, setEditingResourceId] = useState<string | null>(null);
+  const [tempName, setTempName] = useState('');
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,6 +126,23 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
     await onAddResource(newResourceName.trim(), newResourceCategory, newResourceRegion, newResourceType);
     setIsAdding(false);
     setNewResourceName('');
+  };
+  
+  const startEditing = (resource: Resource) => {
+      setEditingResourceId(resource.id);
+      setTempName(resource.name);
+  };
+
+  const saveName = async () => {
+      if (editingResourceId && tempName.trim()) {
+          await onUpdateResourceName(editingResourceId, tempName.trim());
+      }
+      setEditingResourceId(null);
+  };
+
+  const cancelEditing = () => {
+      setEditingResourceId(null);
+      setTempName('');
   };
   
   const categoryColors: Record<Role, string> = {
@@ -207,7 +230,26 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
                             <li key={resource.id} className="border-b border-slate-100 last:border-b-0">
                               <div className="p-3 pl-6 grid grid-cols-3 items-center gap-4 hover:bg-slate-50/50">
                                 <div className="flex items-center gap-3">
-                                  <span className="font-medium text-slate-700 w-32 truncate">{resource.name}</span>
+                                  {editingResourceId === resource.id ? (
+                                      <div className="flex items-center gap-1 w-full max-w-xs">
+                                          <input 
+                                            type="text" 
+                                            value={tempName} 
+                                            onChange={(e) => setTempName(e.target.value)} 
+                                            className="text-sm border border-indigo-300 rounded px-2 py-1 w-full focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            autoFocus
+                                            onKeyDown={(e) => { if (e.key === 'Enter') saveName(); else if (e.key === 'Escape') cancelEditing(); }}
+                                          />
+                                          <button onClick={saveName} className="p-1 text-green-600 hover:bg-green-50 rounded"><Check size={14} /></button>
+                                          <button onClick={cancelEditing} className="p-1 text-red-600 hover:bg-red-50 rounded"><X size={14} /></button>
+                                      </div>
+                                  ) : (
+                                      <div className="flex items-center gap-2 group/name cursor-pointer" onClick={() => startEditing(resource)}>
+                                          <span className="font-medium text-slate-700 w-32 truncate" title={resource.name}>{resource.name}</span>
+                                          <Edit2 size={12} className="text-slate-300 opacity-0 group-hover/name:opacity-100 transition-opacity" />
+                                      </div>
+                                  )}
+                                  
                                   <select value={resource.category} onChange={(e) => onUpdateResourceCategory(resource.id, e.target.value as Role)} className={`text-xs font-semibold rounded-full appearance-none bg-transparent border px-2 py-0.5 focus:ring-2 cursor-pointer ${categoryColors[resource.category] || 'bg-slate-100 text-slate-600 border-slate-200 focus:ring-slate-500'}`}>
                                     {Object.values(Role).map(cat => (<option key={cat} value={cat}>{cat}</option>))}
                                   </select>

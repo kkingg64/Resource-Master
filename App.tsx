@@ -743,7 +743,7 @@ const App: React.FC = () => {
   };
 
   const addResource = async (name: string, category: Role, region: string, type: 'Internal' | 'External') => {
-    const { error } = await callSupabase('CREATE resource', { name, category }, supabase.from('resources').insert({ name, category, holiday_region: region === 'No Region' ? null : region, type, user_id: session!.user.id }).select().single());
+    const { error } = await callSupabase('CREATE resource', { name }, supabase.from('resources').insert({ name, category, holiday_region: region === 'No Region' ? null : region, type, user_id: session!.user.id }).select().single());
     if (error) { alert("Failed to add resource."); } else { fetchData(true); }
   };
   const deleteResource = async (id: string) => {
@@ -753,6 +753,28 @@ const App: React.FC = () => {
   const updateResourceRegion = async (id: string, region: string | null) => { const { error } = await callSupabase('UPDATE resource region', { id, region }, supabase.from('resources').update({ holiday_region: region }).eq('id', id)); if (error) alert("Failed to update resource region."); else fetchData(true); };
   const updateResourceType = async (id: string, type: 'Internal' | 'External') => { const { error } = await callSupabase('UPDATE resource type', { id, type }, supabase.from('resources').update({ type }).eq('id', id)); if (error) alert("Failed to update resource type."); else fetchData(true); };
   
+  // NEW: Rename Resource function
+  const updateResourceName = async (id: string, name: string) => {
+    const resource = resources.find(r => r.id === id);
+    const oldName = resource?.name;
+    
+    const { error } = await callSupabase('UPDATE resource name', { id, name },
+        supabase.from('resources').update({ name }).eq('id', id)
+    );
+    
+    if (error) {
+        alert("Failed to update resource name.");
+    } else {
+        // Also update assignments if name changed to keep data consistent
+        if (oldName && oldName !== name) {
+             await callSupabase('UPDATE assignments resource name', { oldName, name },
+                supabase.from('task_assignments').update({ resource_name: name }).eq('resource_name', oldName)
+             );
+        }
+        fetchData(true);
+    }
+  };
+
   // Updated to accept an array of holidays for bulk insertion
   const addIndividualHolidays = async (resourceId: string, items: { date: string, name: string }[]) => { 
       const toInsert = items.map(item => ({ resource_id: resourceId, date: item.date, name: item.name, user_id: session!.user.id }));
@@ -1326,6 +1348,7 @@ const App: React.FC = () => {
                               onUpdateResourceCategory={updateResourceCategory}
                               onUpdateResourceRegion={updateResourceRegion}
                               onUpdateResourceType={updateResourceType}
+                              onUpdateResourceName={updateResourceName}
                               onAddIndividualHoliday={addIndividualHolidays}
                               onDeleteIndividualHoliday={deleteIndividualHoliday}
                            />
