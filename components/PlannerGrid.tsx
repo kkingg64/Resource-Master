@@ -104,7 +104,7 @@ const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNa
 
   return (
       <div 
-          className={`flex-shrink-0 border-r border-slate-100 relative ${isHoliday ? 'bg-[repeating-linear-gradient(45deg,theme(colors.red.50),theme(colors.red.50)_5px,theme(colors.red.100)_5px,theme(colors.red.100)_10px)]' : isCurrent ? 'bg-amber-50/50' : ''}`} 
+          className={`flex-shrink-0 border-r border-slate-100 relative ${isHoliday ? 'bg-[repeating-linear-gradient(45deg,theme(colors.red.50),theme(colors.red.50)_5px,theme(colors.red.100)_5px,theme(colors.red.100)_10px)]' : isCurrent ? 'bg-amber-100 ring-1 ring-inset ring-amber-300' : ''}`} 
           style={{ width: `${width}px` }}
           title={typeof holidayName === 'string' ? holidayName : holidayName?.name}
       >
@@ -119,7 +119,7 @@ const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNa
                   data-c={colIndex}
                   data-grid="planner"
                   className={`w-full h-full text-center text-xs focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors
-                      ${(localValue && localValue !== '0') ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50'}
+                      ${(localValue && localValue !== '0') ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50/50'}
                   `}
                   value={localValue}
                   placeholder="-"
@@ -750,9 +750,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           if (holiday) { isHKHoliday = true; holidayName = holiday.name; }
                       }
                       let className = `flex-shrink-0 text-center text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col h-full`;
-                      if (isHKHoliday) { className += ' bg-red-50 text-red-700'; } else if (isCurrent) { className += ' bg-amber-50 text-amber-700'; } else { className += ' text-slate-500'; }
-                      if (isCurrent) { className += ' border-b-2 border-b-amber-400'; }
-                      return (<div key={col.id} className={className} style={{ width: `${colWidth}px` }} title={isHKHoliday ? holidayName : (isCurrent ? 'Current Date' : '')}><span>{col.label}</span>{viewMode === 'day' && col.date && <span className={`text-[9px] ${isHKHoliday ? 'text-red-600 font-bold' : isCurrent ? 'text-amber-600 font-bold' : 'text-slate-400'}`}>{col.date.getDate()}</span>}</div>);
+                      if (isHKHoliday) { className += ' bg-red-50 text-red-700'; } else if (isCurrent) { className += ' bg-amber-100 text-amber-800 border-b-4 border-b-amber-500'; } else { className += ' text-slate-500'; }
+                      if (isCurrent && !isHKHoliday) { className += ''; } // Already applied above
+                      return (<div key={col.id} className={className} style={{ width: `${colWidth}px` }} title={isHKHoliday ? holidayName : (isCurrent ? 'Current Date' : '')}><span>{col.label}</span>{viewMode === 'day' && col.date && <span className={`text-[9px] ${isHKHoliday ? 'text-red-600 font-bold' : isCurrent ? 'text-amber-800 font-bold' : 'text-slate-400'}`}>{col.date.getDate()}</span>}</div>);
                   })}
                 </div>
               </>
@@ -898,7 +898,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                         if (viewMode === 'day' && col.date) { isInRange = col.date >= assignmentStartDate && col.date <= assignmentEndDate; isStart = col.date.getTime() === assignmentStartDate.getTime(); isEnd = col.date.getTime() === assignmentEndDate.getTime(); if (formatDateForInput(col.date) === formatDateForInput(assignmentStartDate)) isStart = true; if (formatDateForInput(col.date) === formatDateForInput(assignmentEndDate)) isEnd = true; } else if (viewMode === 'week') { const [y, w] = col.id.split('-').map(Number); const colDate = getDateFromWeek(y, w); const colEnd = new Date(colDate); colEnd.setDate(colEnd.getDate() + 6); isInRange = (assignmentStartDate <= colEnd) && (assignmentEndDate >= colDate); if (isInRange) { const startWeekId = getWeekIdFromDate(assignmentStartDate); const endWeekId = getWeekIdFromDate(assignmentEndDate); isStart = col.id === startWeekId; isEnd = col.id === endWeekId; } } else if (viewMode === 'month') { if (col.weekIds && col.weekIds.length > 0) { const startWeek = col.weekIds[0]; const endWeek = col.weekIds[col.weekIds.length - 1]; const [y1, w1] = startWeek.split('-').map(Number); const mStart = getDateFromWeek(y1, w1); const [y2, w2] = endWeek.split('-').map(Number); const mEnd = new Date(getDateFromWeek(y2, w2)); mEnd.setDate(mEnd.getDate() + 6); isInRange = (assignmentStartDate <= mEnd) && (assignmentEndDate >= mStart); isStart = assignmentStartDate >= mStart && assignmentStartDate <= mEnd; isEnd = assignmentEndDate >= mStart && assignmentEndDate <= mEnd; } }
                                         const progress = assignment.progress || 0;
                                         return (
-                                            <div key={`${assignment.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 relative ${isCurrent ? 'bg-amber-50/30' : ''}`} style={{ width: `${colWidth}px` }}>
+                                            <div key={`${assignment.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 relative ${isCurrent ? 'bg-amber-100 ring-1 ring-inset ring-amber-300' : ''}`} style={{ width: `${colWidth}px` }}>
                                                 {isInRange && ( <div className={`absolute top-1 bottom-1 left-0 right-0 ${roleStyle.bar} ${isStart ? 'rounded-l-md ml-1' : ''} ${isEnd ? 'rounded-r-md mr-1' : ''} flex items-center overflow-hidden`} title={`${assignment.role} - ${assignment.resourceName || 'Unassigned'} (${progress}%)`}> <div className={`h-full opacity-30 ${roleStyle.fill}`} style={{ width: `${progress}%` }}></div> {isStart && ( <span className="absolute left-2 text-[9px] font-bold text-slate-700 whitespace-nowrap truncate z-10 pointer-events-none">{assignment.resourceName || 'Unassigned'}</span> )} {isEnd && progress > 0 && ( <span className="absolute right-2 text-[8px] font-bold text-slate-600 z-10 pointer-events-none bg-white/50 px-0.5 rounded">{progress}%</span> )} </div> )}
                                             </div>
                                         );

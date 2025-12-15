@@ -1,8 +1,9 @@
+
 import React, { useMemo } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
 import { getTimeline, DEFAULT_START, DEFAULT_END, calculateWorkingDaysBetween, formatDateForInput } from '../constants';
-import { AlertCircle, CheckCircle2, Clock, Users, Briefcase, ChevronRight, AlertTriangle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Users, Briefcase, ChevronRight, AlertTriangle, AlertOctagon } from 'lucide-react';
 
 interface DashboardProps {
   projects: Project[];
@@ -151,6 +152,46 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
     });
   }, [projects, GLOBAL_TIMELINE_DATA]);
 
+  // 5. Conflict Detection
+  const conflicts = useMemo(() => {
+    const usage: Record<string, Record<string, { total: number, modules: Set<string> }>> = {};
+    
+    projects.forEach(p => {
+        p.modules.forEach(m => {
+            m.tasks.forEach(t => {
+                t.assignments.forEach(a => {
+                    if (a.resourceName && a.resourceName !== 'Unassigned') {
+                        a.allocations.forEach(alloc => {
+                            if (!usage[a.resourceName!]) usage[a.resourceName!] = {};
+                            if (!usage[a.resourceName!][alloc.weekId]) usage[a.resourceName!][alloc.weekId] = { total: 0, modules: new Set() };
+                            
+                            usage[a.resourceName!][alloc.weekId].total += alloc.count;
+                            usage[a.resourceName!][alloc.weekId].modules.add(`${p.name} • ${m.name}`);
+                        });
+                    }
+                });
+            });
+        });
+    });
+
+    const result: { resource: string, weekId: string, total: number, modules: string[] }[] = [];
+    Object.entries(usage).forEach(([res, weeks]) => {
+        Object.entries(weeks).forEach(([weekId, data]) => {
+            // Conflict if allocated more than 5 days OR works on multiple modules
+            if (data.modules.size > 1) {
+                result.push({ 
+                    resource: res, 
+                    weekId, 
+                    total: data.total, 
+                    modules: Array.from(data.modules) 
+                });
+            }
+        });
+    });
+    
+    return result.sort((a,b) => a.weekId.localeCompare(b.weekId));
+  }, [projects]);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 h-full overflow-y-auto custom-scrollbar p-1">
       
@@ -290,8 +331,54 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
         </div>
       </div>
 
-      {/* Charts Row */}
+      {/* Resource Conflict & Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* Conflict Detection Card */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-80">
+             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                    <AlertOctagon size={16} className="text-red-500" />
+                    Resource Overlap/Conflicts
+                </h3>
+            </div>
+            <div className="flex-1 overflow-auto custom-scrollbar">
+                 {conflicts.length === 0 ? (
+                     <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
+                        <CheckCircle2 size={32} className="text-green-500 mb-2" />
+                        <p className="text-sm">No cross-module conflicts detected.</p>
+                    </div>
+                 ) : (
+                     <table className="w-full text-sm text-left">
+                        <thead className="bg-white text-slate-500 font-medium border-b border-slate-100">
+                            <tr>
+                                <th className="px-4 py-2">Resource</th>
+                                <th className="px-4 py-2">Week</th>
+                                <th className="px-4 py-2">Total Load</th>
+                                <th className="px-4 py-2">Conflicts</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {conflicts.map((c, idx) => (
+                                <tr key={idx} className="hover:bg-red-50/50">
+                                    <td className="px-4 py-3 font-medium text-slate-700">{c.resource}</td>
+                                    <td className="px-4 py-3 font-mono text-xs text-slate-500">{c.weekId}</td>
+                                    <td className={`px-4 py-3 font-bold ${c.total > 5 ? 'text-red-600' : 'text-orange-600'}`}>{c.total.toFixed(1)}d</td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex flex-col gap-1">
+                                            {c.modules.map(m => (
+                                                <span key={m} className="text-[10px] bg-red-100 text-red-800 px-1.5 py-0.5 rounded w-fit truncate max-w-[150px]" title={m}>{m}</span>
+                                            ))}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                     </table>
+                 )}
+            </div>
+        </div>
+
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm h-80">
           <h3 className="text-lg font-bold text-slate-800 mb-4">Resource Allocation by Role</h3>
           <ResponsiveContainer width="100%" height="100%">
@@ -310,35 +397,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
               <Bar dataKey={Role.BRAND_SOLUTIONS} stackId="a" fill="#f97316" name="Brand Solutions" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
-
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-80">
-             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                <h3 className="font-bold text-slate-800">Top Utilized Resources</h3>
-                <span className="text-xs text-slate-400">Total Man-Days</span>
-            </div>
-            <div className="flex-1 overflow-auto p-4">
-                 <div className="space-y-4">
-                     {resourceUtilization.map((r, idx) => (
-                         <div key={r.name} className="flex items-center gap-4">
-                             <div className="w-6 text-center font-bold text-slate-300 text-sm">#{idx + 1}</div>
-                             <div className="flex-1">
-                                 <div className="flex justify-between text-sm mb-1">
-                                     <span className="font-medium text-slate-700">{r.name}</span>
-                                     <span className="font-bold text-indigo-600">{r.days.toFixed(1)}d</span>
-                                 </div>
-                                 <div className="w-full bg-slate-100 rounded-full h-1.5">
-                                     <div 
-                                        className="h-full bg-indigo-500 rounded-full" 
-                                        style={{ width: `${Math.min(100, (r.days / (stats.totalAllocatedDays || 1)) * 100 * 5)}%` }} // Visual scaling
-                                    ></div>
-                                 </div>
-                             </div>
-                         </div>
-                     ))}
-                     {resourceUtilization.length === 0 && <div className="text-center text-slate-400 py-8">No resource data available.</div>}
-                 </div>
-            </div>
         </div>
       </div>
     </div>
