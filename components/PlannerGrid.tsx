@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Project, Holiday, Resource, Role, ViewMode } from '../types';
+import { Project, Holiday, Resource, Role, WeekPoint, ViewMode } from '../types';
 import { ChevronRight, ChevronDown, Plus, Trash2, Copy, RefreshCw, History, ArrowLeft, ArrowRight, User, CheckCircle2, AlertCircle } from 'lucide-react';
-import { getTimeline, formatDateForInput, WeekPoint } from '../constants';
+import { getTimeline, formatDateForInput } from '../constants';
 
 interface PlannerGridProps {
   projects: Project[];
@@ -66,7 +66,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   isReadOnly
 }) => {
   const [sidebarWidth, setSidebarWidth] = useState(350);
-  const [colWidthBase, setColWidthBase] = useState(20);
+  const [colWidthBase, setColWidthBase] = useState(40);
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
@@ -109,19 +109,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
            
            <button onClick={() => onExtendTimeline('start')} className="p-1.5 hover:bg-white rounded border border-transparent hover:border-slate-200 text-slate-500" title="Load Previous Weeks"><ArrowLeft size={14}/></button>
            <button onClick={() => onExtendTimeline('end')} className="p-1.5 hover:bg-white rounded border border-transparent hover:border-slate-200 text-slate-500" title="Load Next Weeks"><ArrowRight size={14}/></button>
-           
-           <div className="h-6 w-px bg-slate-300 mx-1"></div>
-           <div className="flex items-center gap-2 ml-2">
-              <span className="text-[10px] text-slate-400 uppercase font-bold">Width</span>
-              <input 
-                type="range" 
-                min="20" 
-                max="100" 
-                value={colWidthBase} 
-                onChange={(e) => setColWidthBase(Number(e.target.value))}
-                className="w-24 h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-              />
-           </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -151,7 +138,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
                 {projects.map(project => (
                     <div key={project.id}>
-                        <div className="flex items-center px-2 py-1 hover:bg-slate-50 border-b border-slate-100 group">
+                        <div className="flex items-center px-2 py-1.5 hover:bg-slate-50 border-b border-slate-100 group">
                              <button onClick={() => toggleProject(project.id)} className="p-1 text-slate-400 hover:text-indigo-600">
                                 {expandedProjects[project.id] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                              </button>
@@ -172,7 +159,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         
                         {expandedProjects[project.id] && project.modules.map(module => (
                             <div key={module.id} className="pl-4">
-                                <div className="flex items-center px-2 py-1 hover:bg-slate-50 border-b border-slate-100 group">
+                                <div className="flex items-center px-2 py-1.5 hover:bg-slate-50 border-b border-slate-100 group">
                                      <button onClick={() => toggleModule(module.id)} className="p-1 text-slate-400 hover:text-indigo-600">
                                         {expandedModules[module.id] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                                      </button>
@@ -272,13 +259,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                 <div className="pb-20">
                     {projects.map(project => (
                         <div key={project.id}>
-                            <div className="h-[29px] border-b border-slate-100 bg-slate-50/50"></div>
+                            <div className="h-[34px] border-b border-slate-100 bg-slate-50/50"></div>
                             {expandedProjects[project.id] && project.modules.map(module => (
                                 <div key={module.id}>
-                                    <div className="h-[25px] border-b border-slate-100 bg-slate-50/30"></div>
+                                    <div className="h-[33px] border-b border-slate-100 bg-slate-50/30"></div>
                                     {expandedModules[module.id] && module.tasks.map(task => (
                                         <div key={task.id}>
-                                            <div className="h-[25px] border-b border-slate-100"></div>
+                                            <div className="h-[33px] border-b border-slate-100"></div>
                                             {expandedTasks[task.id] && task.assignments.map(assignment => (
                                                 <div key={assignment.id} className="flex h-[34px] border-b border-slate-100 relative bg-white hover:bg-indigo-50/10">
                                                     {timeline.map(col => {
