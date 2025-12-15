@@ -13,6 +13,7 @@ interface EstimatorProps {
   onUpdateModuleDeliveryTask: (projectId: string, moduleId: string, deliveryTaskId: string | null) => void;
   onUpdateModuleStartTask: (projectId: string, moduleId: string, startTaskId: string | null) => void;
   onReorderModules: (projectId: string, startIndex: number, endIndex: number) => void;
+  isReadOnly?: boolean;
 }
 
 const COMPLEXITY_MULTIPLIERS: Record<ComplexityLevel, number> = {
@@ -22,9 +23,9 @@ const COMPLEXITY_MULTIPLIERS: Record<ComplexityLevel, number> = {
   'Complex': 2.0
 };
 
-const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: ComplexityLevel) => void }> = ({ value, onChange }) => {
+const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: ComplexityLevel) => void, isReadOnly?: boolean }> = ({ value, onChange, isReadOnly }) => {
     return (
-        <div className="relative w-full h-full flex items-center justify-center group cursor-pointer bg-white/50 hover:bg-white border border-transparent hover:border-slate-300 rounded px-1 transition-colors">
+        <div className={`relative w-full h-full flex items-center justify-center group ${isReadOnly ? '' : 'cursor-pointer hover:bg-white hover:border-slate-300'} bg-white/50 border border-transparent rounded px-1 transition-colors`}>
             <div className="flex items-center gap-0.5 pointer-events-none z-0">
                 <span className={`text-[10px] font-bold ${
                     value === 'Low' ? 'text-green-600' :
@@ -34,9 +35,9 @@ const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: Compl
                 }`}>
                     {value.charAt(0)}
                 </span>
-                <ChevronDown size={8} className="text-slate-300 group-hover:text-slate-500" />
+                {!isReadOnly && <ChevronDown size={8} className="text-slate-300 group-hover:text-slate-500" />}
             </div>
-            <select
+            {!isReadOnly && <select
                 value={value}
                 onChange={(e) => onChange(e.target.value as ComplexityLevel)}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 appearance-none"
@@ -46,7 +47,7 @@ const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: Compl
                 <option value="Medium">Medium (1.2x)</option>
                 <option value="High">High (1.5x)</option>
                 <option value="Complex">Complex (2x)</option>
-            </select>
+            </select>}
         </div>
     );
 };
@@ -60,9 +61,10 @@ interface EstimatorNumberInputProps {
     onNavigate: (dir: string, r: number, c: number) => void;
     rowIndex: number;
     colIndex: number;
+    disabled?: boolean;
 }
 
-const EstimatorNumberInput: React.FC<EstimatorNumberInputProps> = ({ value, onChange, min = 0, className, onNavigate, rowIndex, colIndex }) => {
+const EstimatorNumberInput: React.FC<EstimatorNumberInputProps> = ({ value, onChange, min = 0, className, onNavigate, rowIndex, colIndex, disabled }) => {
     const [localValue, setLocalValue] = useState(String(value));
     const [isEditing, setIsEditing] = useState(false);
 
@@ -91,6 +93,14 @@ const EstimatorNumberInput: React.FC<EstimatorNumberInputProps> = ({ value, onCh
         }
     };
 
+    if (disabled) {
+        return (
+             <div className={`${className} flex items-center justify-center`}>
+                {value}
+            </div>
+        );
+    }
+
     return (
         <input 
             type="text" 
@@ -108,7 +118,7 @@ const EstimatorNumberInput: React.FC<EstimatorNumberInputProps> = ({ value, onCh
 };
 
 
-export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateFunctionPoints, onUpdateModuleComplexity, onUpdateModuleStartDate, onUpdateModuleDeliveryTask, onUpdateModuleStartTask, onReorderModules }) => {
+export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateFunctionPoints, onUpdateModuleComplexity, onUpdateModuleStartDate, onUpdateModuleDeliveryTask, onUpdateModuleStartTask, onReorderModules, isReadOnly = false }) => {
   const [selectedProjectId, setSelectedProjectId] = useState<string>(projects[0]?.id || '');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   
@@ -250,9 +260,9 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
     return { refFP: totalRefFP, feFP: totalFeFP, beFP: totalBeFP, prepEffort: totalPrepEffort, feEffort: totalFeEffort, beEffort: totalBeEffort, prepDuration: totalPrepDuration, feDuration: totalFeDuration, beDuration: totalBeDuration, projectMaxEstDate, projectMaxPlanDate, totalVarianceDays };
   }, [modules, holidaySet]);
 
-  const handleDragStart = (e: React.DragEvent, index: number) => { e.dataTransfer.setData("text/plain", index.toString()); setDraggedIndex(index); };
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); };
-  const handleDrop = (e: React.DragEvent, index: number) => { e.preventDefault(); const startIndex = parseInt(e.dataTransfer.getData("text/plain"), 10); if (!isNaN(startIndex) && startIndex !== index) { onReorderModules(selectedProjectId, startIndex, index); } setDraggedIndex(null); };
+  const handleDragStart = (e: React.DragEvent, index: number) => { if (isReadOnly) return; e.dataTransfer.setData("text/plain", index.toString()); setDraggedIndex(index); };
+  const handleDragOver = (e: React.DragEvent) => { if (isReadOnly) return; e.preventDefault(); };
+  const handleDrop = (e: React.DragEvent, index: number) => { if (isReadOnly) return; e.preventDefault(); const startIndex = parseInt(e.dataTransfer.getData("text/plain"), 10); if (!isNaN(startIndex) && startIndex !== index) { onReorderModules(selectedProjectId, startIndex, index); } setDraggedIndex(null); };
 
   const formatWeeks = (days: number) => { if (!days || isNaN(days)) return '0.0w'; const weeks = (days / 5).toFixed(1); return `${weeks}w`; };
   const getTaskStartDate = (module: ProjectModule, taskId: string): string | null => { const task = module.tasks.find(t => t.id === taskId); if (!task) return null; let minStart: string | null = null; task.assignments.forEach(a => { if (a.startDate) { if (!minStart || a.startDate < minStart) { minStart = a.startDate; } } }); return minStart; };
@@ -400,58 +410,58 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     const baseInputClass = "w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500";
 
                     return (
-                        <tr key={m.id} draggable onDragStart={(e) => handleDragStart(e, index)} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, index)} className={`hover:bg-slate-50 transition-colors group ${draggedIndex === index ? 'opacity-40 bg-slate-100' : ''}`}>
-                            <td className="text-center text-slate-300 cursor-grab active:cursor-grabbing border-b border-slate-100"><div className="flex justify-center group-hover:text-slate-500"><GripVertical size={12} /></div></td>
+                        <tr key={m.id} draggable={!isReadOnly} onDragStart={(e) => handleDragStart(e, index)} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, index)} className={`hover:bg-slate-50 transition-colors group ${draggedIndex === index ? 'opacity-40 bg-slate-100' : ''}`}>
+                            <td className="text-center text-slate-300 cursor-grab active:cursor-grabbing border-b border-slate-100"><div className="flex justify-center group-hover:text-slate-500">{!isReadOnly && <GripVertical size={12} />}</div></td>
                             <td className="px-2 py-1.5 border-b border-slate-100 border-r border-slate-200"><span className="font-medium text-slate-700 truncate block w-full" title={m.name}>{m.name}</span></td>
                             
                             {/* Prep */}
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={0} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={m.legacyFunctionPoints || 0} onChange={(val) => updateParams(val, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={0} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={m.legacyFunctionPoints || 0} onChange={(val) => updateParams(val, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} disabled={isReadOnly} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={1} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={prepVelocity} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, val, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={1} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={prepVelocity} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, val, prepTeamSize, feVel, feTeam, beVel, beTeam)} disabled={isReadOnly} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={2} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={prepTeamSize} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, val, feVel, feTeam, beVel, beTeam)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={2} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={prepTeamSize} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, val, feVel, feTeam, beVel, beTeam)} disabled={isReadOnly} />
                             </td>
                             <td className="px-1 text-center border-b border-slate-100 text-slate-400 font-mono">{prepEffort || '-'}</td>
                             <td className="px-1 text-center border-b border-slate-100 border-r border-slate-200 text-amber-700 font-medium">{formatWeeks(prepDuration)}</td>
 
                             {/* FE */}
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={3} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={m.frontendFunctionPoints || 0} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, val, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={3} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={m.frontendFunctionPoints || 0} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, val, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} disabled={isReadOnly} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={4} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={feVel} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, val, feTeam, beVel, beTeam)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={4} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={feVel} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, val, feTeam, beVel, beTeam)} disabled={isReadOnly} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={5} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={feTeam} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, val, beVel, beTeam)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={5} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={feTeam} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, val, beVel, beTeam)} disabled={isReadOnly} />
                             </td>
                             <td className="p-0 border-b border-slate-100">
-                                <ComplexitySelect value={feComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'frontend', val)} />
+                                <ComplexitySelect value={feComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'frontend', val)} isReadOnly={isReadOnly} />
                             </td>
                             <td className="px-1 text-center border-b border-slate-100 text-slate-400 font-mono">{feEffort || '-'}</td>
                             <td className="px-1 text-center border-b border-slate-100 border-r border-slate-200 text-blue-700 font-medium">{formatWeeks(feDuration)}</td>
 
                             {/* BE */}
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={6} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={m.backendFunctionPoints || 0} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, val, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={6} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={m.backendFunctionPoints || 0} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, val, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} disabled={isReadOnly} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={7} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={beVel} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, val, beTeam)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={7} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={beVel} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, val, beTeam)} disabled={isReadOnly} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-slate-50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={8} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={beTeam} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, val)} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={8} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={beTeam} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, val)} disabled={isReadOnly} />
                             </td>
                             <td className="p-0 border-b border-slate-100">
-                                <ComplexitySelect value={beComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'backend', val)} />
+                                <ComplexitySelect value={beComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'backend', val)} isReadOnly={isReadOnly} />
                             </td>
                             <td className="px-1 text-center border-b border-slate-100 text-slate-400 font-mono">{beEffort || '-'}</td>
                             <td className="px-1 text-center border-b border-slate-100 border-r border-slate-200 text-indigo-700 font-medium">{formatWeeks(beDuration)}</td>
 
                             {/* Start */}
                             <td className="p-0 border-b border-slate-100 bg-slate-50/30 relative group/start">
-                                <div className="absolute inset-0 opacity-0 group-hover/start:opacity-100 transition-opacity bg-white/95 flex items-center justify-center shadow-sm z-20">
+                                {!isReadOnly && <div className="absolute inset-0 opacity-0 group-hover/start:opacity-100 transition-opacity bg-white/95 flex items-center justify-center shadow-sm z-20">
                                     <div className="relative w-full h-full">
                                         <select className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" value={m.startTaskId || (m.startDate ? 'manual' : '')} onChange={(e) => { const val = e.target.value; if (val === 'manual' || val === '') { onUpdateModuleStartTask(selectedProjectId, m.id, null); if(val === '') { onUpdateModuleStartDate(selectedProjectId, m.id, null); } } else { onUpdateModuleStartTask(selectedProjectId, m.id, val); } }}>
                                             <option value="">- Auto (Earliest) -</option>
@@ -460,9 +470,9 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                         </select>
                                         <div className="w-full h-full flex flex-col items-center justify-center text-[9px] text-indigo-600 pointer-events-none p-1"><Link2 size={10} /> <span className="truncate w-full text-center">Change Source</span></div>
                                     </div>
-                                </div>
+                                </div>}
                                 <div className="w-full h-full flex flex-col items-center justify-center text-[10px] relative z-10 px-1">
-                                    {isTaskBased ? ( <> <span className="text-indigo-700 font-bold truncate w-full text-center" title={`Starts with: ${startTaskName}`}>{startTaskName}</span> <span className="text-[9px] text-slate-400">{baseStartDate ? new Date(baseStartDate).toLocaleDateString(undefined, {month:'numeric', day:'numeric'}) : '-'}</span> </> ) : ( <> <input type="date" className={`w-full bg-transparent text-center focus:outline-none ${m.startDate ? 'text-indigo-700 font-bold' : 'text-slate-500'}`} value={m.startDate || (baseStartDate || '')} onChange={(e) => onUpdateModuleStartDate(selectedProjectId, m.id, e.target.value)} /> {!m.startDate && baseStartDate && <span className="text-[8px] text-slate-300 absolute bottom-0.5 right-1">Auto</span>} </> )}
+                                    {isTaskBased ? ( <> <span className="text-indigo-700 font-bold truncate w-full text-center" title={`Starts with: ${startTaskName}`}>{startTaskName}</span> <span className="text-[9px] text-slate-400">{baseStartDate ? new Date(baseStartDate).toLocaleDateString(undefined, {month:'numeric', day:'numeric'}) : '-'}</span> </> ) : ( <> <input type="date" disabled={isReadOnly} className={`w-full bg-transparent text-center focus:outline-none ${m.startDate ? 'text-indigo-700 font-bold' : 'text-slate-500'} ${isReadOnly ? 'cursor-default' : ''}`} value={m.startDate || (baseStartDate || '')} onChange={(e) => onUpdateModuleStartDate(selectedProjectId, m.id, e.target.value)} /> {!m.startDate && baseStartDate && <span className="text-[8px] text-slate-300 absolute bottom-0.5 right-1">Auto</span>} </> )}
                                 </div>
                             </td>
 

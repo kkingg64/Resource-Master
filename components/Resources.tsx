@@ -14,13 +14,15 @@ interface ResourcesProps {
   onUpdateResourceName: (id: string, name: string) => Promise<void>;
   onAddIndividualHoliday: (resourceId: string, items: { date: string, name: string }[]) => Promise<void>;
   onDeleteIndividualHoliday: (holidayId: string) => Promise<void>;
+  isReadOnly?: boolean;
 }
 
 const IndividualHolidayManager: React.FC<{
   resource: Resource;
   onAdd: (items: { date: string, name: string }[]) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
-}> = ({ resource, onAdd, onDelete }) => {
+  isReadOnly?: boolean;
+}> = ({ resource, onAdd, onDelete, isReadOnly }) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [name, setName] = useState('');
@@ -67,7 +69,7 @@ const IndividualHolidayManager: React.FC<{
   return (
     <div className="bg-slate-100 p-4 rounded-b-lg border-t border-slate-200">
        <h4 className="text-xs font-bold text-slate-600 mb-3">Manage Individual Holidays</h4>
-      <form onSubmit={handleAddHoliday} className="grid gap-2 mb-4">
+      {!isReadOnly && <form onSubmit={handleAddHoliday} className="grid gap-2 mb-4">
         <div className="flex gap-2">
             <div className="flex flex-col gap-1 w-32">
                 <label className="text-[10px] font-bold text-slate-500 uppercase">From</label>
@@ -82,7 +84,7 @@ const IndividualHolidayManager: React.FC<{
             <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Annual Leave" required className="flex-1 p-2 border border-slate-300 rounded-lg text-sm"/>
             <button type="submit" disabled={isAdding} className="px-3 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50">Add</button>
         </div>
-      </form>
+      </form>}
       
       <div className="max-h-48 overflow-y-auto space-y-1 pr-2 custom-scrollbar">
         {allHolidays.length === 0 && <p className="text-xs text-slate-500 text-center py-2">No regional or individual holidays.</p>}
@@ -95,7 +97,7 @@ const IndividualHolidayManager: React.FC<{
                 {holiday.type}
               </span>
             </div>
-            {holiday.type === 'Individual' && (
+            {!isReadOnly && holiday.type === 'Individual' && (
               <button onClick={() => onDelete(holiday.id)} className="p-1 text-slate-400 hover:text-red-500 rounded-full"><Trash2 size={12} /></button>
             )}
           </div>
@@ -106,7 +108,7 @@ const IndividualHolidayManager: React.FC<{
 };
 
 
-export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, onDeleteResource, onUpdateResourceCategory, onUpdateResourceRegion, onUpdateResourceType, onUpdateResourceName, onAddIndividualHoliday, onDeleteIndividualHoliday }) => {
+export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, onDeleteResource, onUpdateResourceCategory, onUpdateResourceRegion, onUpdateResourceType, onUpdateResourceName, onAddIndividualHoliday, onDeleteIndividualHoliday, isReadOnly = false }) => {
   const [newResourceName, setNewResourceName] = useState('');
   const [newResourceCategory, setNewResourceCategory] = useState<Role>(Role.EA);
   const [newResourceRegion, setNewResourceRegion] = useState<string>('HK');
@@ -129,6 +131,7 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
   };
   
   const startEditing = (resource: Resource) => {
+      if (isReadOnly) return;
       setEditingResourceId(resource.id);
       setTempName(resource.name);
   };
@@ -195,7 +198,7 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
           <h2 className="text-xl font-bold text-slate-800">Manage Resources & Holidays</h2>
         </div>
         
-        <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-6 items-center">
+        {!isReadOnly && <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-6 items-center">
           <input type="text" value={newResourceName} onChange={(e) => setNewResourceName(e.target.value)} placeholder="e.g., John Doe" className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm md:col-span-2"/>
           <select value={newResourceCategory} onChange={(e) => setNewResourceCategory(e.target.value as Role)} className="p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
             {Object.values(Role).map(cat => (<option key={cat} value={cat}>{cat}</option>))}
@@ -212,7 +215,7 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
           <button type="submit" disabled={isAdding || !newResourceName.trim()} className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             <Plus size={16} />{isAdding ? 'Adding...' : 'Add Resource'}
           </button>
-        </form>
+        </form>}
 
         <div className="space-y-2">
           {resources.length === 0 ? (
@@ -230,7 +233,7 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
                             <li key={resource.id} className="border-b border-slate-100 last:border-b-0">
                               <div className="p-3 pl-6 grid grid-cols-3 items-center gap-4 hover:bg-slate-50/50">
                                 <div className="flex items-center gap-3">
-                                  {editingResourceId === resource.id ? (
+                                  {editingResourceId === resource.id && !isReadOnly ? (
                                       <div className="flex items-center gap-1 w-full max-w-xs">
                                           <input 
                                             type="text" 
@@ -246,20 +249,20 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
                                   ) : (
                                       <div className="flex items-center gap-2 group/name cursor-pointer" onClick={() => startEditing(resource)}>
                                           <span className="font-medium text-slate-700 w-32 truncate" title={resource.name}>{resource.name}</span>
-                                          <Edit2 size={12} className="text-slate-300 opacity-0 group-hover/name:opacity-100 transition-opacity" />
+                                          {!isReadOnly && <Edit2 size={12} className="text-slate-300 opacity-0 group-hover/name:opacity-100 transition-opacity" />}
                                       </div>
                                   )}
                                   
-                                  <select value={resource.category} onChange={(e) => onUpdateResourceCategory(resource.id, e.target.value as Role)} className={`text-xs font-semibold rounded-full appearance-none bg-transparent border px-2 py-0.5 focus:ring-2 cursor-pointer ${categoryColors[resource.category] || 'bg-slate-100 text-slate-600 border-slate-200 focus:ring-slate-500'}`}>
+                                  <select disabled={isReadOnly} value={resource.category} onChange={(e) => onUpdateResourceCategory(resource.id, e.target.value as Role)} className={`text-xs font-semibold rounded-full appearance-none bg-transparent border px-2 py-0.5 focus:ring-2 cursor-pointer disabled:cursor-default ${categoryColors[resource.category] || 'bg-slate-100 text-slate-600 border-slate-200 focus:ring-slate-500'}`}>
                                     {Object.values(Role).map(cat => (<option key={cat} value={cat}>{cat}</option>))}
                                   </select>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <select value={resource.type || 'Internal'} onChange={(e) => onUpdateResourceType(resource.id, e.target.value as 'Internal' | 'External')} className="text-xs font-medium rounded-md appearance-none bg-white border border-slate-200 px-2 py-1 focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                                  <select disabled={isReadOnly} value={resource.type || 'Internal'} onChange={(e) => onUpdateResourceType(resource.id, e.target.value as 'Internal' | 'External')} className="text-xs font-medium rounded-md appearance-none bg-white border border-slate-200 px-2 py-1 focus:ring-2 focus:ring-indigo-500 cursor-pointer disabled:cursor-default disabled:bg-slate-50">
                                     <option value="Internal">Internal</option>
                                     <option value="External">External</option>
                                   </select>
-                                  <select value={resource.holiday_region || ''} onChange={(e) => onUpdateResourceRegion(resource.id, e.target.value || null)} className="text-xs font-medium rounded-md appearance-none bg-white border border-slate-200 px-2 py-1 focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                                  <select disabled={isReadOnly} value={resource.holiday_region || ''} onChange={(e) => onUpdateResourceRegion(resource.id, e.target.value || null)} className="text-xs font-medium rounded-md appearance-none bg-white border border-slate-200 px-2 py-1 focus:ring-2 focus:ring-indigo-500 cursor-pointer disabled:cursor-default disabled:bg-slate-50">
                                     <option value="">No Region</option>
                                     {countries.map(code => (<option key={code} value={code}>{code} Holidays</option>))}
                                   </select>
@@ -268,9 +271,9 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
                                   <button onClick={() => setExpandedResourceId(prev => prev === resource.id ? null : resource.id)} className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md ${expandedResourceId === resource.id ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100'}`}>
                                     <Calendar size={12} /> Holidays <ChevronDown size={14} className={`transition-transform ${expandedResourceId === resource.id ? 'rotate-180' : ''}`} />
                                   </button>
-                                  <button onClick={() => onDeleteResource(resource.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors" title={`Delete ${resource.name}`}>
+                                  {!isReadOnly && <button onClick={() => onDeleteResource(resource.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors" title={`Delete ${resource.name}`}>
                                     <Trash2 size={16} />
-                                  </button>
+                                  </button>}
                                 </div>
                               </div>
                               {expandedResourceId === resource.id && (
@@ -278,6 +281,7 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
                                   resource={resource}
                                   onAdd={(items) => onAddIndividualHoliday(resource.id, items)}
                                   onDelete={onDeleteIndividualHoliday}
+                                  isReadOnly={isReadOnly}
                                 />
                               )}
                             </li>

@@ -38,6 +38,7 @@ interface PlannerGridProps {
   onRefresh: () => void;
   saveStatus: 'idle' | 'saving' | 'success' | 'error';
   isRefreshing: boolean;
+  isReadOnly?: boolean;
 }
 
 const SaveStatusIndicator: React.FC<{ status: PlannerGridProps['saveStatus'] }> = ({ status }) => {
@@ -69,9 +70,10 @@ interface GridNumberInputProps {
   isHoliday: boolean;
   isCurrent: boolean;
   holidayName?: string | any;
+  disabled?: boolean;
 }
 
-const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNavigate, rowIndex, colIndex, width, isHoliday, isCurrent, holidayName }) => {
+const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNavigate, rowIndex, colIndex, width, isHoliday, isCurrent, holidayName, disabled }) => {
   const [localValue, setLocalValue] = useState(value === 0 ? '' : String(value));
   const [isEditing, setIsEditing] = useState(false);
 
@@ -112,6 +114,10 @@ const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNa
               <div className="flex items-center justify-center h-full text-xs font-bold text-red-700 select-none">
                 {'country' in (holidayName as any) ? (holidayName as any).country : 'AL'}
               </div>
+          ) : disabled ? (
+              <div className="w-full h-full flex items-center justify-center text-xs text-slate-500 font-medium">
+                {localValue}
+              </div>
           ) : (
               <input 
                   type="text"
@@ -127,6 +133,7 @@ const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNa
                   onBlur={commit}
                   onFocus={(e) => { setIsEditing(true); e.target.select(); }}
                   onKeyDown={handleKeyDown}
+                  disabled={disabled}
               />
           )}
       </div>
@@ -184,6 +191,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   onRefresh,
   saveStatus,
   isRefreshing,
+  isReadOnly = false,
 }) => {
   // --- Persistent State Initialization ---
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>(() => {
@@ -401,6 +409,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
 
   const startEditing = (id: string, initialValue: string, e?: React.MouseEvent) => {
+    if (isReadOnly) return;
     if (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -410,7 +419,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
 
   const saveEdit = () => {
-    if (!editingId) return;
+    if (!editingId || isReadOnly) return;
     const [type, ...parts] = editingId.split('::');
 
     if (type === 'project') {
@@ -460,6 +469,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
 
   const handleImportExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (isReadOnly) return;
     // ... Import logic preserved ...
     const file = event.target.files?.[0];
     if (!file) return;
@@ -583,6 +593,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const getProjectTotal = (project: Project, col: TimelineColumn) => project.modules.reduce((sum, module) => sum + getModuleTotal(module, col), 0);
 
   const handleCellUpdate = (projectId: string, moduleId: string, taskId: string, assignmentId: string, col: TimelineColumn, value: string) => {
+    if (isReadOnly) return;
     const numValue = value === '' ? 0 : parseFloat(value);
     if (isNaN(numValue)) return;
 
@@ -619,19 +630,20 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }
   };
 
-  const handleModuleDragStart = (e: React.DragEvent, index: number) => { e.dataTransfer.setData("text/plain", index.toString()); e.dataTransfer.effectAllowed = "move"; setDraggedModuleIndex(index); };
-  const handleModuleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
-  const handleModuleDrop = (e: React.DragEvent, projectId: string, index: number) => { e.preventDefault(); setDraggedModuleIndex(null); const startIndex = parseInt(e.dataTransfer.getData("text/plain"), 10); if (!isNaN(startIndex) && startIndex !== index) { onReorderModules(projectId, startIndex, index); } };
+  const handleModuleDragStart = (e: React.DragEvent, index: number) => { if (isReadOnly) return; e.dataTransfer.setData("text/plain", index.toString()); e.dataTransfer.effectAllowed = "move"; setDraggedModuleIndex(index); };
+  const handleModuleDragOver = (e: React.DragEvent) => { if (isReadOnly) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
+  const handleModuleDrop = (e: React.DragEvent, projectId: string, index: number) => { if (isReadOnly) return; e.preventDefault(); setDraggedModuleIndex(null); const startIndex = parseInt(e.dataTransfer.getData("text/plain"), 10); if (!isNaN(startIndex) && startIndex !== index) { onReorderModules(projectId, startIndex, index); } };
 
-  const handleTaskDragStart = (e: React.DragEvent, moduleId: string, taskIndex: number) => { e.dataTransfer.setData("application/json", JSON.stringify({ type: 'task', moduleId, index: taskIndex })); e.dataTransfer.effectAllowed = "move"; setDraggedTask({ moduleId, index: taskIndex }); };
-  const handleTaskDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
-  const handleTaskDrop = (e: React.DragEvent, projectId: string, targetModuleId: string, targetTaskIndex: number) => { e.preventDefault(); setDraggedTask(null); try { const data = JSON.parse(e.dataTransfer.getData("application/json")); if (data.type === 'task' && data.moduleId === targetModuleId && data.index !== targetTaskIndex) { onReorderTasks(projectId, data.moduleId, data.index, targetTaskIndex); } } catch (err) { console.error("Error dropping task", err); } };
+  const handleTaskDragStart = (e: React.DragEvent, moduleId: string, taskIndex: number) => { if (isReadOnly) return; e.dataTransfer.setData("application/json", JSON.stringify({ type: 'task', moduleId, index: taskIndex })); e.dataTransfer.effectAllowed = "move"; setDraggedTask({ moduleId, index: taskIndex }); };
+  const handleTaskDragOver = (e: React.DragEvent) => { if (isReadOnly) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
+  const handleTaskDrop = (e: React.DragEvent, projectId: string, targetModuleId: string, targetTaskIndex: number) => { if (isReadOnly) return; e.preventDefault(); setDraggedTask(null); try { const data = JSON.parse(e.dataTransfer.getData("application/json")); if (data.type === 'task' && data.moduleId === targetModuleId && data.index !== targetTaskIndex) { onReorderTasks(projectId, data.moduleId, data.index, targetTaskIndex); } } catch (err) { console.error("Error dropping task", err); } };
   
-  const handleAssignmentDragStart = (e: React.DragEvent, taskId: string, assignmentIndex: number) => { e.dataTransfer.setData("application/json", JSON.stringify({ type: 'assignment', taskId, index: assignmentIndex })); e.dataTransfer.effectAllowed = "move"; setDraggedAssignment({ taskId, index: assignmentIndex }); };
-  const handleAssignmentDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
-  const handleAssignmentDrop = (e: React.DragEvent, projectId: string, moduleId: string, targetTaskId: string, targetAssignmentIndex: number) => { e.preventDefault(); setDraggedAssignment(null); try { const data = JSON.parse(e.dataTransfer.getData("application/json")); if (data.type === 'assignment' && data.taskId === targetTaskId && data.index !== targetAssignmentIndex) { onReorderAssignments(projectId, moduleId, data.taskId, data.index, targetAssignmentIndex); } } catch (err) { console.error("Error dropping assignment", err); } };
+  const handleAssignmentDragStart = (e: React.DragEvent, taskId: string, assignmentIndex: number) => { if (isReadOnly) return; e.dataTransfer.setData("application/json", JSON.stringify({ type: 'assignment', taskId, index: assignmentIndex })); e.dataTransfer.effectAllowed = "move"; setDraggedAssignment({ taskId, index: assignmentIndex }); };
+  const handleAssignmentDragOver = (e: React.DragEvent) => { if (isReadOnly) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
+  const handleAssignmentDrop = (e: React.DragEvent, projectId: string, moduleId: string, targetTaskId: string, targetAssignmentIndex: number) => { if (isReadOnly) return; e.preventDefault(); setDraggedAssignment(null); try { const data = JSON.parse(e.dataTransfer.getData("application/json")); if (data.type === 'assignment' && data.taskId === targetTaskId && data.index !== targetAssignmentIndex) { onReorderAssignments(projectId, moduleId, data.taskId, data.index, targetAssignmentIndex); } } catch (err) { console.error("Error dropping assignment", err); } };
 
   const handleAddTaskClick = (projectId: string, moduleId: string) => {
+    if (isReadOnly) return;
     const newTaskId = crypto.randomUUID();
     if (collapsedModules[moduleId]) { toggleModule(moduleId); }
     onAddTask(projectId, moduleId, newTaskId, "New Task", Role.EA);
@@ -639,12 +651,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
 
   const handleAssignmentStartDateChange = (assignment: TaskAssignment, newDateStr: string) => {
-     if (!newDateStr) return;
+     if (isReadOnly || !newDateStr) return;
      onUpdateAssignmentSchedule(assignment.id, newDateStr, assignment.duration || 1);
   };
 
   const saveDuration = (assignment: TaskAssignment) => {
-    if (editingId !== `duration::${assignment.id}`) return;
+    if (editingId !== `duration::${assignment.id}` || isReadOnly) return;
     let startDate = assignment.startDate;
     if (!startDate && assignment.startWeekId) { const d = getDateFromWeek(parseInt(assignment.startWeekId.split('-')[0]), parseInt(assignment.startWeekId.split('-')[1])); startDate = formatDateForInput(d); }
     if (!startDate) { setEditingId(null); return; }
@@ -699,13 +711,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                 <button onClick={onRefresh} disabled={isRefreshing} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Refresh data from server"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh</button>
                 <SaveStatusIndicator status={saveStatus} />
                 <div className="w-px h-4 bg-slate-300"></div>
-                <button onClick={onShowHistory} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="View and restore saved versions"><History size={12} /></button>
+                {!isReadOnly && <button onClick={onShowHistory} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="View and restore saved versions"><History size={12} /></button>}
                 <button onClick={handleExportExcel} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Export the current plan as an Excel file"><Download size={12} /></button>
-                <button onClick={() => importInputRef.current?.click()} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Import a plan from an Excel file"><Upload size={12} /></button>
+                {!isReadOnly && <button onClick={() => importInputRef.current?.click()} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Import a plan from an Excel file"><Upload size={12} /></button>}
                 <input type="file" ref={importInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
             </div>
             <div className="w-px h-4 bg-slate-300"></div>
-            <button onClick={onAddProject} className="text-xs flex items-center gap-1 bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 transition-colors"><Plus size={12} /> Add Project</button>
+            {!isReadOnly && <button onClick={onAddProject} className="text-xs flex items-center gap-1 bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 transition-colors"><Plus size={12} /> Add Project</button>}
             <div className="flex bg-slate-200 p-1 rounded-lg">
               {(['day', 'week', 'month'] as ViewMode[]).map((mode) => (
                 <button key={mode} onClick={() => setViewMode(mode)} className={`px-3 py-1 text-xs font-medium rounded-md transition-all capitalize ${viewMode === mode ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{mode}</button>
@@ -764,13 +776,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
               return (
                 <React.Fragment key={project.id}>
                   <div className="flex bg-slate-700 border-b border-slate-600 sticky z-30 group">
-                    <div className="flex-shrink-0 p-3 pr-2 border-r border-slate-600 sticky left-0 bg-slate-700 z-40 cursor-pointer flex items-center justify-between text-white shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]" style={stickyStyle} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ type: 'project', x: e.pageX, y: e.pageY, projectId: project.id }); }}>
+                    <div className="flex-shrink-0 p-3 pr-2 border-r border-slate-600 sticky left-0 bg-slate-700 z-40 cursor-pointer flex items-center justify-between text-white shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]" style={stickyStyle} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'project', x: e.pageX, y: e.pageY, projectId: project.id }); }}>
                       <div className="flex items-center gap-2 overflow-hidden flex-1" onClick={() => !isEditingProject && toggleProject(project.id)}>
                         {isProjectCollapsed ? <ChevronRight className="w-4 h-4 text-slate-300" /> : <ChevronDown className="w-4 h-4 text-slate-300" />}
                         <Folder className="w-4 h-4 text-slate-200" />
                         {isEditingProject ? ( <input ref={editInputRef} value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown} className="bg-slate-600 text-white text-sm font-bold border border-slate-500 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500" /> ) : ( <span className="font-bold text-sm truncate select-none flex-1" onDoubleClick={(e) => startEditing(`project::${project.id}`, project.name, e)} title="Double click to rename">{project.name}</span> )}
                       </div>
-                      <button onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); }} className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] text-red-300 hover:bg-red-500 hover:text-white p-1 rounded transition-colors" title="Delete Project"><Trash2 size={12} /></button>
+                      {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); }} className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] text-red-300 hover:bg-red-500 hover:text-white p-1 rounded transition-colors" title="Delete Project"><Trash2 size={12} /></button>}
                     </div>
                     <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 39 } : detailsColStyle}></div>
                     {timeline.map(col => { const total = getProjectTotal(project, col); const isCurrent = isCurrentColumn(col); return ( <div key={col.id} className={`flex-shrink-0 border-r border-slate-600 flex items-center justify-center bg-slate-700 ${isCurrent ? 'bg-slate-600 ring-1 ring-inset ring-amber-400/50' : ''}`} style={{ width: `${colWidth}px` }}>{total > 0 && displayMode === 'allocation' && (<span className="text-[10px] font-bold text-slate-200">{formatValue(total)}</span>)}</div> ); })}
@@ -786,16 +798,16 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     { const allAssignments = module.tasks.flatMap(t => t.assignments); if (allAssignments.length > 0) { let earliestDate: Date | null = null; let latestEndDate: Date | null = null; const moduleHolidays = new Set<string>(); allAssignments.forEach(a => { const resourceName = a.resourceName || 'Unassigned'; const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'); if (resourceHolidayData) { resourceHolidayData.dateSet.forEach(d => moduleHolidays.add(d)); } }); allAssignments.forEach(assignment => { if (!assignment.startDate || !assignment.duration) return; const startDate = new Date(assignment.startDate.replace(/-/g, '/')); if (!earliestDate || startDate < earliestDate) { earliestDate = startDate; } const resourceName = assignment.resourceName || 'Unassigned'; const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>(); const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidays); const endDate = new Date(endDateStr.replace(/-/g, '/')); if (!latestEndDate || endDate > latestEndDate) { latestEndDate = endDate; } }); if (earliestDate && latestEndDate) { moduleEarliestStartDate = formatDateForInput(earliestDate); moduleLatestEndDate = latestEndDate; moduleTotalDuration = calculateWorkingDaysBetween(formatDateForInput(earliestDate), formatDateForInput(latestEndDate), moduleHolidays); } } }
 
                     return (
-                      <div key={module.id} draggable onDragStart={(e) => handleModuleDragStart(e, index)} onDragOver={handleModuleDragOver} onDrop={(e) => handleModuleDrop(e, project.id, index)} className={`${draggedModuleIndex === index ? 'opacity-50' : 'opacity-100'}`} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ type: 'module', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id }); }}>
+                      <div key={module.id} draggable={!isReadOnly} onDragStart={(e) => handleModuleDragStart(e, index)} onDragOver={handleModuleDragOver} onDrop={(e) => handleModuleDrop(e, project.id, index)} className={`${draggedModuleIndex === index ? 'opacity-50' : 'opacity-100'}`} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'module', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id }); }}>
                         <div className="flex bg-indigo-50 border-b border-slate-100 hover:bg-indigo-100/50 transition-colors group">
                           <div className="flex-shrink-0 p-3 pl-6 border-r border-slate-200 sticky left-0 bg-indigo-50 z-30 flex items-center justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}>
                             <div className="flex items-center gap-2 flex-1 overflow-hidden cursor-pointer" onClick={() => !isEditingModule && toggleModule(module.id)}>
-                              <div className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500" title="Drag to reorder"><GripVertical className="w-4 h-4" /></div>
+                              {!isReadOnly && <div className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500" title="Drag to reorder"><GripVertical className="w-4 h-4" /></div>}
                               {isModuleCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-indigo-500" />}
                               <Layers className="w-4 h-4 text-indigo-600" />
                               {isEditingModule ? ( <input ref={editInputRef} value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown} className="bg-white text-slate-800 text-sm font-semibold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500" onClick={(e) => e.stopPropagation()} /> ) : ( <span className="font-semibold text-sm text-slate-800 truncate select-none flex-1 hover:text-indigo-600" onDoubleClick={(e) => startEditing(moduleEditId, module.name, e)} title="Double click to rename">{module.name}</span> )}
                             </div>
-                            <button onClick={(e) => { e.stopPropagation(); onDeleteModule(project.id, module.id); }} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-100 transition-opacity" title="Delete Module"><Trash2 size={14} /></button>
+                            {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); onDeleteModule(project.id, module.id); }} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-100 transition-opacity" title="Delete Module"><Trash2 size={14} /></button>}
                           </div>
                           <div className={`flex-shrink-0 text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center bg-indigo-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 29 } : detailsColStyle}>
                             {isModuleCollapsed && ( <div className="flex-1 grid grid-cols-[1fr_60px_30px] gap-2 text-xs text-indigo-800/80 font-medium text-center items-center px-2"><span title="Earliest Start Date" className="bg-indigo-200/50 rounded p-1 text-left">{moduleEarliestStartDate ? moduleEarliestStartDate.substring(5) : '-'}</span><span title="Total Duration (days)" className="bg-indigo-200/50 rounded p-1">{moduleTotalDuration > 0 ? `${moduleTotalDuration}d` : '-'}</span><div></div></div> )}
@@ -818,15 +830,15 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                           return (
                             <React.Fragment key={task.id}>
-                              <div draggable onDragStart={(e) => handleTaskDragStart(e, module.id, taskIndex)} onDragOver={handleTaskDragOver} onDrop={(e) => handleTaskDrop(e, project.id, module.id, taskIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ type: 'task', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id }); }} className={`flex border-b border-slate-100 bg-slate-50 group/task ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>
+                              <div draggable={!isReadOnly} onDragStart={(e) => handleTaskDragStart(e, module.id, taskIndex)} onDragOver={handleTaskDragOver} onDrop={(e) => handleTaskDrop(e, project.id, module.id, taskIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'task', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id }); }} className={`flex border-b border-slate-100 bg-slate-50 group/task ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>
                                 <div className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50 z-20 flex items-center justify-between pl-6 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}>
                                   <div className="flex items-center gap-2 overflow-hidden cursor-pointer flex-1" onClick={() => !isEditingTask && toggleTask(task.id)}>
-                                    <div className="cursor-grab text-slate-400 hover:text-slate-600" title="Drag to reorder task"><GripVertical size={14} /></div>
+                                    {!isReadOnly && <div className="cursor-grab text-slate-400 hover:text-slate-600" title="Drag to reorder task"><GripVertical size={14} /></div>}
                                     {isTaskCollapsed ? <ChevronRight size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
                                     <div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0"></div>
                                     {isEditingTask ? ( <input ref={editInputRef} value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown} className="bg-white text-slate-700 text-xs font-bold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500" /> ) : ( <span className="text-xs text-slate-700 font-bold truncate select-none hover:text-indigo-600 flex-1" title="Double click to rename" onDoubleClick={(e) => startEditing(taskEditId, task.name, e)}>{task.name}</span> )}
                                   </div>
-                                  <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity"><button onClick={() => onAddAssignment(project.id, module.id, task.id, Role.EA)} className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200" title="Add another resource to this task"><UserPlus size={14} /></button></div>
+                                  {!isReadOnly && <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity"><button onClick={() => onAddAssignment(project.id, module.id, task.id, Role.EA)} className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200" title="Add another resource to this task"><UserPlus size={14} /></button></div>}
                                 </div>
                                 <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-50 flex items-center px-2 py-1.5 gap-1 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 19 } : detailsColStyle}>
                                   {isTaskCollapsed && ( <> <div className="w-[14px]"></div> <div className="flex-1 grid grid-cols-[1fr_60px_30px] gap-2 text-xs text-slate-500 font-medium text-center items-center"><span title="Earliest Start Date" className="bg-slate-200/50 rounded p-1 text-left">{earliestStartDate ? earliestStartDate.substring(5) : '-'}</span><span title="Total Duration (days)" className="bg-slate-200/50 rounded p-1">{totalDuration > 0 ? `${totalDuration}d` : '-'}</span><div></div></div> </> )}
@@ -847,22 +859,22 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 const currentRowIndex = gridRowIndex++; // Increment for each assignment row
 
                                 return (
-                                <div key={assignment.id} className={`flex border-b border-slate-100 group/assign ${draggedAssignment?.taskId === task.id && draggedAssignment?.index === assignmentIndex ? 'opacity-30' : ''}`} draggable onDragStart={(e) => handleAssignmentDragStart(e, task.id, assignmentIndex)} onDragOver={handleAssignmentDragOver} onDrop={(e) => handleAssignmentDrop(e, project.id, module.id, task.id, assignmentIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ type: 'assignment', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id, assignmentId: assignment.id }); }}>
+                                <div key={assignment.id} className={`flex border-b border-slate-100 group/assign ${draggedAssignment?.taskId === task.id && draggedAssignment?.index === assignmentIndex ? 'opacity-30' : ''}`} draggable={!isReadOnly} onDragStart={(e) => handleAssignmentDragStart(e, task.id, assignmentIndex)} onDragOver={handleAssignmentDragOver} onDrop={(e) => handleAssignmentDrop(e, project.id, module.id, task.id, assignmentIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'assignment', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id, assignmentId: assignment.id }); }}>
                                   <div className={`flex-shrink-0 py-0.5 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-10 flex items-center justify-between border-l-[3px] ${roleStyle.border} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`} style={stickyStyle}>
                                     <div className="flex-1 overflow-hidden flex items-center gap-2 pl-12">
-                                      <select value={assignment.resourceName || 'Unassigned'} onChange={(e) => onUpdateAssignmentResourceName(project.id, module.id, task.id, assignment.id, e.target.value)} className="w-full text-xs text-slate-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer hover:text-indigo-600">
+                                      <select disabled={isReadOnly} value={assignment.resourceName || 'Unassigned'} onChange={(e) => onUpdateAssignmentResourceName(project.id, module.id, task.id, assignment.id, e.target.value)} className="w-full text-xs text-slate-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer hover:text-indigo-600 disabled:cursor-default disabled:hover:text-slate-600">
                                           <option value="Unassigned">Unassigned</option>
                                           {Object.entries(groupedResources).map(([category, resList]) => ( <optgroup label={category} key={category}>{resList.map(r => <option key={r.id} value={r.name}>{r.name} {r.type === 'External' ? '(Ext.)' : ''}</option>)}</optgroup> ))}
                                       </select>
                                     </div>
                                   </div>
                                   <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 gap-1 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 9 } : detailsColStyle}>
-                                      <div className="cursor-grab text-slate-300 hover:text-slate-500" title="Drag to reorder assignment"><GripVertical size={14} /></div>
+                                      {!isReadOnly && <div className="cursor-grab text-slate-300 hover:text-slate-500" title="Drag to reorder assignment"><GripVertical size={14} /></div>}
                                       <div className="flex-1 grid grid-cols-[1fr_60px_30px] gap-2 items-center">
-                                        <input type="date" title="Start Date" disabled={!!assignment.parentAssignmentId} className={`text-xs py-0.5 px-1 rounded-md bg-transparent border-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full hover:bg-slate-100 ${!!assignment.parentAssignmentId ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-600'}`} value={formatDateForInput(assignmentStartDate)} onChange={(e) => handleAssignmentStartDateChange(assignment, e.target.value)} />
-                                        <input type="number" min="1" title="Duration (days)" value={isEditingDuration ? editValue : (assignment.duration || 1)} onFocus={() => { setEditingId(`duration::${assignment.id}`); setEditValue((assignment.duration || 1).toString()); }} onChange={(e) => setEditValue(e.target.value)} onBlur={() => saveDuration(assignment)} onKeyDown={(e) => { if (e.key === 'Enter') { saveDuration(assignment); (e.target as HTMLInputElement).blur(); } else if (e.key === 'Escape') { setEditingId(null); (e.target as HTMLInputElement).blur(); } }} ref={isEditingDuration ? editInputRef : undefined} className="text-xs py-0.5 px-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center hover:bg-slate-100" />
+                                        <input type="date" title="Start Date" disabled={isReadOnly || !!assignment.parentAssignmentId} className={`text-xs py-0.5 px-1 rounded-md bg-transparent border-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full hover:bg-slate-100 ${isReadOnly || !!assignment.parentAssignmentId ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-600'}`} value={formatDateForInput(assignmentStartDate)} onChange={(e) => handleAssignmentStartDateChange(assignment, e.target.value)} />
+                                        <input type="number" min="1" title="Duration (days)" disabled={isReadOnly} value={isEditingDuration ? editValue : (assignment.duration || 1)} onFocus={() => { setEditingId(`duration::${assignment.id}`); setEditValue((assignment.duration || 1).toString()); }} onChange={(e) => setEditValue(e.target.value)} onBlur={() => saveDuration(assignment)} onKeyDown={(e) => { if (e.key === 'Enter') { saveDuration(assignment); (e.target as HTMLInputElement).blur(); } else if (e.key === 'Escape') { setEditingId(null); (e.target as HTMLInputElement).blur(); } }} ref={isEditingDuration ? editInputRef : undefined} className="text-xs py-0.5 px-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center hover:bg-slate-100 disabled:hover:bg-transparent" />
                                         <div className="relative h-full flex items-center justify-center">
-                                           <select value={assignment.parentAssignmentId || ''} onChange={(e) => onUpdateAssignmentDependency(assignment.id, e.target.value || null)} title="Task Dependency" className="absolute inset-0 w-full h-full text-transparent bg-transparent border-none appearance-none cursor-pointer focus:ring-1 focus:ring-indigo-500 rounded-md">
+                                           <select disabled={isReadOnly} value={assignment.parentAssignmentId || ''} onChange={(e) => onUpdateAssignmentDependency(assignment.id, e.target.value || null)} title="Task Dependency" className="absolute inset-0 w-full h-full text-transparent bg-transparent border-none appearance-none cursor-pointer focus:ring-1 focus:ring-indigo-500 rounded-md disabled:cursor-default">
                                                 <option value="" className="text-black">- No Dependency -</option>
                                                 {Object.entries(groupedParents).map(([label, group]) => ( <optgroup label={label} key={label}>{group.map(parent => ( <option key={parent.id} value={parent.id} className="text-black">{parent.name}</option> ))}</optgroup> ))}
                                             </select>
@@ -891,6 +903,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                                 isHoliday={isHol}
                                                 holidayName={holidayInfo}
                                                 isCurrent={isCurrent}
+                                                disabled={isReadOnly}
                                             />
                                         );
                                     } else {

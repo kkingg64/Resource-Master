@@ -11,7 +11,7 @@ import { VersionHistory } from './components/VersionHistory';
 import { DebugLog } from './components/DebugLog';
 import { AdminSettings } from './components/AdminSettings';
 import { AIAssistant } from './components/AIAssistant';
-import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe } from 'lucide-react';
+import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
@@ -138,6 +138,62 @@ const shiftWeekIdByAmount = (weekId: string, amount: number): string => {
     return `${newPoint.year}-${String(newPoint.week).padStart(2, '0')}`;
 };
 
+const ShareModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const [copied, setCopied] = useState(false);
+  const shareUrl = `${window.location.origin}${window.location.pathname}?mode=readonly`;
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(shareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/30 z-[100] flex items-center justify-center animate-in fade-in duration-200">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <Share2 className="w-5 h-5 text-indigo-600" /> Share Project Plan
+          </h3>
+          <button onClick={onClose} className="p-1 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+        
+        <p className="text-sm text-slate-600 mb-4">
+          Share this link with your team members to give them <strong>Read-Only</strong> access to the Dashboard, Planner, and Estimator.
+        </p>
+
+        <div className="flex items-center gap-2 mb-4">
+          <input 
+            type="text" 
+            readOnly 
+            value={shareUrl} 
+            className="flex-1 bg-slate-50 border border-slate-300 text-slate-600 text-sm rounded-lg p-2.5 focus:ring-indigo-500 focus:border-indigo-500 block w-full"
+          />
+          <button 
+            onClick={copyToClipboard}
+            className={`p-2.5 rounded-lg border flex items-center justify-center transition-all ${copied ? 'bg-green-50 border-green-200 text-green-600' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'}`}
+            title="Copy to clipboard"
+          >
+            {copied ? <Check size={18} /> : <Copy size={18} />}
+          </button>
+        </div>
+
+        <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800">
+           <strong>Note:</strong> Team members must have access to the underlying project data in the system for this link to populate correctly.
+        </div>
+        
+        <div className="mt-6 flex justify-end">
+          <button onClick={onClose} className="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-700 transition-colors">
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const App: React.FC = () => {
   const [session, setSession] = useState<any | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -148,6 +204,17 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'planner' | 'estimator' | 'settings' | 'resources' | 'holidays'>('planner');
   const [showHistory, setShowHistory] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  const [showShareModal, setShowShareModal] = useState(false);
+  
+  // Read Only Mode Logic
+  const [isReadOnlyMode, setIsReadOnlyMode] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('mode') === 'readonly') {
+        setIsReadOnlyMode(true);
+    }
+  }, []);
   
   const [timelineStart, setTimelineStart] = useState<WeekPoint>(DEFAULT_START);
   const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
@@ -185,6 +252,8 @@ const App: React.FC = () => {
     payload: any,
     supabasePromise: PromiseLike<{ data: any; error: any }>
   ) => {
+    if (isReadOnlyMode) return { data: null, error: 'Read Only Mode' };
+
     const logId = log(message, payload);
     setSaveStatus('saving');
     window.clearTimeout(statusTimeoutRef.current);
@@ -362,6 +431,7 @@ const App: React.FC = () => {
   };
 
   const propagateScheduleChanges = async (currentProjects: Project[], startAssignmentId: string) => {
+    if (isReadOnlyMode) return;
     const assignmentMap = new Map<string, TaskAssignment>();
     const dependencyMap = new Map<string, string[]>();
 
@@ -482,6 +552,7 @@ const App: React.FC = () => {
   };
   
   const updateAssignmentSchedule = async (assignmentId: string, startDate: string, duration: number) => {
+    if (isReadOnlyMode) return;
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
     let foundAssignment: TaskAssignment | null = null;
@@ -575,6 +646,7 @@ const App: React.FC = () => {
   };
 
   const updateAssignmentProgress = async (assignmentId: string, progress: number) => {
+      if (isReadOnlyMode) return;
       const previousState = deepClone(projects);
       const updatedProjects = deepClone(projects);
       let found = false;
@@ -609,6 +681,7 @@ const App: React.FC = () => {
   };
 
   const updateAssignmentDependency = async (assignmentId: string, parentAssignmentId: string | null) => {
+    if (isReadOnlyMode) return;
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
     let targetAssignment = null;
@@ -675,6 +748,7 @@ const App: React.FC = () => {
   };
   
   const reorderModules = async (projectId: string, startIndex: number, endIndex: number) => {
+      if (isReadOnlyMode) return;
       const previousState = deepClone(projects);
       const updatedProjects = deepClone(projects);
       const project = updatedProjects.find(p => p.id === projectId);
@@ -688,6 +762,7 @@ const App: React.FC = () => {
   };
   
   const reorderTasks = async (projectId: string, moduleId: string, startIndex: number, endIndex: number) => {
+      if (isReadOnlyMode) return;
       const previousState = deepClone(projects);
       const updatedProjects = deepClone(projects);
       const project = updatedProjects.find(p => p.id === projectId);
@@ -703,6 +778,7 @@ const App: React.FC = () => {
   };
 
   const reorderAssignments = async (projectId: string, moduleId: string, taskId: string, startIndex: number, endIndex: number) => {
+    if (isReadOnlyMode) return;
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
     const task = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
@@ -716,6 +792,7 @@ const App: React.FC = () => {
   };
   
   const onShiftTask = async (projectId: string, moduleId: string, taskId: string, direction: 'left' | 'right') => {
+    if (isReadOnlyMode) return;
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
     const task = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
@@ -743,18 +820,21 @@ const App: React.FC = () => {
   };
 
   const addResource = async (name: string, category: Role, region: string, type: 'Internal' | 'External') => {
+    if (isReadOnlyMode) return;
     const { error } = await callSupabase('CREATE resource', { name }, supabase.from('resources').insert({ name, category, holiday_region: region === 'No Region' ? null : region, type, user_id: session!.user.id }).select().single());
     if (error) { alert("Failed to add resource."); } else { fetchData(true); }
   };
   const deleteResource = async (id: string) => {
+    if (isReadOnlyMode) return;
     if (window.confirm('Delete resource?')) { const { error } = await callSupabase('DELETE resource', { id }, supabase.from('resources').delete().eq('id', id)); if (error) { alert("Failed to delete resource."); } else { fetchData(true); } }
   };
-  const updateResourceCategory = async (id: string, category: Role) => { const { error } = await callSupabase('UPDATE resource category', { id, category }, supabase.from('resources').update({ category }).eq('id', id)); if (error) alert("Failed to update resource category."); else fetchData(true); };
-  const updateResourceRegion = async (id: string, region: string | null) => { const { error } = await callSupabase('UPDATE resource region', { id, region }, supabase.from('resources').update({ holiday_region: region }).eq('id', id)); if (error) alert("Failed to update resource region."); else fetchData(true); };
-  const updateResourceType = async (id: string, type: 'Internal' | 'External') => { const { error } = await callSupabase('UPDATE resource type', { id, type }, supabase.from('resources').update({ type }).eq('id', id)); if (error) alert("Failed to update resource type."); else fetchData(true); };
+  const updateResourceCategory = async (id: string, category: Role) => { if (isReadOnlyMode) return; const { error } = await callSupabase('UPDATE resource category', { id, category }, supabase.from('resources').update({ category }).eq('id', id)); if (error) alert("Failed to update resource category."); else fetchData(true); };
+  const updateResourceRegion = async (id: string, region: string | null) => { if (isReadOnlyMode) return; const { error } = await callSupabase('UPDATE resource region', { id, region }, supabase.from('resources').update({ holiday_region: region }).eq('id', id)); if (error) alert("Failed to update resource region."); else fetchData(true); };
+  const updateResourceType = async (id: string, type: 'Internal' | 'External') => { if (isReadOnlyMode) return; const { error } = await callSupabase('UPDATE resource type', { id, type }, supabase.from('resources').update({ type }).eq('id', id)); if (error) alert("Failed to update resource type."); else fetchData(true); };
   
   // NEW: Rename Resource function
   const updateResourceName = async (id: string, name: string) => {
+    if (isReadOnlyMode) return;
     const resource = resources.find(r => r.id === id);
     const oldName = resource?.name;
     
@@ -777,18 +857,19 @@ const App: React.FC = () => {
 
   // Updated to accept an array of holidays for bulk insertion
   const addIndividualHolidays = async (resourceId: string, items: { date: string, name: string }[]) => { 
+      if (isReadOnlyMode) return;
       const toInsert = items.map(item => ({ resource_id: resourceId, date: item.date, name: item.name, user_id: session!.user.id }));
       const { error } = await callSupabase('ADD individual holidays', { count: toInsert.length }, supabase.from('individual_holidays').insert(toInsert)); 
       if (error) alert("Failed to add holidays."); 
       else fetchData(true); 
   };
   
-  const deleteIndividualHoliday = async (holidayId: string) => { const { error } = await callSupabase('DELETE individual holiday', { id: holidayId }, supabase.from('individual_holidays').delete().eq('id', holidayId)); if (error) alert("Failed to delete holiday."); else fetchData(true); };
-  const addHoliday = async (holidays: Omit<Holiday, 'id'>[]) => { const toInsert = holidays.map(h => ({ ...h, user_id: session!.user.id })); const { error } = await callSupabase('ADD holidays', { count: toInsert.length }, supabase.from('holidays').insert(toInsert)); if (error) alert("Failed to add holidays."); else fetchData(true); };
-  const deleteHoliday = async (id: string) => { const { error } = await callSupabase('DELETE holiday', { id }, supabase.from('holidays').delete().eq('id', id)); if (error) alert("Failed to delete holiday."); else fetchData(true); };
-  const deleteHolidaysByCountry = async (country: string) => { const { error } = await callSupabase('DELETE holidays by country', { country }, supabase.from('holidays').delete().eq('country', country).eq('user_id', session!.user.id)); if (error) alert("Failed to delete holidays."); else fetchData(true); };
-  const saveCurrentVersion = async (name: string) => { const { error } = await callSupabase('SAVE version', { name }, supabase.from('versions').insert({ name, user_id: session!.user.id, data: { projects, resources, holidays } })); if (error) alert("Failed to save version."); };
-  const restoreVersion = async (versionId: number) => { const { data, error } = await supabase.from('versions').select('data').eq('id', versionId).single(); if (error || !data) { alert("Failed to restore version."); return; } const snapshot = data.data; if (snapshot.projects) { alert("Version restore logic would implementation deep backend restore. Loading snapshot into memory only."); setProjects(snapshot.projects); setResources(snapshot.resources || []); setHolidays(snapshot.holidays || []); } };
+  const deleteIndividualHoliday = async (holidayId: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('DELETE individual holiday', { id: holidayId }, supabase.from('individual_holidays').delete().eq('id', holidayId)); if (error) alert("Failed to delete holiday."); else fetchData(true); };
+  const addHoliday = async (holidays: Omit<Holiday, 'id'>[]) => { if (isReadOnlyMode) return; const toInsert = holidays.map(h => ({ ...h, user_id: session!.user.id })); const { error } = await callSupabase('ADD holidays', { count: toInsert.length }, supabase.from('holidays').insert(toInsert)); if (error) alert("Failed to add holidays."); else fetchData(true); };
+  const deleteHoliday = async (id: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('DELETE holiday', { id }, supabase.from('holidays').delete().eq('id', id)); if (error) alert("Failed to delete holiday."); else fetchData(true); };
+  const deleteHolidaysByCountry = async (country: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('DELETE holidays by country', { country }, supabase.from('holidays').delete().eq('country', country).eq('user_id', session!.user.id)); if (error) alert("Failed to delete holidays."); else fetchData(true); };
+  const saveCurrentVersion = async (name: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('SAVE version', { name }, supabase.from('versions').insert({ name, user_id: session!.user.id, data: { projects, resources, holidays } })); if (error) alert("Failed to save version."); };
+  const restoreVersion = async (versionId: number) => { if (isReadOnlyMode) return; const { data, error } = await supabase.from('versions').select('data').eq('id', versionId).single(); if (error || !data) { alert("Failed to restore version."); return; } const snapshot = data.data; if (snapshot.projects) { alert("Version restore logic would implementation deep backend restore. Loading snapshot into memory only."); setProjects(snapshot.projects); setResources(snapshot.resources || []); setHolidays(snapshot.holidays || []); } };
 
   // --- Missing Handlers Implemented Below ---
   
@@ -801,6 +882,7 @@ const App: React.FC = () => {
   };
 
   const updateAllocation = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, count: number, dayDate?: string) => {
+      if (isReadOnlyMode) return;
       const previousState = deepClone(projects);
       const updatedProjects = deepClone(projects);
       let foundAssignment: TaskAssignment | null = null;
@@ -856,6 +938,7 @@ const App: React.FC = () => {
   };
 
   const updateAssignmentResourceName = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, resourceName: string) => {
+      if (isReadOnlyMode) return;
       const updatedProjects = deepClone(projects);
       let found = false;
       for(const p of updatedProjects) {
@@ -880,6 +963,7 @@ const App: React.FC = () => {
   };
 
   const addTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
+    if (isReadOnlyMode) return;
     const newProjectTask: ProjectTask = {
         id: taskId,
         name: taskName,
@@ -914,6 +998,7 @@ const App: React.FC = () => {
   };
 
   const addAssignment = async (projectId: string, moduleId: string, taskId: string, role: Role) => {
+      if (isReadOnlyMode) return;
       const updatedProjects = deepClone(projects);
       const project = updatedProjects.find(p => p.id === projectId);
       const module = project?.modules.find(m => m.id === moduleId);
@@ -948,6 +1033,7 @@ const App: React.FC = () => {
   };
 
   const onCopyAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
+      if (isReadOnlyMode) return;
       const updatedProjects = deepClone(projects);
       const task = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
       
@@ -994,6 +1080,7 @@ const App: React.FC = () => {
   };
   
   const addProject = async () => {
+    if (isReadOnlyMode) return;
     const name = "New Project";
     const { data, error } = await callSupabase('CREATE project', { name }, 
         supabase.from('projects').insert({ name, user_id: session.user.id }).select().single()
@@ -1004,6 +1091,7 @@ const App: React.FC = () => {
   };
   
   const addModule = async (projectId: string) => {
+     if (isReadOnlyMode) return;
      const updatedProjects = deepClone(projects);
      const project = updatedProjects.find(p => p.id === projectId);
      if(project) {
@@ -1036,6 +1124,7 @@ const App: React.FC = () => {
   };
   
   const updateProjectName = async (projectId: string, name: string) => {
+      if (isReadOnlyMode) return;
       setProjects(prev => prev.map(p => p.id === projectId ? { ...p, name } : p));
       await callSupabase('UPDATE project name', { projectId, name },
           supabase.from('projects').update({ name }).eq('id', projectId)
@@ -1043,6 +1132,7 @@ const App: React.FC = () => {
   };
 
   const updateModuleName = async (projectId: string, moduleId: string, name: string) => {
+      if (isReadOnlyMode) return;
       setProjects(prev => prev.map(p => {
           if (p.id !== projectId) return p;
           return {
@@ -1056,6 +1146,7 @@ const App: React.FC = () => {
   };
 
   const updateTaskName = async (projectId: string, moduleId: string, taskId: string, name: string) => {
+      if (isReadOnlyMode) return;
       setProjects(prev => prev.map(p => {
           if (p.id !== projectId) return p;
           return {
@@ -1075,12 +1166,14 @@ const App: React.FC = () => {
   };
   
   const deleteProject = async (projectId: string) => {
+      if (isReadOnlyMode) return;
       if(!window.confirm("Delete project?")) return;
       setProjects(prev => prev.filter(p => p.id !== projectId));
       await callSupabase('DELETE project', { projectId }, supabase.from('projects').delete().eq('id', projectId));
   };
 
   const deleteModule = async (projectId: string, moduleId: string) => {
+      if (isReadOnlyMode) return;
       if(!window.confirm("Delete module?")) return;
       setProjects(prev => prev.map(p => {
           if(p.id !== projectId) return p;
@@ -1090,6 +1183,7 @@ const App: React.FC = () => {
   };
 
   const deleteTask = async (projectId: string, moduleId: string, taskId: string) => {
+      if (isReadOnlyMode) return;
       if(!window.confirm("Delete task?")) return;
       setProjects(prev => prev.map(p => {
           if(p.id !== projectId) return p;
@@ -1105,6 +1199,7 @@ const App: React.FC = () => {
   };
   
   const deleteAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
+      if (isReadOnlyMode) return;
       if(!window.confirm("Delete assignment?")) return;
       setProjects(prev => prev.map(p => {
           if(p.id !== projectId) return p;
@@ -1126,6 +1221,7 @@ const App: React.FC = () => {
   };
 
   const updateFunctionPoints = async (projectId: string, moduleId: string, legacyFp: number, feFp: number, beFp: number, pVel: number, pTeam: number, fVel: number, fTeam: number, bVel: number, bTeam: number) => {
+      if (isReadOnlyMode) return;
       setProjects(prev => prev.map(p => {
           if(p.id !== projectId) return p;
           return {
@@ -1166,6 +1262,7 @@ const App: React.FC = () => {
   };
   
   const updateModuleComplexity = async (projectId: string, moduleId: string, type: 'frontend' | 'backend', complexity: ComplexityLevel) => {
+      if (isReadOnlyMode) return;
       setProjects(prev => prev.map(p => {
           if(p.id !== projectId) return p;
           return {
@@ -1184,6 +1281,7 @@ const App: React.FC = () => {
   };
 
   const updateModuleStartDate = async (projectId: string, moduleId: string, startDate: string | null) => {
+      if (isReadOnlyMode) return;
       setProjects(prev => prev.map(p => {
           if(p.id !== projectId) return p;
           return {
@@ -1201,6 +1299,7 @@ const App: React.FC = () => {
   };
 
   const updateModuleDeliveryTask = async (projectId: string, moduleId: string, deliveryTaskId: string | null) => {
+     if (isReadOnlyMode) return;
      // Deprecated logic kept for interface compliance
       setProjects(prev => prev.map(p => {
           if(p.id !== projectId) return p;
@@ -1219,6 +1318,7 @@ const App: React.FC = () => {
   };
 
   const updateModuleStartTask = async (projectId: string, moduleId: string, startTaskId: string | null) => {
+      if (isReadOnlyMode) return;
       setProjects(prev => prev.map(p => {
           if(p.id !== projectId) return p;
           return {
@@ -1258,10 +1358,21 @@ const App: React.FC = () => {
                 <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors">
                     {isSidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
                 </button>
-                <h1 className="font-bold text-lg text-slate-800 tracking-tight">OMS Resource Master</h1>
+                <h1 className="font-bold text-lg text-slate-800 tracking-tight">
+                    OMS Resource Master 
+                    {isReadOnlyMode && <span className="ml-2 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">Read-Only Mode</span>}
+                </h1>
             </div>
             <div className="flex items-center gap-4">
-                <span className="text-xs font-medium bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full border border-indigo-100">{session.user.email}</span>
+                {!isReadOnlyMode && (
+                    <button 
+                        onClick={() => setShowShareModal(true)} 
+                        className="text-xs flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-100 border border-indigo-200 transition-colors font-medium"
+                    >
+                        <Share2 size={14} /> Share
+                    </button>
+                )}
+                <span className="text-xs font-medium bg-slate-50 text-slate-700 px-3 py-1 rounded-full border border-slate-200">{session.user.email}</span>
                 <button onClick={() => supabase.auth.signOut()} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Sign Out">
                     <LogOut size={18} />
                 </button>
@@ -1279,7 +1390,7 @@ const App: React.FC = () => {
                    <SidebarItem icon={Users} label="Resources" isActive={activeTab === 'resources'} onClick={() => setActiveTab('resources')} collapsed={isSidebarCollapsed} />
                    <SidebarItem icon={Globe} label="Holidays" isActive={activeTab === 'holidays'} onClick={() => setActiveTab('holidays')} collapsed={isSidebarCollapsed} />
                    <div className="my-2 border-t border-slate-100"></div>
-                   <SidebarItem icon={SettingsIcon} label="Settings" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} collapsed={isSidebarCollapsed} />
+                   {!isReadOnlyMode && <SidebarItem icon={SettingsIcon} label="Settings" isActive={activeTab === 'settings'} onClick={() => setActiveTab('settings')} collapsed={isSidebarCollapsed} />}
                 </nav>
             </div>
 
@@ -1317,11 +1428,12 @@ const App: React.FC = () => {
                                 onDeleteModule={deleteModule}
                                 onDeleteTask={deleteTask}
                                 onDeleteAssignment={deleteAssignment}
-                                onImportPlan={(p) => { setProjects(p); }}
+                                onImportPlan={(p) => { if(!isReadOnlyMode) setProjects(p); }}
                                 onShowHistory={() => setShowHistory(true)}
                                 onRefresh={() => fetchData(true)}
                                 saveStatus={saveStatus}
                                 isRefreshing={isRefreshing}
+                                isReadOnly={isReadOnlyMode}
                             />
                         </div>
                     )}
@@ -1336,6 +1448,7 @@ const App: React.FC = () => {
                                 onUpdateModuleStartDate={updateModuleStartDate}
                                 onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
                                 onUpdateModuleStartTask={updateModuleStartTask}
+                                isReadOnly={isReadOnlyMode}
                             />
                         </div>
                     )}
@@ -1351,6 +1464,7 @@ const App: React.FC = () => {
                               onUpdateResourceName={updateResourceName}
                               onAddIndividualHoliday={addIndividualHolidays}
                               onDeleteIndividualHoliday={deleteIndividualHoliday}
+                              isReadOnly={isReadOnlyMode}
                            />
                         </div>
                     )}
@@ -1364,7 +1478,7 @@ const App: React.FC = () => {
                             />
                         </div>
                     )}
-                    {activeTab === 'settings' && (
+                    {activeTab === 'settings' && !isReadOnlyMode && (
                         <div className="max-w-4xl mx-auto h-full overflow-y-auto custom-scrollbar">
                            <Settings 
                                 isDebugLogEnabled={isDebugLogEnabled} 
@@ -1379,15 +1493,16 @@ const App: React.FC = () => {
         </div>
 
         {/* Floating Components */}
+        {showShareModal && <ShareModal onClose={() => setShowShareModal(false)} />}
         {isDebugLogEnabled && <DebugLog entries={logEntries} setEntries={setLogEntries} />}
-        {showHistory && (
+        {showHistory && !isReadOnlyMode && (
             <VersionHistory 
                 onClose={() => setShowHistory(false)} 
                 onRestore={restoreVersion}
                 onSaveCurrent={saveCurrentVersion}
             />
         )}
-        {isAIEnabled && <AIAssistant 
+        {isAIEnabled && !isReadOnlyMode && <AIAssistant 
             projects={projects}
             resources={resources}
             onAddTask={addTask}
