@@ -125,7 +125,7 @@ const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNa
                   data-c={colIndex}
                   data-grid="planner"
                   className={`w-full h-full text-center text-xs focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors
-                      {(localValue && localValue !== '0') ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50/50'}
+                      ${(localValue && localValue !== '0') ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50/50'}
                   `}
                   value={localValue}
                   placeholder="-"
@@ -246,11 +246,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [colWidthBase, setColWidthBase] = useState(40);
   const [isDetailsFrozen, setIsDetailsFrozen] = useState(true);
   
-  const isResizingSidebar = useRef(false);
-  const isResizingStart = useRef(false);
-  const isResizingDuration = useRef(false);
-  const isResizingDependency = useRef(false);
-  
   const [showToggleMenu, setShowToggleMenu] = useState(false);
 
   const [contextMenu, setContextMenu] = useState<{ 
@@ -266,6 +261,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const importInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const toggleButtonRef = useRef<HTMLButtonElement>(null);
+
+  // --- Performance: Ghost Resize Refs ---
+  const resizeGhostRef = useRef<HTMLDivElement>(null);
+  const isResizing = useRef(false);
+  const resizeData = useRef({ col: '', startX: 0, startWidth: 0 });
 
   useEffect(() => {
     if (editingId && editInputRef.current) {
@@ -298,70 +298,62 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
 
   const handleToggleResources = () => {
-    // Resources are children of tasks. Collapsing tasks hides resources.
     const allTaskIds = projects.flatMap(p => p.modules.flatMap(m => m.tasks.map(t => t.id)));
     const areSomeCollapsed = allTaskIds.some(id => collapsedTasks[id]);
     const newCollapsedState = areSomeCollapsed ? {} : allTaskIds.reduce((acc, id) => ({ ...acc, [id]: true }), {});
     setCollapsedTasks(newCollapsedState);
   };
   
-  const startSidebarResize = (e: React.MouseEvent) => {
-    isResizingSidebar.current = true;
+  // --- Optimized Resize Handlers (Ghost Resize) ---
+  const handleResizeStart = (col: string, currentWidth: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isResizing.current = true;
+    resizeData.current = { col, startX: e.clientX, startWidth: currentWidth };
+    
+    if (resizeGhostRef.current) {
+        resizeGhostRef.current.style.display = 'block';
+        resizeGhostRef.current.style.left = `${e.clientX}px`;
+    }
+    
     document.body.style.cursor = 'col-resize';
-  };
-  const startStartResize = (e: React.MouseEvent) => {
-    isResizingStart.current = true;
-    document.body.style.cursor = 'col-resize';
-  };
-  const startDurationResize = (e: React.MouseEvent) => {
-    isResizingDuration.current = true;
-    document.body.style.cursor = 'col-resize';
-  };
-  const startDependencyResize = (e: React.MouseEvent) => {
-    isResizingDependency.current = true;
-    document.body.style.cursor = 'col-resize';
+    window.addEventListener('mousemove', handleResizeMove);
+    window.addEventListener('mouseup', handleResizeEnd);
   };
 
-  const handleMouseMove = (e: MouseEvent) => {
-    if (isResizingSidebar.current) {
-      setSidebarWidth(prev => Math.max(200, Math.min(600, prev + e.movementX)));
-    }
-    if (isResizingStart.current) {
-      setStartColWidth(prev => Math.max(80, Math.min(200, prev + e.movementX)));
-    }
-    if (isResizingDuration.current) {
-      setDurationColWidth(prev => Math.max(40, Math.min(150, prev + e.movementX)));
-    }
-    if (isResizingDependency.current) {
-      setDependencyColWidth(prev => Math.max(40, Math.min(400, prev + e.movementX)));
-    }
-  };
-  const handleMouseUp = () => {
-    isResizingSidebar.current = false;
-    isResizingStart.current = false;
-    isResizingDuration.current = false;
-    isResizingDependency.current = false;
-    document.body.style.cursor = 'default';
+  const handleResizeMove = (e: MouseEvent) => {
+      if (!isResizing.current) return;
+      if (resizeGhostRef.current) {
+          resizeGhostRef.current.style.left = `${e.clientX}px`;
+      }
   };
 
-  useEffect(() => {
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, []);
+  const handleResizeEnd = (e: MouseEvent) => {
+      if (!isResizing.current) return;
+      isResizing.current = false;
+      
+      const delta = e.clientX - resizeData.current.startX;
+      const newWidth = resizeData.current.startWidth + delta;
+      const col = resizeData.current.col;
+
+      if (col === 'sidebar') setSidebarWidth(Math.max(200, Math.min(600, newWidth)));
+      if (col === 'start') setStartColWidth(Math.max(80, Math.min(200, newWidth)));
+      if (col === 'duration') setDurationColWidth(Math.max(40, Math.min(150, newWidth)));
+      if (col === 'dependency') setDependencyColWidth(Math.max(40, Math.min(400, newWidth)));
+
+      if (resizeGhostRef.current) resizeGhostRef.current.style.display = 'none';
+      document.body.style.cursor = 'default';
+      window.removeEventListener('mousemove', handleResizeMove);
+      window.removeEventListener('mouseup', handleResizeEnd);
+  };
 
   const resourceHolidaysMap = useMemo(() => {
     const map = new Map<string, { holidays: (Omit<Holiday, 'id'> | IndividualHoliday)[], dateSet: Set<string> }>();
     
-    // Determine default holidays for "Unassigned" (use 'HK' or first available)
     const availableRegions = Array.from(new Set(holidays.map(h => h.country)));
     const defaultRegion = availableRegions.includes('HK') ? 'HK' : availableRegions[0];
     const defaultHolidays = defaultRegion ? holidays.filter(h => h.country === defaultRegion) : [];
     
-    // Add "Unassigned" entry
     map.set('Unassigned', {
         holidays: defaultHolidays,
         dateSet: new Set(defaultHolidays.map(h => h.date))
@@ -401,7 +393,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     const flatList: { id: string; name: string; parentAssignmentId?: string; groupLabel: string }[] = [];
     projects.forEach(p => {
       p.modules.forEach(m => {
-        // Group clearly by module name first, then project
         const groupLabel = `📦 ${m.name}  (Project: ${p.name})`;
         m.tasks.forEach(t => {
           t.assignments.forEach(a => {
@@ -471,7 +462,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
 
   const handleExportExcel = () => {
-    // ... Excel export logic preserved ...
     const planData: any[] = [];
     const weekHeaders = getTimeline('week', timelineStart, timelineEnd).map(w => w.id);
     projects.forEach(p => {
@@ -493,7 +483,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const handleImportExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (isReadOnly) return;
-    // ... Import logic preserved ...
     const file = event.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -703,7 +692,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   return (
     <>
-      <div className="flex flex-col h-full bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="flex flex-col h-full bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden relative">
+        {/* Ghost Resize Line */}
+        <div 
+            ref={resizeGhostRef} 
+            className="fixed top-0 bottom-0 w-0.5 bg-indigo-500 z-[100] hidden pointer-events-none border-l border-dashed border-indigo-200"
+            style={{ display: 'none' }}
+        ></div>
+
         <div className="px-4 py-3 border-b border-slate-200 flex justify-between items-center bg-slate-50">
           <div className="flex items-center gap-4">
              <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-500" /><span className="text-sm font-semibold text-slate-700">Timeline</span></div>
@@ -760,7 +756,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                 <div className="flex bg-slate-200 border-b border-slate-200 sticky top-0 z-40 h-8 items-center">
                   <div className="flex-shrink-0 px-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group h-full flex items-center" style={stickyStyle}>
                     Project Structure
-                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
+                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={(e) => handleResizeStart('sidebar', sidebarWidth, e)}></div>
                   </div>
                   
                   {/* Start Column Header */}
@@ -769,19 +765,19 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         <button onClick={() => setIsDetailsFrozen(!isDetailsFrozen)} title={isDetailsFrozen ? 'Unfreeze columns' : 'Freeze columns'} className="text-slate-400 hover:text-indigo-600 mr-1">{isDetailsFrozen ? <PinOff size={14} /> : <Pin size={14} />}</button>
                         <span className="flex-1 text-center">Start</span>
                     </div>
-                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startStartResize}></div>
+                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={(e) => handleResizeStart('start', startColWidth, e)}></div>
                   </div>
 
                   {/* Duration Column Header */}
                   <div className={`flex-shrink-0 flex items-center justify-center px-2 text-xs font-semibold text-slate-600 border-r border-slate-200 relative h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}>
                     <span>Days</span>
-                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDurationResize}></div>
+                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={(e) => handleResizeStart('duration', durationColWidth, e)}></div>
                   </div>
 
                   {/* Dependency Column Header */}
                   <div title="Dependency" className={`flex-shrink-0 flex items-center justify-center px-2 text-xs font-semibold text-slate-600 border-r border-slate-200 relative h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}>
                     <Link2 size={14} className="text-slate-600" />
-                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDependencyResize}></div>
+                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={(e) => handleResizeStart('dependency', dependencyColWidth, e)}></div>
                   </div>
 
                   {Object.values(yearHeaders).map((group, idx) => (<div key={idx} className="text-center text-xs font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
