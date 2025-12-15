@@ -125,7 +125,7 @@ const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNa
                   data-c={colIndex}
                   data-grid="planner"
                   className={`w-full h-full text-center text-xs focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors
-                      ${(localValue && localValue !== '0') ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50/50'}
+                      {(localValue && localValue !== '0') ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50/50'}
                   `}
                   value={localValue}
                   placeholder="-"
@@ -239,11 +239,17 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [draggedAssignment, setDraggedAssignment] = useState<{ taskId: string, index: number } | null>(null);
   
   const [sidebarWidth, setSidebarWidth] = useState(350);
-  const [detailsWidth, setDetailsWidth] = useState(330);
+  const [startColWidth, setStartColWidth] = useState(95);
+  const [durationColWidth, setDurationColWidth] = useState(50);
+  const [dependencyColWidth, setDependencyColWidth] = useState(100);
+
   const [colWidthBase, setColWidthBase] = useState(40);
   const [isDetailsFrozen, setIsDetailsFrozen] = useState(true);
+  
   const isResizingSidebar = useRef(false);
-  const isResizingDetails = useRef(false);
+  const isResizingStart = useRef(false);
+  const isResizingDuration = useRef(false);
+  const isResizingDependency = useRef(false);
   
   const [showToggleMenu, setShowToggleMenu] = useState(false);
 
@@ -303,21 +309,38 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     isResizingSidebar.current = true;
     document.body.style.cursor = 'col-resize';
   };
-  const startDetailsResize = (e: React.MouseEvent) => {
-    isResizingDetails.current = true;
+  const startStartResize = (e: React.MouseEvent) => {
+    isResizingStart.current = true;
     document.body.style.cursor = 'col-resize';
   };
+  const startDurationResize = (e: React.MouseEvent) => {
+    isResizingDuration.current = true;
+    document.body.style.cursor = 'col-resize';
+  };
+  const startDependencyResize = (e: React.MouseEvent) => {
+    isResizingDependency.current = true;
+    document.body.style.cursor = 'col-resize';
+  };
+
   const handleMouseMove = (e: MouseEvent) => {
     if (isResizingSidebar.current) {
       setSidebarWidth(prev => Math.max(200, Math.min(600, prev + e.movementX)));
     }
-    if (isResizingDetails.current) {
-      setDetailsWidth(prev => Math.max(220, Math.min(500, prev + e.movementX)));
+    if (isResizingStart.current) {
+      setStartColWidth(prev => Math.max(80, Math.min(200, prev + e.movementX)));
+    }
+    if (isResizingDuration.current) {
+      setDurationColWidth(prev => Math.max(40, Math.min(150, prev + e.movementX)));
+    }
+    if (isResizingDependency.current) {
+      setDependencyColWidth(prev => Math.max(40, Math.min(400, prev + e.movementX)));
     }
   };
   const handleMouseUp = () => {
     isResizingSidebar.current = false;
-    isResizingDetails.current = false;
+    isResizingStart.current = false;
+    isResizingDuration.current = false;
+    isResizingDependency.current = false;
     document.body.style.cursor = 'default';
   };
 
@@ -667,7 +690,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const colWidth = viewMode === 'month' ? colWidthBase * 2 : colWidthBase;
   const stickyStyle = { width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth };
-  const detailsColStyle = { width: detailsWidth, minWidth: detailsWidth, maxWidth: detailsWidth };
+  
+  const startColLeft = sidebarWidth;
+  const durationColLeft = sidebarWidth + startColWidth;
+  const dependencyColLeft = sidebarWidth + startColWidth + durationColWidth;
+
   const showYearRow = viewMode === 'day' || viewMode === 'week' || viewMode === 'month';
   const showMonthRow = viewMode === 'day' || viewMode === 'week';
 
@@ -735,23 +762,44 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     Project Structure
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startSidebarResize}></div>
                   </div>
-                  <div className={`flex-shrink-0 flex items-center text-center text-xs font-semibold text-slate-600 border-r border-slate-200 relative px-2 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}>
-                    <button onClick={() => setIsDetailsFrozen(!isDetailsFrozen)} title={isDetailsFrozen ? 'Unfreeze columns' : 'Freeze columns'} className="w-6 shrink-0 text-slate-400 hover:text-indigo-600">{isDetailsFrozen ? <PinOff size={14} /> : <Pin size={14} />}</button>
-                    <div className="flex-1 grid grid-cols-[1fr_60px_30px] gap-2 uppercase items-center"><span>Start</span><span className="text-center">Days</span><div className="justify-self-center" title="Dependency"><Link2 size={14} className="text-slate-600" /></div></div>
-                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDetailsResize}></div>
+                  
+                  {/* Start Column Header */}
+                  <div className={`flex-shrink-0 flex items-center px-2 text-xs font-semibold text-slate-600 border-r border-slate-200 relative h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}>
+                    <div className="flex items-center justify-between w-full">
+                        <button onClick={() => setIsDetailsFrozen(!isDetailsFrozen)} title={isDetailsFrozen ? 'Unfreeze columns' : 'Freeze columns'} className="text-slate-400 hover:text-indigo-600 mr-1">{isDetailsFrozen ? <PinOff size={14} /> : <Pin size={14} />}</button>
+                        <span className="flex-1 text-center">Start</span>
+                    </div>
+                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startStartResize}></div>
                   </div>
+
+                  {/* Duration Column Header */}
+                  <div className={`flex-shrink-0 flex items-center justify-center px-2 text-xs font-semibold text-slate-600 border-r border-slate-200 relative h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}>
+                    <span>Days</span>
+                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDurationResize}></div>
+                  </div>
+
+                  {/* Dependency Column Header */}
+                  <div title="Dependency" className={`flex-shrink-0 flex items-center justify-center px-2 text-xs font-semibold text-slate-600 border-r border-slate-200 relative h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}>
+                    <Link2 size={14} className="text-slate-600" />
+                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={startDependencyResize}></div>
+                  </div>
+
                   {Object.values(yearHeaders).map((group, idx) => (<div key={idx} className="text-center text-xs font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                 </div>
                 {showMonthRow && (
                   <div className="flex bg-slate-100 border-b border-slate-200 sticky top-8 z-40 h-8 items-center">
                     <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
-                    <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}></div>
+                    <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
+                    <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
+                    <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
                     {Object.values(monthHeaders).map((group, idx) => (<div key={idx} className="text-center text-xs font-bold text-slate-600 border-r border-slate-200 uppercase h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                   </div>
                 )}
                 <div className={`flex bg-slate-50 border-b border-slate-200 sticky z-40 shadow-sm h-8 items-center ${showMonthRow ? 'top-16' : 'top-8'}`}>
                   <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
-                  <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}></div>
+                  <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
+                  <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
+                  <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
                   {timeline.map(col => {
                       const isCurrent = isCurrentColumn(col);
                       let isHKHoliday = false;
@@ -784,7 +832,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                       </div>
                       {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); }} className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] text-red-300 hover:bg-red-500 hover:text-white p-1 rounded transition-colors" title="Delete Project"><Trash2 size={12} /></button>}
                     </div>
-                    <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 39 } : detailsColStyle}></div>
+                    {/* Project Row Spacers */}
+                    <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 39 : undefined }}></div>
+                    <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 39 : undefined }}></div>
+                    <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 39 : undefined }}></div>
+                    
                     {timeline.map(col => { const total = getProjectTotal(project, col); const isCurrent = isCurrentColumn(col); return ( <div key={col.id} className={`flex-shrink-0 border-r border-slate-600 flex items-center justify-center bg-slate-700 ${isCurrent ? 'bg-slate-600 ring-1 ring-inset ring-amber-400/50' : ''}`} style={{ width: `${colWidth}px` }}>{total > 0 && displayMode === 'allocation' && (<span className="text-[10px] font-bold text-slate-200">{formatValue(total)}</span>)}</div> ); })}
                   </div>
 
@@ -809,9 +861,16 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             </div>
                             {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); onDeleteModule(project.id, module.id); }} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-100 transition-opacity" title="Delete Module"><Trash2 size={14} /></button>}
                           </div>
-                          <div className={`flex-shrink-0 text-xs font-bold text-slate-500 border-r border-slate-200 flex items-center bg-indigo-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 29 } : detailsColStyle}>
-                            {isModuleCollapsed && ( <div className="flex-1 grid grid-cols-[1fr_60px_30px] gap-2 text-xs text-indigo-800/80 font-medium text-center items-center px-2"><span title="Earliest Start Date" className="bg-indigo-200/50 rounded p-1 text-left">{moduleEarliestStartDate ? moduleEarliestStartDate.substring(5) : '-'}</span><span title="Total Duration (days)" className="bg-indigo-200/50 rounded p-1">{moduleTotalDuration > 0 ? `${moduleTotalDuration}d` : '-'}</span><div></div></div> )}
+                          
+                          {/* Module Details Columns */}
+                          <div className={`flex-shrink-0 text-xs font-bold text-indigo-800/80 border-r border-slate-200 flex items-center justify-center bg-indigo-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 29 : undefined }}>
+                            {isModuleCollapsed && moduleEarliestStartDate && <span title="Earliest Start Date" className="bg-indigo-200/50 rounded p-1">{moduleEarliestStartDate.substring(5)}</span>}
                           </div>
+                          <div className={`flex-shrink-0 text-xs font-bold text-indigo-800/80 border-r border-slate-200 flex items-center justify-center bg-indigo-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 29 : undefined }}>
+                            {isModuleCollapsed && moduleTotalDuration > 0 && <span title="Total Duration" className="bg-indigo-200/50 rounded p-1">{moduleTotalDuration}d</span>}
+                          </div>
+                          <div className={`flex-shrink-0 border-r border-slate-200 bg-indigo-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 29 : undefined }}></div>
+
                           {timeline.map(col => {
                             const total = getModuleTotal(module, col);
                             const isCurrent = isCurrentColumn(col);
@@ -840,9 +899,16 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   </div>
                                   {!isReadOnly && <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity"><button onClick={() => onAddAssignment(project.id, module.id, task.id, Role.EA)} className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200" title="Add another resource to this task"><UserPlus size={14} /></button></div>}
                                 </div>
-                                <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-50 flex items-center px-2 py-1.5 gap-1 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 19 } : detailsColStyle}>
-                                  {isTaskCollapsed && ( <> <div className="w-[14px]"></div> <div className="flex-1 grid grid-cols-[1fr_60px_30px] gap-2 text-xs text-slate-500 font-medium text-center items-center"><span title="Earliest Start Date" className="bg-slate-200/50 rounded p-1 text-left">{earliestStartDate ? earliestStartDate.substring(5) : '-'}</span><span title="Total Duration (days)" className="bg-slate-200/50 rounded p-1">{totalDuration > 0 ? `${totalDuration}d` : '-'}</span><div></div></div> </> )}
+                                
+                                {/* Task Details Columns */}
+                                <div className={`flex-shrink-0 text-xs font-medium text-slate-500 border-r border-slate-200 flex items-center justify-center bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 19 : undefined }}>
+                                  {isTaskCollapsed && earliestStartDate && <span title="Earliest Start Date" className="bg-slate-200/50 rounded p-1">{earliestStartDate.substring(5)}</span>}
                                 </div>
+                                <div className={`flex-shrink-0 text-xs font-medium text-slate-500 border-r border-slate-200 flex items-center justify-center bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 19 : undefined }}>
+                                  {isTaskCollapsed && totalDuration > 0 && <span title="Total Duration" className="bg-slate-200/50 rounded p-1">{totalDuration}d</span>}
+                                </div>
+                                <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 19 : undefined }}></div>
+
                                 {timeline.map(col => {
                                   const total = getTaskTotal(task, col); const isCurrent = isCurrentColumn(col); let isInTaskRange = false; let isTaskStart = false; let isTaskEnd = false;
                                   if (earliestStartDate && latestEndDate) { const tStart = new Date(earliestStartDate.replace(/-/g, '/')); const tEnd = latestEndDate; if (viewMode === 'day' && col.date) { isInTaskRange = col.date >= tStart && col.date <= tEnd; isTaskStart = col.date.getTime() === tStart.getTime(); isTaskEnd = col.date.getTime() === tEnd.getTime(); if (formatDateForInput(col.date) === formatDateForInput(tStart)) isTaskStart = true; if (formatDateForInput(col.date) === formatDateForInput(tEnd)) isTaskEnd = true; } else if (viewMode === 'week') { const [y, w] = col.id.split('-').map(Number); const colDate = getDateFromWeek(y, w); const colEnd = new Date(colDate); colEnd.setDate(colEnd.getDate() + 6); isInTaskRange = (tStart <= colEnd) && (tEnd >= colDate); if (isInTaskRange) { const startWeekId = getWeekIdFromDate(tStart); const endWeekId = getWeekIdFromDate(tEnd); isTaskStart = col.id === startWeekId; isTaskEnd = col.id === endWeekId; } } else if (viewMode === 'month') { if (col.weekIds && col.weekIds.length > 0) { const startWeek = col.weekIds[0]; const endWeek = col.weekIds[col.weekIds.length - 1]; const [y1, w1] = startWeek.split('-').map(Number); const mStart = getDateFromWeek(y1, w1); const [y2, w2] = endWeek.split('-').map(Number); const mEnd = new Date(getDateFromWeek(y2, w2)); mEnd.setDate(mEnd.getDate() + 6); isInTaskRange = (tStart <= mEnd) && (tEnd >= mStart); isTaskStart = tStart >= mStart && tStart <= mEnd; isTaskEnd = tEnd >= mStart && tEnd <= mEnd; } } }
@@ -868,18 +934,22 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                       </select>
                                     </div>
                                   </div>
-                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 gap-1 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 9 } : detailsColStyle}>
-                                      {!isReadOnly && <div className="cursor-grab text-slate-300 hover:text-slate-500" title="Drag to reorder assignment"><GripVertical size={14} /></div>}
-                                      <div className="flex-1 grid grid-cols-[1fr_60px_30px] gap-2 items-center">
-                                        <input type="date" title="Start Date" disabled={isReadOnly || !!assignment.parentAssignmentId} className={`text-xs py-0.5 px-1 rounded-md bg-transparent border-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full hover:bg-slate-100 ${isReadOnly || !!assignment.parentAssignmentId ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-600'}`} value={formatDateForInput(assignmentStartDate)} onChange={(e) => handleAssignmentStartDateChange(assignment, e.target.value)} />
-                                        <input type="number" min="1" title="Duration (days)" disabled={isReadOnly} value={isEditingDuration ? editValue : (assignment.duration || 1)} onFocus={() => { setEditingId(`duration::${assignment.id}`); setEditValue((assignment.duration || 1).toString()); }} onChange={(e) => setEditValue(e.target.value)} onBlur={() => saveDuration(assignment)} onKeyDown={(e) => { if (e.key === 'Enter') { saveDuration(assignment); (e.target as HTMLInputElement).blur(); } else if (e.key === 'Escape') { setEditingId(null); (e.target as HTMLInputElement).blur(); } }} ref={isEditingDuration ? editInputRef : undefined} className="text-xs py-0.5 px-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center hover:bg-slate-100 disabled:hover:bg-transparent" />
-                                        <div className="relative h-full flex items-center justify-center">
+                                  
+                                  {/* Assignment Details Columns */}
+                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
+                                      {!isReadOnly && <div className="cursor-grab text-slate-300 hover:text-slate-500 mr-1" title="Drag to reorder assignment"><GripVertical size={14} /></div>}
+                                      <input type="date" title="Start Date" disabled={isReadOnly || !!assignment.parentAssignmentId} className={`text-xs py-0.5 px-1 rounded-md bg-transparent border-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full hover:bg-slate-100 ${isReadOnly || !!assignment.parentAssignmentId ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-600'}`} value={formatDateForInput(assignmentStartDate)} onChange={(e) => handleAssignmentStartDateChange(assignment, e.target.value)} />
+                                  </div>
+                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
+                                      <input type="number" min="1" title="Duration (days)" disabled={isReadOnly} value={isEditingDuration ? editValue : (assignment.duration || 1)} onFocus={() => { setEditingId(`duration::${assignment.id}`); setEditValue((assignment.duration || 1).toString()); }} onChange={(e) => setEditValue(e.target.value)} onBlur={() => saveDuration(assignment)} onKeyDown={(e) => { if (e.key === 'Enter') { saveDuration(assignment); (e.target as HTMLInputElement).blur(); } else if (e.key === 'Escape') { setEditingId(null); (e.target as HTMLInputElement).blur(); } }} ref={isEditingDuration ? editInputRef : undefined} className="text-xs py-0.5 px-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center hover:bg-slate-100 disabled:hover:bg-transparent" />
+                                  </div>
+                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-center px-1 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
+                                      <div className="relative w-full h-full flex items-center justify-center">
                                            <select disabled={isReadOnly} value={assignment.parentAssignmentId || ''} onChange={(e) => onUpdateAssignmentDependency(assignment.id, e.target.value || null)} title="Task Dependency" className="absolute inset-0 w-full h-full text-transparent bg-transparent border-none appearance-none cursor-pointer focus:ring-1 focus:ring-indigo-500 rounded-md disabled:cursor-default">
                                                 <option value="" className="text-black">- No Dependency -</option>
                                                 {Object.entries(groupedParents).map(([label, group]) => ( <optgroup label={label} key={label}>{group.map(parent => ( <option key={parent.id} value={parent.id} className="text-black">{parent.name}</option> ))}</optgroup> ))}
                                             </select>
                                             {assignment.parentAssignmentId ? <Link size={14} className="text-indigo-600 pointer-events-none" /> : <Link2 size={14} className="text-slate-400 pointer-events-none" />}
-                                        </div>
                                       </div>
                                   </div>
                                   
@@ -931,7 +1001,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             
             <div className="flex bg-slate-800 text-white border-t border-slate-700 sticky bottom-0 z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.2)] mt-0.5">
               <div className="flex-shrink-0 p-3 border-r border-slate-700 sticky left-0 bg-slate-800 z-50 font-bold text-sm shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]" style={stickyStyle}>GRAND TOTAL</div>
-              <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={isDetailsFrozen ? { ...detailsColStyle, left: sidebarWidth, zIndex: 49 } : detailsColStyle}></div>
+              
+              <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
+              <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
+              <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
+
               {timeline.map(col => { const total = projects.reduce((acc, p) => acc + getProjectTotal(p, col), 0); const isCurrent = isCurrentColumn(col); return ( <div key={`total-${col.id}`} className={`flex-shrink-0 border-r border-slate-700 flex items-center justify-center text-xs font-mono font-bold ${isCurrent ? 'bg-slate-700 ring-1 ring-inset ring-amber-400/50' : ''}`} style={{ width: `${colWidth}px` }}>{total > 0 && displayMode === 'allocation' ? formatValue(total) : ''}</div> ); })}
             </div>
           </div>

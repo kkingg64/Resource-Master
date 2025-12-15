@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useMemo } from 'react';
 import { Holiday } from '../types';
 import { GOV_HOLIDAYS_DB } from '../constants';
 import { Globe, Download, Trash2, CalendarDays, CheckCircle, Plus, Building } from 'lucide-react';
@@ -89,6 +90,22 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
   const isHolidayActive = (sourceHoliday: Omit<Holiday, 'id'>) => {
     return holidays.some(h => h.date === sourceHoliday.date && h.country === sourceHoliday.country);
   }
+
+  // Group holidays by country
+  const groupedHolidays = useMemo(() => {
+    const groups: Record<string, Holiday[]> = {};
+    holidays.forEach(h => {
+        if (!groups[h.country]) groups[h.country] = [];
+        groups[h.country].push(h);
+    });
+    // Sort holidays within groups by date
+    Object.keys(groups).forEach(key => {
+        groups[key].sort((a, b) => a.date.localeCompare(b.date));
+    });
+    return groups;
+  }, [holidays]);
+
+  const sortedCountryCodes = Object.keys(groupedHolidays).sort();
 
   return (
     <div className="flex h-full gap-6 overflow-hidden">
@@ -235,11 +252,11 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
              <table className="w-full text-sm text-left">
                <thead className="bg-white text-slate-600 sticky top-0 z-10 shadow-sm">
                  <tr>
-                   <th className="p-3 font-semibold border-b w-32">Date</th>
+                   <th className="p-3 font-semibold border-b w-32 pl-6">Date</th>
                    <th className="p-3 font-semibold border-b">Holiday Name</th>
                    <th className="p-3 font-semibold border-b w-24">Region</th>
                    <th className="p-3 font-semibold border-b w-24">Type</th>
-                   <th className="p-3 font-semibold border-b w-16 text-right">Action</th>
+                   <th className="p-3 font-semibold border-b w-16 text-right pr-6">Action</th>
                  </tr>
                </thead>
                <tbody className="divide-y divide-slate-100">
@@ -250,32 +267,41 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
                      </td>
                    </tr>
                  )}
-                 {[...holidays].sort((a, b) => a.date.localeCompare(b.date)).map((h) => (
-                   <tr key={h.id} className={`hover:bg-slate-50 ${h.country === selectedCountryCode ? 'bg-indigo-50/30' : ''}`}>
-                     <td className="p-3 font-mono text-slate-600">{h.date}</td>
-                     <td className="p-3 font-medium text-slate-800">{h.name}</td>
-                     <td className="p-3">
-                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${h.country === selectedCountryCode ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-600'}`}>
-                         {h.country}
-                       </span>
-                     </td>
-                     <td className="p-3">
-                        {isGovHoliday(h) ? (
-                            <span className="text-xs font-semibold text-slate-500">Public</span>
-                        ) : (
-                            <span className="text-xs font-semibold text-indigo-600">Company</span>
-                        )}
-                     </td>
-                     <td className="p-3 text-right">
-                       <button 
-                         onClick={() => onDeleteHoliday(h.id)}
-                         className="text-slate-400 hover:text-red-600 transition-colors"
-                         title="Remove holiday"
-                       >
-                         <Trash2 size={14} />
-                       </button>
-                     </td>
-                   </tr>
+                 {sortedCountryCodes.map(countryCode => (
+                    <React.Fragment key={countryCode}>
+                        <tr className="bg-slate-50 border-y border-slate-200 sticky top-10 z-0">
+                            <td colSpan={5} className="px-4 py-2 text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50">
+                                {countries.find(c => c.code === countryCode)?.name || countryCode} ({countryCode})
+                            </td>
+                        </tr>
+                        {groupedHolidays[countryCode].map((h) => (
+                           <tr key={h.id} className={`hover:bg-slate-50 ${h.country === selectedCountryCode ? 'bg-indigo-50/10' : ''}`}>
+                             <td className="p-3 font-mono text-slate-600 pl-6">{h.date}</td>
+                             <td className="p-3 font-medium text-slate-800">{h.name}</td>
+                             <td className="p-3">
+                               <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${h.country === selectedCountryCode ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-600'}`}>
+                                 {h.country}
+                               </span>
+                             </td>
+                             <td className="p-3">
+                                {isGovHoliday(h) ? (
+                                    <span className="text-xs font-semibold text-slate-500">Public</span>
+                                ) : (
+                                    <span className="text-xs font-semibold text-indigo-600">Company</span>
+                                )}
+                             </td>
+                             <td className="p-3 text-right pr-6">
+                               <button 
+                                 onClick={() => onDeleteHoliday(h.id)}
+                                 className="text-slate-400 hover:text-red-600 transition-colors"
+                                 title="Remove holiday"
+                               >
+                                 <Trash2 size={14} />
+                               </button>
+                             </td>
+                           </tr>
+                        ))}
+                    </React.Fragment>
                  ))}
                </tbody>
              </table>
