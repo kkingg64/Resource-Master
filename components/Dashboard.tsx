@@ -193,12 +193,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
     return result.sort((a,b) => a.weekId.localeCompare(b.weekId));
   }, [projects]);
 
-  // 6. Weekly Pulse (Daily Activity)
+  // 6. Weekly Pulse (Daily Activity) - Grouped by Task
   const weeklyPulse = useMemo(() => {
     const weekDates = getWeekdaysForWeekId(currentWeekId);
-    const activityByDay: Record<string, { id: string, resource: string, task: string, module: string, role: string }[]> = {};
     
-    weekDates.forEach(d => activityByDay[d] = []);
+    // Structure: Date -> TaskID -> { task, module, resources Set }
+    const dailyGroups: Record<string, Map<string, { task: string, module: string, resources: Set<string> }>> = {};
+    
+    weekDates.forEach(d => dailyGroups[d] = new Map());
 
     projects.forEach(p => {
         p.modules.forEach(m => {
@@ -208,37 +210,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
                     
                     const alloc = a.allocations.find(al => al.weekId === currentWeekId);
                     if (alloc) {
-                        // If days breakdown exists, use it. Otherwise assume roughly even distribution if full week count > 0
-                        // For visualization accuracy, we rely on `days` map if available.
+                        const addToDay = (date: string) => {
+                            if (!dailyGroups[date]) return;
+                            const dayMap = dailyGroups[date];
+                            if (!dayMap.has(t.id)) {
+                                dayMap.set(t.id, { task: t.name, module: m.name, resources: new Set() });
+                            }
+                            dayMap.get(t.id)!.resources.add(a.resourceName!);
+                        };
+
                         if (alloc.days && Object.keys(alloc.days).length > 0) {
                             Object.entries(alloc.days).forEach(([date, count]) => {
-                                if (activityByDay[date] && count > 0) {
-                                    activityByDay[date].push({
-                                        id: a.id,
-                                        resource: a.resourceName!,
-                                        task: t.name,
-                                        module: m.name,
-                                        role: a.role
-                                    });
-                                }
+                                if (count > 0) addToDay(date);
                             });
                         } else if (alloc.count > 0) {
-                            // Fallback: Show on all days if just weekly total (legacy behavior support)
-                            weekDates.forEach(date => {
-                                activityByDay[date].push({
-                                    id: a.id,
-                                    resource: a.resourceName!,
-                                    task: t.name,
-                                    module: m.name,
-                                    role: a.role
-                                });
-                            });
+                            weekDates.forEach(date => addToDay(date));
                         }
                     }
                 });
             });
         });
     });
+
+    const activityByDay: Record<string, { task: string, module: string, resources: string[] }[]> = {};
+    weekDates.forEach(d => {
+        activityByDay[d] = Array.from(dailyGroups[d].values()).map(item => ({
+            task: item.task,
+            module: item.module,
+            resources: Array.from(item.resources).sort()
+        }));
+    });
+
     return { dates: weekDates, activity: activityByDay };
   }, [projects, currentWeekId]);
 
@@ -304,7 +306,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
         </div>
       </div>
 
-      {/* Weekly Pulse Section (New) */}
+      {/* Weekly Pulse Section (Grouped by Task) */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 overflow-hidden">
         <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-2">
             <Activity className="text-indigo-600" size={20} />
@@ -329,10 +331,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
                                 <div className="text-[10px] text-slate-400 text-center mt-4 italic">No active tasks</div>
                             ) : (
                                 items.map((item, i) => (
-                                    <div key={`${item.id}-${i}`} className="bg-white p-2 rounded shadow-sm border border-slate-100 text-xs group hover:border-indigo-300 transition-colors">
-                                        <div className="font-bold text-slate-700 truncate" title={item.resource}>{item.resource}</div>
-                                        <div className="text-[10px] text-slate-500 truncate" title={item.task}>{item.task}</div>
-                                        <div className="text-[9px] text-indigo-400 mt-1 truncate">{item.module}</div>
+                                    <div key={`${item.task}-${i}`} className="bg-white p-2 rounded shadow-sm border border-slate-100 text-xs group hover:border-indigo-300 transition-colors">
+                                        <div className="font-medium text-slate-700 truncate mb-0.5" title={item.task}>{item.task}</div>
+                                        <div className="text-[9px] text-indigo-400 mb-1.5 truncate">{item.module}</div>
+                                        
+                                        <div className="flex flex-wrap gap-1">
+                                            {item.resources.map((res, ridx) => (
+                                                <span key={ridx} className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-100 text-slate-600 border border-slate-200" title={res}>
+                                                    {res}
+                                                </span>
+                                            ))}
+                                        </div>
                                     </div>
                                 ))
                             )}
