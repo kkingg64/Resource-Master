@@ -2,8 +2,8 @@
 import React, { useMemo } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
-import { getTimeline, DEFAULT_START, DEFAULT_END, calculateWorkingDaysBetween, formatDateForInput } from '../constants';
-import { AlertCircle, CheckCircle2, Clock, Users, Briefcase, ChevronRight, AlertTriangle, AlertOctagon } from 'lucide-react';
+import { getTimeline, DEFAULT_START, DEFAULT_END, calculateWorkingDaysBetween, formatDateForInput, getWeekIdFromDate, getWeekdaysForWeekId } from '../constants';
+import { AlertCircle, CheckCircle2, Clock, Users, Briefcase, ChevronRight, AlertTriangle, AlertOctagon, CalendarDays, Activity } from 'lucide-react';
 
 interface DashboardProps {
   projects: Project[];
@@ -16,6 +16,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
   const GLOBAL_TIMELINE_DATA = useMemo(() => getTimeline('week', DEFAULT_START, DEFAULT_END), []);
   const today = new Date();
   const todayStr = formatDateForInput(today);
+  const currentWeekId = getWeekIdFromDate(today);
 
   // 1. Calculate General Stats
   const stats = useMemo(() => {
@@ -192,6 +193,55 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
     return result.sort((a,b) => a.weekId.localeCompare(b.weekId));
   }, [projects]);
 
+  // 6. Weekly Pulse (Daily Activity)
+  const weeklyPulse = useMemo(() => {
+    const weekDates = getWeekdaysForWeekId(currentWeekId);
+    const activityByDay: Record<string, { id: string, resource: string, task: string, module: string, role: string }[]> = {};
+    
+    weekDates.forEach(d => activityByDay[d] = []);
+
+    projects.forEach(p => {
+        p.modules.forEach(m => {
+            m.tasks.forEach(t => {
+                t.assignments.forEach(a => {
+                    if (!a.resourceName || a.resourceName === 'Unassigned') return;
+                    
+                    const alloc = a.allocations.find(al => al.weekId === currentWeekId);
+                    if (alloc) {
+                        // If days breakdown exists, use it. Otherwise assume roughly even distribution if full week count > 0
+                        // For visualization accuracy, we rely on `days` map if available.
+                        if (alloc.days && Object.keys(alloc.days).length > 0) {
+                            Object.entries(alloc.days).forEach(([date, count]) => {
+                                if (activityByDay[date] && count > 0) {
+                                    activityByDay[date].push({
+                                        id: a.id,
+                                        resource: a.resourceName!,
+                                        task: t.name,
+                                        module: m.name,
+                                        role: a.role
+                                    });
+                                }
+                            });
+                        } else if (alloc.count > 0) {
+                            // Fallback: Show on all days if just weekly total (legacy behavior support)
+                            weekDates.forEach(date => {
+                                activityByDay[date].push({
+                                    id: a.id,
+                                    resource: a.resourceName!,
+                                    task: t.name,
+                                    module: m.name,
+                                    role: a.role
+                                });
+                            });
+                        }
+                    }
+                });
+            });
+        });
+    });
+    return { dates: weekDates, activity: activityByDay };
+  }, [projects, currentWeekId]);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 h-full overflow-y-auto custom-scrollbar p-1">
       
@@ -251,6 +301,50 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
              <div className="mt-4 text-xs text-orange-600 font-medium bg-orange-50 px-2 py-1 rounded w-fit">
                 Est. Size
             </div>
+        </div>
+      </div>
+
+      {/* Weekly Pulse Section (New) */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 overflow-hidden">
+        <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-2">
+            <Activity className="text-indigo-600" size={20} />
+            <h3 className="font-bold text-slate-800">Weekly Pulse</h3>
+            <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-mono">{currentWeekId}</span>
+        </div>
+        <div className="grid grid-cols-5 gap-4">
+            {weeklyPulse.dates.map((date, idx) => {
+                const isToday = date === todayStr;
+                const items = weeklyPulse.activity[date] || [];
+                const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short' });
+                const dayNum = new Date(date).getDate();
+
+                return (
+                    <div key={date} className={`flex flex-col rounded-xl border transition-all duration-300 ${isToday ? 'bg-white border-indigo-200 ring-2 ring-indigo-500/20 shadow-lg scale-[1.02] z-10' : 'bg-slate-50 border-slate-200 opacity-90'}`}>
+                        <div className={`p-2 border-b flex justify-between items-center ${isToday ? 'bg-indigo-50 border-indigo-100' : 'border-slate-100'}`}>
+                            <span className={`text-xs font-bold uppercase ${isToday ? 'text-indigo-700' : 'text-slate-500'}`}>{dayName}</span>
+                            <span className={`text-xs font-bold ${isToday ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'} px-1.5 rounded`}>{dayNum}</span>
+                        </div>
+                        <div className="p-2 space-y-2 min-h-[120px] max-h-[200px] overflow-y-auto custom-scrollbar">
+                            {items.length === 0 ? (
+                                <div className="text-[10px] text-slate-400 text-center mt-4 italic">No active tasks</div>
+                            ) : (
+                                items.map((item, i) => (
+                                    <div key={`${item.id}-${i}`} className="bg-white p-2 rounded shadow-sm border border-slate-100 text-xs group hover:border-indigo-300 transition-colors">
+                                        <div className="font-bold text-slate-700 truncate" title={item.resource}>{item.resource}</div>
+                                        <div className="text-[10px] text-slate-500 truncate" title={item.task}>{item.task}</div>
+                                        <div className="text-[9px] text-indigo-400 mt-1 truncate">{item.module}</div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        {isToday && (
+                            <div className="bg-indigo-50 text-[10px] text-indigo-600 text-center py-1 font-bold border-t border-indigo-100 rounded-b-xl">
+                                TODAY
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
         </div>
       </div>
 
