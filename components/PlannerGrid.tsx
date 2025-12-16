@@ -241,7 +241,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const [startColWidth, setStartColWidth] = useState(95);
   const [durationColWidth, setDurationColWidth] = useState(50);
-  const [dependencyColWidth, setDependencyColWidth] = useState(100);
+  const [dependencyColWidth, setDependencyColWidth] = useState(50);
 
   const [colWidthBase, setColWidthBase] = useState(40);
   const [isDetailsFrozen, setIsDetailsFrozen] = useState(true);
