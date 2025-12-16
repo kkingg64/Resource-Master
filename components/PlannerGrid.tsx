@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
@@ -990,7 +991,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           
                           {/* Module Details Columns */}
                           <div className={`flex-shrink-0 text-[10px] font-bold text-indigo-800/80 border-r border-slate-200 flex items-center justify-center bg-indigo-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 29 : undefined }}>
-                            {isModuleCollapsed && moduleEarliestStartDate && <span title="Earliest Start Date" className="bg-indigo-200/50 rounded p-1">{moduleEarliestStartDate.substring(5)}</span>}
+                            {isModuleCollapsed && moduleEarliestStartDate && <span title="Earliest Start Date" className="bg-indigo-200/50 rounded p-1">{moduleEarliestStartDate}</span>}
                           </div>
                           <div className={`flex-shrink-0 text-[10px] font-bold text-indigo-800/80 border-r border-slate-200 flex items-center justify-center bg-indigo-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 29 : undefined }}>
                             {isModuleCollapsed && moduleTotalDuration > 0 && <span title="Total Duration" className="bg-indigo-200/50 rounded p-1">{moduleTotalDuration}d</span>}
@@ -1027,7 +1028,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 
                                 {/* Task Details Columns */}
                                 <div className={`flex-shrink-0 text-[10px] font-medium text-slate-500 border-r border-slate-200 flex items-center justify-center bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 19 : undefined }}>
-                                  {isTaskCollapsed && earliestStartDate && <span title="Earliest Start Date" className="bg-slate-200/50 rounded p-1">{earliestStartDate.substring(5)}</span>}
+                                  {isTaskCollapsed && earliestStartDate && <span title="Earliest Start Date" className="bg-slate-200/50 rounded p-1">{earliestStartDate}</span>}
                                 </div>
                                 <div className={`flex-shrink-0 text-[10px] font-medium text-slate-500 border-r border-slate-200 flex items-center justify-center bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 19 : undefined }}>
                                   {isTaskCollapsed && totalDuration > 0 && <span title="Total Duration" className="bg-slate-200/50 rounded p-1">{totalDuration}d</span>}
