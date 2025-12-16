@@ -807,6 +807,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   // --- Grid Row Tracking ---
   let gridRowIndex = 0;
 
+  // --- Calculate Current Column for Overlay ---
+  const currentColumnIndex = timeline.findIndex(c => isCurrentColumn(c));
+  const stickyLeftOffset = sidebarWidth + startColWidth + durationColWidth + dependencyColWidth;
+
   return (
     <>
       <div className="flex flex-col h-full bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden relative">
@@ -867,7 +871,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         </div>
 
         <div className="overflow-x-auto custom-scrollbar flex-1 relative">
-          <div className="min-w-max">
+          <div className="min-w-max relative">
               <>
                 {/* Header Rows */}
                 <div className="flex bg-slate-200 border-b border-slate-200 sticky top-0 z-40 h-8 items-center">
@@ -930,6 +934,17 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                 </div>
               </>
 
+            {/* Today/Current Column Highlighter Overlay */}
+            {currentColumnIndex !== -1 && (
+                <div 
+                    className="absolute top-0 bottom-0 pointer-events-none z-35 border-l-2 border-r-2 border-amber-400 bg-amber-400/10 mix-blend-multiply"
+                    style={{
+                        left: stickyLeftOffset + (currentColumnIndex * colWidth),
+                        width: colWidth
+                    }}
+                />
+            )}
+
             {projects.map((project) => {
               const isProjectCollapsed = collapsedProjects[project.id];
               const isEditingProject = editingId === `project::${project.id}`;
@@ -943,14 +958,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         <Folder className="w-3.5 h-3.5 text-slate-200" />
                         {isEditingProject ? ( <input ref={editInputRef} value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown} className="bg-slate-600 text-white text-xs font-bold border border-slate-500 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500" /> ) : ( <span className="font-bold text-xs truncate select-none flex-1" onDoubleClick={(e) => startEditing(`project::${project.id}`, project.name, e)} title="Double click to rename">{project.name}</span> )}
                       </div>
-                      {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); onDeleteProject(project.id); }} className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] text-red-300 hover:bg-red-500 hover:text-white p-1 rounded transition-colors" title="Delete Project"><Trash2 size={12} /></button>}
                     </div>
                     {/* Project Row Spacers */}
                     <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 39 : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 39 : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 39 : undefined }}></div>
                     
-                    {timeline.map(col => { const total = getProjectTotal(project, col); const isCurrent = isCurrentColumn(col); return ( <div key={col.id} className={`flex-shrink-0 border-r border-slate-600 flex items-center justify-center bg-slate-700 ${isCurrent ? 'bg-slate-600 ring-1 ring-inset ring-amber-400/50' : ''}`} style={{ width: `${colWidth}px` }}>{total > 0 && displayMode === 'allocation' && (<span className="text-[10px] font-bold text-slate-200">{formatValue(total)}</span>)}</div> ); })}
+                    {timeline.map(col => { const total = getProjectTotal(project, col); return ( <div key={col.id} className={`flex-shrink-0 border-r border-slate-600 flex items-center justify-center bg-slate-700`} style={{ width: `${colWidth}px` }}>{total > 0 && displayMode === 'allocation' && (<span className="text-[10px] font-bold text-slate-200">{formatValue(total)}</span>)}</div> ); })}
                   </div>
 
                   {!isProjectCollapsed && project.modules.map((module, index) => {
@@ -972,7 +986,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               <Layers className="w-4 h-4 text-indigo-600" />
                               {isEditingModule ? ( <input ref={editInputRef} value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown} className="bg-white text-slate-800 text-xs font-semibold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500" onClick={(e) => e.stopPropagation()} /> ) : ( <span className="font-semibold text-xs text-slate-800 truncate select-none flex-1 hover:text-indigo-600" onDoubleClick={(e) => startEditing(moduleEditId, module.name, e)} title="Double click to rename">{module.name}</span> )}
                             </div>
-                            {!isReadOnly && <button onClick={(e) => { e.stopPropagation(); onDeleteModule(project.id, module.id); }} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-100 transition-opacity" title="Delete Module"><Trash2 size={14} /></button>}
                           </div>
                           
                           {/* Module Details Columns */}
@@ -986,10 +999,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                           {timeline.map(col => {
                             const total = getModuleTotal(module, col);
-                            const isCurrent = isCurrentColumn(col);
                             let isInModuleRange = false; let isModuleStart = false; let isModuleEnd = false;
                             if (moduleEarliestStartDate && moduleLatestEndDate) { const modStart = new Date(moduleEarliestStartDate.replace(/-/g, '/')); const modEnd = moduleLatestEndDate; if (viewMode === 'day' && col.date) { isInModuleRange = col.date >= modStart && col.date <= modEnd; isModuleStart = col.date.getTime() === modStart.getTime(); isModuleEnd = col.date.getTime() === modEnd.getTime(); if (formatDateForInput(col.date) === formatDateForInput(modStart)) isModuleStart = true; if (formatDateForInput(col.date) === formatDateForInput(modEnd)) isModuleEnd = true; } else if (viewMode === 'week') { const [y, w] = col.id.split('-').map(Number); const colDate = getDateFromWeek(y, w); const colEnd = new Date(colDate); colEnd.setDate(colEnd.getDate() + 6); isInModuleRange = (modStart <= colEnd) && (modEnd >= colDate); if (isInModuleRange) { const startWeekId = getWeekIdFromDate(modStart); const endWeekId = getWeekIdFromDate(modEnd); isModuleStart = col.id === startWeekId; isModuleEnd = col.id === endWeekId; } } else if (viewMode === 'month') { if (col.weekIds && col.weekIds.length > 0) { const startWeek = col.weekIds[0]; const endWeek = col.weekIds[col.weekIds.length - 1]; const [y1, w1] = startWeek.split('-').map(Number); const mStart = getDateFromWeek(y1, w1); const [y2, w2] = endWeek.split('-').map(Number); const mEnd = new Date(getDateFromWeek(y2, w2)); mEnd.setDate(mEnd.getDate() + 6); isInModuleRange = (modStart <= mEnd) && (modEnd >= mStart); isModuleStart = modStart >= mStart && modStart <= mEnd; isModuleEnd = modEnd >= mStart && modEnd <= mEnd; } } }
-                            return ( <div key={col.id} className={`flex-shrink-0 border-r border-slate-200/50 flex items-center justify-center bg-indigo-50 relative ${isCurrent ? 'bg-indigo-50/80' : ''}`} style={{ width: `${colWidth}px` }}>{isInModuleRange && ( <div className={`absolute pointer-events-none z-10 ${displayMode === 'gantt' ? 'top-1/2 -translate-y-1/2 h-4 bg-indigo-400 rounded' : 'inset-y-1 inset-x-0 bg-indigo-200'} ${isModuleStart ? 'rounded-l-md ml-1' : ''} ${isModuleEnd ? 'rounded-r-md mr-1' : ''}`}></div> )}{total > 0 && displayMode === 'allocation' && (<span className="text-[10px] font-bold text-indigo-900 relative z-10">{formatValue(total)}</span>)}</div> );
+                            return ( <div key={col.id} className={`flex-shrink-0 border-r border-slate-200/50 flex items-center justify-center bg-indigo-50 relative`} style={{ width: `${colWidth}px` }}>{isInModuleRange && ( <div className={`absolute pointer-events-none z-10 ${displayMode === 'gantt' ? 'top-1/2 -translate-y-1/2 h-4 bg-indigo-400 rounded' : 'inset-y-1 inset-x-0 bg-indigo-200'} ${isModuleStart ? 'rounded-l-md ml-1' : ''} ${isModuleEnd ? 'rounded-r-md mr-1' : ''}`}></div> )}{total > 0 && displayMode === 'allocation' && (<span className="text-[10px] font-bold text-indigo-900 relative z-10">{formatValue(total)}</span>)}</div> );
                           })}
                         </div>
 
@@ -1023,9 +1035,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 19 : undefined }}></div>
 
                                 {timeline.map(col => {
-                                  const total = getTaskTotal(task, col); const isCurrent = isCurrentColumn(col); let isInTaskRange = false; let isTaskStart = false; let isTaskEnd = false;
+                                  const total = getTaskTotal(task, col); let isInTaskRange = false; let isTaskStart = false; let isTaskEnd = false;
                                   if (earliestStartDate && latestEndDate) { const tStart = new Date(earliestStartDate.replace(/-/g, '/')); const tEnd = latestEndDate; if (viewMode === 'day' && col.date) { isInTaskRange = col.date >= tStart && col.date <= tEnd; isTaskStart = col.date.getTime() === tStart.getTime(); isTaskEnd = col.date.getTime() === tEnd.getTime(); if (formatDateForInput(col.date) === formatDateForInput(tStart)) isTaskStart = true; if (formatDateForInput(col.date) === formatDateForInput(tEnd)) isTaskEnd = true; } else if (viewMode === 'week') { const [y, w] = col.id.split('-').map(Number); const colDate = getDateFromWeek(y, w); const colEnd = new Date(colDate); colEnd.setDate(colEnd.getDate() + 6); isInTaskRange = (tStart <= colEnd) && (tEnd >= colDate); if (isInTaskRange) { const startWeekId = getWeekIdFromDate(tStart); const endWeekId = getWeekIdFromDate(tEnd); isTaskStart = col.id === startWeekId; isTaskEnd = col.id === endWeekId; } } else if (viewMode === 'month') { if (col.weekIds && col.weekIds.length > 0) { const startWeek = col.weekIds[0]; const endWeek = col.weekIds[col.weekIds.length - 1]; const [y1, w1] = startWeek.split('-').map(Number); const mStart = getDateFromWeek(y1, w1); const [y2, w2] = endWeek.split('-').map(Number); const mEnd = new Date(getDateFromWeek(y2, w2)); mEnd.setDate(mEnd.getDate() + 6); isInTaskRange = (tStart <= mEnd) && (tEnd >= mStart); isTaskStart = tStart >= mStart && tStart <= mEnd; isTaskEnd = tEnd >= mStart && tEnd <= mEnd; } } }
-                                  return ( <div key={`th-${task.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 flex items-center justify-center bg-slate-50 relative ${isCurrent ? 'bg-slate-50' : ''}`} style={{ width: `${colWidth}px` }}>{isInTaskRange && ( <div className={`absolute pointer-events-none z-10 ${displayMode === 'gantt' ? 'top-1/2 -translate-y-1/2 h-4 bg-slate-400 rounded' : 'inset-y-1 inset-x-0 bg-slate-200'} ${isTaskStart ? 'rounded-l-md ml-1' : ''} ${isTaskEnd ? 'rounded-r-md mr-1' : ''}`}></div> )}{total > 0 && displayMode === 'allocation' && (<span className="text-[10px] font-semibold text-slate-600 relative z-10">{formatValue(total)}</span>)}</div> );
+                                  return ( <div key={`th-${task.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 flex items-center justify-center bg-slate-50 relative`} style={{ width: `${colWidth}px` }}>{isInTaskRange && ( <div className={`absolute pointer-events-none z-10 ${displayMode === 'gantt' ? 'top-1/2 -translate-y-1/2 h-4 bg-slate-400 rounded' : 'inset-y-1 inset-x-0 bg-slate-200'} ${isTaskStart ? 'rounded-l-md ml-1' : ''} ${isTaskEnd ? 'rounded-r-md mr-1' : ''}`}></div> )}{total > 0 && displayMode === 'allocation' && (<span className="text-[10px] font-semibold text-slate-600 relative z-10">{formatValue(total)}</span>)}</div> );
                                 })}
                               </div>
 
@@ -1096,8 +1108,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     const dateStr = col.date ? formatDateForInput(col.date) : '';
                                     const isHol = viewMode === 'day' && !!(resourceHolidayData && resourceHolidayData.dateSet.has(dateStr));
                                     const holidayInfo = isHol ? resourceHolidayData!.holidays.find(h => h.date === dateStr) : undefined;
-                                    const isCurrent = isCurrentColumn(col);
-
+                                    
                                     if (displayMode === 'allocation') {
                                         const raw = getRawCellValue(assignment, col);
                                         return (
@@ -1111,7 +1122,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                                 width={colWidth}
                                                 isHoliday={isHol}
                                                 holidayName={holidayInfo}
-                                                isCurrent={isCurrent}
+                                                isCurrent={false} // Handled by Overlay now
                                                 disabled={isReadOnly}
                                             />
                                         );
@@ -1120,7 +1131,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                         if (viewMode === 'day' && col.date) { isInRange = col.date >= assignmentStartDate && col.date <= assignmentEndDate; isStart = col.date.getTime() === assignmentStartDate.getTime(); isEnd = col.date.getTime() === assignmentEndDate.getTime(); if (formatDateForInput(col.date) === formatDateForInput(assignmentStartDate)) isStart = true; if (formatDateForInput(col.date) === formatDateForInput(assignmentEndDate)) isEnd = true; } else if (viewMode === 'week') { const [y, w] = col.id.split('-').map(Number); const colDate = getDateFromWeek(y, w); const colEnd = new Date(colDate); colEnd.setDate(colEnd.getDate() + 6); isInRange = (assignmentStartDate <= colEnd) && (assignmentEndDate >= colDate); if (isInRange) { const startWeekId = getWeekIdFromDate(assignmentStartDate); const endWeekId = getWeekIdFromDate(assignmentEndDate); isStart = col.id === startWeekId; isEnd = col.id === endWeekId; } } else if (viewMode === 'month') { if (col.weekIds && col.weekIds.length > 0) { const startWeek = col.weekIds[0]; const endWeek = col.weekIds[col.weekIds.length - 1]; const [y1, w1] = startWeek.split('-').map(Number); const mStart = getDateFromWeek(y1, w1); const [y2, w2] = endWeek.split('-').map(Number); const mEnd = new Date(getDateFromWeek(y2, w2)); mEnd.setDate(mEnd.getDate() + 6); isInRange = (assignmentStartDate <= mEnd) && (assignmentEndDate >= mStart); isStart = assignmentStartDate >= mStart && assignmentStartDate <= mEnd; isEnd = assignmentEndDate >= mStart && assignmentEndDate <= mEnd; } }
                                         const progress = assignment.progress || 0;
                                         return (
-                                            <div key={`${assignment.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 relative ${isCurrent ? 'bg-amber-100 ring-1 ring-inset ring-amber-300' : ''}`} style={{ width: `${colWidth}px` }}>
+                                            <div key={`${assignment.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 relative`} style={{ width: `${colWidth}px` }}>
                                                 {isInRange && ( <div className={`absolute top-1/2 -translate-y-1/2 h-4 left-0 right-0 z-10 ${roleStyle.bar} ${isStart ? 'rounded-l-md ml-1' : ''} ${isEnd ? 'rounded-r-md mr-1' : ''} flex items-center overflow-hidden`} title={`${assignment.role} - ${assignment.resourceName || 'Unassigned'} (${progress}%)`}> <div className={`h-full opacity-30 ${roleStyle.fill}`} style={{ width: `${progress}%` }}></div> {isStart && ( <span className="absolute left-2 text-[9px] font-bold text-slate-700 whitespace-nowrap truncate z-20 pointer-events-none">{assignment.resourceName || 'Unassigned'}</span> )} {isEnd && progress > 0 && ( <span className="absolute right-2 text-[8px] font-bold text-slate-600 z-20 pointer-events-none bg-white/50 px-0.5 rounded">{progress}%</span> )} </div> )}
                                             </div>
                                         );
@@ -1145,7 +1156,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
               <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
               <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
 
-              {timeline.map(col => { const total = projects.reduce((acc, p) => acc + getProjectTotal(p, col), 0); const isCurrent = isCurrentColumn(col); return ( <div key={`total-${col.id}`} className={`flex-shrink-0 border-r border-slate-700 flex items-center justify-center text-[10px] font-mono font-bold ${isCurrent ? 'bg-slate-700 ring-1 ring-inset ring-amber-400/50' : ''}`} style={{ width: `${colWidth}px` }}>{total > 0 && displayMode === 'allocation' ? formatValue(total) : ''}</div> ); })}
+              {timeline.map(col => { const total = projects.reduce((acc, p) => acc + getProjectTotal(p, col), 0); return ( <div key={`total-${col.id}`} className={`flex-shrink-0 border-r border-slate-700 flex items-center justify-center text-[10px] font-mono font-bold`} style={{ width: `${colWidth}px` }}>{total > 0 && displayMode === 'allocation' ? formatValue(total) : ''}</div> ); })}
             </div>
           </div>
         </div>
