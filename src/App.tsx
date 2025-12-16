@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
-import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType } from './types';
-import { Dashboard } from './components/Dashboard';
-import { PlannerGrid } from './components/PlannerGrid';
-import { Estimator } from './components/Estimator';
-import { Settings } from './components/Settings';
-import { Resources } from './components/Resources';
-import { VersionHistory } from './components/VersionHistory';
-import { DebugLog } from './components/DebugLog';
-import { AdminSettings } from './components/AdminSettings';
-import { AIAssistant } from './components/AIAssistant';
+// FIX: Corrected import paths to be relative to the `src` directory.
+import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from '../constants';
+import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType } from '../types';
+import { Dashboard } from '../components/Dashboard';
+import { PlannerGrid } from '../components/PlannerGrid';
+import { Estimator } from '../components/Estimator';
+import { Settings } from '../components/Settings';
+import { Resources } from '../components/Resources';
+import { VersionHistory } from '../components/VersionHistory';
+import { DebugLog } from '../components/DebugLog';
+import { AdminSettings } from '../components/AdminSettings';
+import { AIAssistant } from '../components/AIAssistant';
 import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X } from 'lucide-react';
-import { supabase } from './lib/supabaseClient';
+import { supabase } from '../lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 
@@ -795,4 +796,769 @@ const App: React.FC = () => {
       const [removed] = module.tasks.splice(startIndex, 1);
       module.tasks.splice(endIndex, 0, removed);
       setProjects(updatedProjects);
-      const updates = module.tasks.map((task, index) => ({ id: task.id, name: task.name, sort_order: index, module_
+      // FIX: Corrected typo from `module_` to `module`
+      const updates = module.tasks.map((task, index) => ({ id: task.id, name: task.name, sort_order: index, module_id: moduleId, user_id: session!.user.id }));
+      const { error } = await callSupabase('REORDER tasks', { updates }, supabase.from('tasks').upsert(updates));
+      if (error) { setProjects(previousState); alert("Failed to reorder tasks."); }
+  };
+
+  const reorderAssignments = async (projectId: string, moduleId: string, taskId: string, startIndex: number, endIndex: number) => {
+    if (isReadOnlyMode) return;
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const task = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const [removed] = task.assignments.splice(startIndex, 1);
+    task.assignments.splice(endIndex, 0, removed);
+    setProjects(updatedProjects);
+    const updates = task.assignments.map((assignment, index) => ({ id: assignment.id, task_id: taskId, role: assignment.role, resource_name: assignment.resourceName, start_date: assignment.startDate, duration: assignment.duration, parent_assignment_id: assignment.parentAssignmentId, sort_order: index, user_id: session!.user.id, }));
+    const { error } = await callSupabase('REORDER assignments', { updates: updates.length }, supabase.from('task_assignments').upsert(updates));
+    if (error) { setProjects(previousState); alert("Failed to reorder assignments."); }
+  };
+
+  const moveTask = async (projectId: string, sourceModuleId: string, targetModuleId: string, sourceIndex: number, targetIndex: number) => {
+      if (isReadOnlyMode) return;
+      const previousState = deepClone(projects);
+      const updatedProjects = deepClone(projects);
+      const project = updatedProjects.find(p => p.id === projectId);
+      if (!project) return;
+      
+      const sourceModule = project.modules.find(m => m.id === sourceModuleId);
+      const targetModule = project.modules.find(m => m.id === targetModuleId);
+      
+      if (!sourceModule || !targetModule) return;
+
+      const [movedTask] = sourceModule.tasks.splice(sourceIndex, 1);
+      targetModule.tasks.splice(targetIndex, 0, movedTask);
+      
+      setProjects(updatedProjects);
+
+      const updates = [
+          ...sourceModule.tasks.map((t, i) => ({ id: t.id, module_id: sourceModuleId, sort_order: i, name: t.name, user_id: session!.user.id })),
+          ...targetModule.tasks.map((t, i) => ({ id: t.id, module_id: targetModuleId, sort_order: i, name: t.name, user_id: session!.user.id }))
+      ];
+
+      const { error } = await callSupabase('MOVE task', { updates: updates.length }, supabase.from('tasks').upsert(updates));
+      if (error) { setProjects(previousState); alert("Failed to move task."); }
+  };
+  
+  const onShiftTask = async (projectId: string, moduleId: string, taskId: string, direction: 'left' | 'right') => {
+    // ... onShiftTask implementation ...
+    if (isReadOnlyMode) return;
+    const previousState = deepClone(projects);
+    const updatedProjects = deepClone(projects);
+    const task = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const allAssignmentIds = task.assignments.map(a => a.id);
+    if(allAssignmentIds.length === 0) return;
+    const allNewAllocationsForDB: any[] = [];
+    for (const assignment of task.assignments) {
+      const newAllocationsMap = new Map<string, ResourceAllocation>();
+      for (const alloc of assignment.allocations) {
+        const newWeekId = shiftWeekId(alloc.weekId, direction);
+        if (newAllocationsMap.has(newWeekId)) { const existing = newAllocationsMap.get(newWeekId)!; existing.count += alloc.count; existing.days = {}; } 
+        else { newAllocationsMap.set(newWeekId, { ...alloc, weekId: newWeekId }); }
+      }
+      assignment.allocations = Array.from(newAllocationsMap.values());
+      assignment.allocations.forEach(a => allNewAllocationsForDB.push({ assignment_id: assignment.id, user_id: session!.user.id, week_id: a.weekId, count: a.count, days: a.days || {} }));
+    }
+    setProjects(updatedProjects);
+    setSaveStatus('saving');
+    const { error: delErr } = await supabase.from('resource_allocations').delete().in('assignment_id', allAssignmentIds);
+    if (delErr) { setSaveStatus('error'); setProjects(previousState); return; }
+    if (allNewAllocationsForDB.length > 0) { const { error: insErr } = await supabase.from('resource_allocations').insert(allNewAllocationsForDB); if (insErr) { setSaveStatus('error'); fetchData(true); return; } }
+    setSaveStatus('success');
+    statusTimeoutRef.current = window.setTimeout(() => setSaveStatus('idle'), 3000);
+  };
+
+  const addResource = async (name: string, category: Role, region: string, type: 'Internal' | 'External') => {
+    if (isReadOnlyMode) return;
+    const { error } = await callSupabase('CREATE resource', { name }, supabase.from('resources').insert({ name, category, holiday_region: region === 'No Region' ? null : region, type, user_id: session!.user.id }).select().single());
+    if (error) { alert("Failed to add resource."); } else { fetchData(true); }
+  };
+  const deleteResource = async (id: string) => {
+    if (isReadOnlyMode) return;
+    if (window.confirm('Delete resource?')) { const { error } = await callSupabase('DELETE resource', { id }, supabase.from('resources').delete().eq('id', id)); if (error) { alert("Failed to delete resource."); } else { fetchData(true); } }
+  };
+  const updateResourceCategory = async (id: string, category: Role) => { if (isReadOnlyMode) return; const { error } = await callSupabase('UPDATE resource category', { id, category }, supabase.from('resources').update({ category }).eq('id', id)); if (error) alert("Failed to update resource category."); else fetchData(true); };
+  const updateResourceRegion = async (id: string, region: string | null) => { if (isReadOnlyMode) return; const { error } = await callSupabase('UPDATE resource region', { id, region }, supabase.from('resources').update({ holiday_region: region }).eq('id', id)); if (error) alert("Failed to update resource region."); else fetchData(true); };
+  const updateResourceType = async (id: string, type: 'Internal' | 'External') => { if (isReadOnlyMode) return; const { error } = await callSupabase('UPDATE resource type', { id, type }, supabase.from('resources').update({ type }).eq('id', id)); if (error) alert("Failed to update resource type."); else fetchData(true); };
+  
+  // NEW: Rename Resource function
+  const updateResourceName = async (id: string, name: string) => {
+    if (isReadOnlyMode) return;
+    const resource = resources.find(r => r.id === id);
+    const oldName = resource?.name;
+    
+    const { error } = await callSupabase('UPDATE resource name', { id, name },
+        supabase.from('resources').update({ name }).eq('id', id)
+    );
+    
+    if (error) {
+        alert("Failed to update resource name.");
+    } else {
+        // Also update assignments if name changed to keep data consistent
+        if (oldName && oldName !== name) {
+             await callSupabase('UPDATE assignments resource name', { oldName, name },
+                supabase.from('task_assignments').update({ resource_name: name }).eq('resource_name', oldName)
+             );
+        }
+        fetchData(true);
+    }
+  };
+
+  // Updated to accept an array of holidays for bulk insertion
+  const addIndividualHolidays = async (resourceId: string, items: { date: string, name: string }[]) => { 
+      if (isReadOnlyMode) return;
+      const toInsert = items.map(item => ({ resource_id: resourceId, date: item.date, name: item.name, user_id: session!.user.id }));
+      const { error } = await callSupabase('ADD individual holidays', { count: toInsert.length }, supabase.from('individual_holidays').insert(toInsert)); 
+      if (error) alert("Failed to add holidays."); 
+      else fetchData(true); 
+  };
+  
+  const deleteIndividualHoliday = async (holidayId: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('DELETE individual holiday', { id: holidayId }, supabase.from('individual_holidays').delete().eq('id', holidayId)); if (error) alert("Failed to delete holiday."); else fetchData(true); };
+  const addHoliday = async (holidays: Omit<Holiday, 'id'>[]) => { if (isReadOnlyMode) return; const toInsert = holidays.map(h => ({ ...h, user_id: session!.user.id })); const { error } = await callSupabase('ADD holidays', { count: toInsert.length }, supabase.from('holidays').insert(toInsert)); if (error) alert("Failed to add holidays."); else fetchData(true); };
+  const deleteHoliday = async (id: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('DELETE holiday', { id }, supabase.from('holidays').delete().eq('id', id)); if (error) alert("Failed to delete holiday."); else fetchData(true); };
+  const deleteHolidaysByCountry = async (country: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('DELETE holidays by country', { country }, supabase.from('holidays').delete().eq('country', country).eq('user_id', session.user.id)); if (error) alert("Failed to delete holidays."); else fetchData(true); };
+  const saveCurrentVersion = async (name: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('SAVE version', { name }, supabase.from('versions').insert({ name, user_id: session!.user.id, data: { projects, resources, holidays } })); if (error) alert("Failed to save version."); };
+  const restoreVersion = async (versionId: number) => { if (isReadOnlyMode) return; const { data, error } = await supabase.from('versions').select('data').eq('id', versionId).single(); if (error || !data) { alert("Failed to restore version."); return; } const snapshot = data.data; if (snapshot.projects) { alert("Version restore logic would implementation deep backend restore. Loading snapshot into memory only."); setProjects(snapshot.projects); setResources(snapshot.resources || []); setHolidays(snapshot.holidays || []); } };
+
+  // --- Missing Handlers Implemented Below ---
+  
+  const handleExtendTimeline = (direction: 'start' | 'end') => {
+    if (direction === 'start') {
+      setTimelineStart(prev => addWeeksToPoint(prev, -4));
+    } else {
+      setTimelineEnd(prev => addWeeksToPoint(prev, 4));
+    }
+  };
+
+  const updateAllocation = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, weekId: string, count: number, dayDate?: string) => {
+      // ... updateAllocation implementation ...
+      if (isReadOnlyMode) return;
+      const previousState = deepClone(projects);
+      const updatedProjects = deepClone(projects);
+      let foundAssignment: TaskAssignment | null = null;
+      for(const p of updatedProjects) {
+          if (p.id !== projectId) continue;
+          for(const m of p.modules) {
+              if (m.id !== moduleId) continue;
+              for(const t of m.tasks) {
+                  if (t.id !== taskId) continue;
+                  foundAssignment = t.assignments.find(a => a.id === assignmentId) || null;
+                  break;
+              }
+              if (foundAssignment) break;
+          }
+          if (foundAssignment) break;
+      }
+      
+      if (foundAssignment) {
+          let allocation = foundAssignment.allocations.find(a => a.weekId === weekId);
+          if (!allocation) {
+              allocation = { weekId, count: 0, days: {} };
+              foundAssignment.allocations.push(allocation);
+          }
+          
+          if (dayDate) {
+               if (!allocation.days) allocation.days = {};
+               allocation.days[dayDate] = count; 
+               allocation.count = Object.values(allocation.days).reduce((sum, val) => sum + val, 0);
+          } else {
+               allocation.count = count;
+          }
+          setProjects(updatedProjects);
+          
+          if (allocationTimeouts.current[`${assignmentId}-${weekId}`]) {
+              window.clearTimeout(allocationTimeouts.current[`${assignmentId}-${weekId}`]);
+          }
+          
+          allocationTimeouts.current[`${assignmentId}-${weekId}`] = window.setTimeout(async () => {
+              const { error } = await supabase.from('resource_allocations').upsert({
+                  assignment_id: assignmentId,
+                  week_id: weekId,
+                  count: allocation!.count,
+                  days: allocation!.days || {},
+                  user_id: session.user.id
+              }, { onConflict: 'assignment_id,week_id' });
+              
+              if (error) {
+                  console.error("Failed to save allocation", error);
+                  setProjects(previousState);
+              }
+          }, 1000);
+      }
+  };
+
+  const updateAssignmentResourceName = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, resourceName: string) => {
+      // ... updateAssignmentResourceName implementation ...
+      if (isReadOnlyMode) return;
+      const updatedProjects = deepClone(projects);
+      let found = false;
+      for(const p of updatedProjects) {
+        if(p.id !== projectId) continue;
+        for(const m of p.modules) {
+          if(m.id !== moduleId) continue;
+          for(const t of m.tasks) {
+            if(t.id !== taskId) continue;
+            const a = t.assignments.find(ass => ass.id === assignmentId);
+            if(a) {
+                a.resourceName = resourceName;
+                found = true;
+            }
+          }
+        }
+      }
+      if(found) setProjects(updatedProjects);
+
+      await callSupabase('UPDATE assignment resource', { assignmentId, resourceName }, 
+        supabase.from('task_assignments').update({ resource_name: resourceName }).eq('id', assignmentId)
+      );
+  };
+
+  const addTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
+    if (isReadOnlyMode) return;
+    const newProjectTask: ProjectTask = {
+        id: taskId,
+        name: taskName,
+        assignments: []
+    };
+    
+    const updatedProjects = deepClone(projects);
+    const project = updatedProjects.find(p => p.id === projectId);
+    const module = project?.modules.find(m => m.id === moduleId);
+    
+    if (module) {
+        const maxSort = module.tasks.reduce((max, t) => Math.max(max, t.sort_order || 0), 0);
+        newProjectTask.sort_order = maxSort + 1;
+        
+        module.tasks.push(newProjectTask);
+        setProjects(updatedProjects);
+        
+        const { error: taskError } = await callSupabase('CREATE task', { taskId, taskName }, 
+             supabase.from('tasks').insert({
+                 id: taskId,
+                 module_id: moduleId,
+                 name: taskName,
+                 sort_order: newProjectTask.sort_order,
+                 user_id: session.user.id
+             })
+        );
+        
+        if (taskError) {
+            fetchData(true);
+        }
+    }
+  };
+
+  const addAssignment = async (projectId: string, moduleId: string, taskId: string, role: Role) => {
+      if (isReadOnlyMode) return;
+      const updatedProjects = deepClone(projects);
+      const project = updatedProjects.find(p => p.id === projectId);
+      const module = project?.modules.find(m => m.id === moduleId);
+      const task = module?.tasks.find(t => t.id === taskId);
+      
+      if (task) {
+          const newAssignmentId = crypto.randomUUID();
+          const maxSort = task.assignments.reduce((max, a) => Math.max(max, a.sort_order || 0), 0);
+          
+          const newAssignment: TaskAssignment = {
+              id: newAssignmentId,
+              role: role,
+              resourceName: 'Unassigned',
+              allocations: [],
+              sort_order: maxSort + 1
+          };
+          
+          task.assignments.push(newAssignment);
+          setProjects(updatedProjects);
+          
+          await callSupabase('CREATE assignment', { assignmentId: newAssignmentId },
+                supabase.from('task_assignments').insert({
+                    id: newAssignmentId,
+                    task_id: taskId,
+                    role: role,
+                    resource_name: 'Unassigned',
+                    sort_order: newAssignment.sort_order,
+                    user_id: session.user.id
+                })
+            );
+      }
+  };
+
+  const onCopyAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
+      if (isReadOnlyMode) return;
+      const updatedProjects = deepClone(projects);
+      const task = updatedProjects.find(p => p.id === projectId)?.modules.find(m => m.id === moduleId)?.tasks.find(t => t.id === taskId);
+      
+      const sourceAssignment = task?.assignments.find(a => a.id === assignmentId);
+      if (sourceAssignment && task) {
+          const newAssignmentId = crypto.randomUUID();
+          const maxSort = task.assignments.reduce((max, a) => Math.max(max, a.sort_order || 0), 0);
+          
+          const newAssignment: TaskAssignment = {
+              ...deepClone(sourceAssignment),
+              id: newAssignmentId,
+              resourceName: 'Unassigned',
+              allocations: sourceAssignment.allocations.map(a => ({ ...a })),
+              sort_order: maxSort + 1
+          };
+          
+          task.assignments.push(newAssignment);
+          setProjects(updatedProjects);
+          
+           const { error } = await callSupabase('COPY assignment', { assignmentId: newAssignmentId },
+                supabase.from('task_assignments').insert({
+                    id: newAssignmentId,
+                    task_id: taskId,
+                    role: newAssignment.role,
+                    resource_name: 'Unassigned',
+                    start_date: newAssignment.startDate,
+                    duration: newAssignment.duration,
+                    sort_order: newAssignment.sort_order,
+                    user_id: session.user.id
+                })
+            );
+            
+            if (!error && newAssignment.allocations.length > 0) {
+                 const dbAllocations = newAssignment.allocations.map(a => ({
+                    assignment_id: newAssignmentId,
+                    user_id: session!.user.id,
+                    week_id: a.weekId,
+                    count: a.count,
+                    days: a.days || {}
+                }));
+                await supabase.from('resource_allocations').insert(dbAllocations);
+            }
+      }
+  };
+  
+  const addProject = async () => {
+    if (isReadOnlyMode) return;
+    const name = "New Project";
+    const { data, error } = await callSupabase('CREATE project', { name }, 
+        supabase.from('projects').insert({ name, user_id: session.user.id }).select().single()
+    );
+    if(data && !error) {
+        setProjects(prev => [...prev, { id: data.id, name: data.name, modules: [] }]);
+    }
+  };
+  
+  const addModule = async (projectId: string) => {
+     if (isReadOnlyMode) return;
+     const updatedProjects = deepClone(projects);
+     const project = updatedProjects.find(p => p.id === projectId);
+     if(project) {
+         const name = "New Module";
+         const maxSort = project.modules.reduce((max, m) => Math.max(max, m.sort_order || 0), 0);
+         
+         const { data, error } = await callSupabase('CREATE module', { name },
+            supabase.from('modules').insert({
+                project_id: projectId,
+                name,
+                sort_order: maxSort + 1,
+                user_id: session.user.id,
+                function_points: 0
+            }).select().single()
+         );
+         
+         if(data && !error) {
+             const newModule: ProjectModule = {
+                 id: data.id,
+                 name: data.name,
+                 tasks: [],
+                 legacyFunctionPoints: 0,
+                 functionPoints: 0,
+                 sort_order: data.sort_order
+             };
+             project.modules.push(newModule);
+             setProjects(updatedProjects);
+         }
+     }
+  };
+  
+  const updateProjectName = async (projectId: string, name: string) => {
+      if (isReadOnlyMode) return;
+      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, name } : p));
+      await callSupabase('UPDATE project name', { projectId, name },
+          supabase.from('projects').update({ name }).eq('id', projectId)
+      );
+  };
+
+  const updateModuleName = async (projectId: string, moduleId: string, name: string) => {
+      if (isReadOnlyMode) return;
+      setProjects(prev => prev.map(p => {
+          if (p.id !== projectId) return p;
+          return {
+              ...p,
+              modules: p.modules.map(m => m.id === moduleId ? { ...m, name } : m)
+          };
+      }));
+      await callSupabase('UPDATE module name', { moduleId, name },
+          supabase.from('modules').update({ name }).eq('id', moduleId)
+      );
+  };
+
+  const updateModuleType = async (projectId: string, moduleId: string, type: ModuleType) => {
+      if (isReadOnlyMode) return;
+      setProjects(prev => prev.map(p => {
+          if (p.id !== projectId) return p;
+          return {
+              ...p,
+              modules: p.modules.map(m => m.id === moduleId ? { ...m, type } : m)
+          };
+      }));
+      await callSupabase('UPDATE module type', { moduleId, type },
+          supabase.from('modules').update({ type }).eq('id', moduleId)
+      );
+  };
+
+  const updateTaskName = async (projectId: string, moduleId: string, taskId: string, name: string) => {
+      if (isReadOnlyMode) return;
+      setProjects(prev => prev.map(p => {
+          if (p.id !== projectId) return p;
+          return {
+              ...p,
+              modules: p.modules.map(m => {
+                  if (m.id !== moduleId) return m;
+                  return {
+                      ...m,
+                      tasks: m.tasks.map(t => t.id === taskId ? { ...t, name } : t)
+                  };
+              })
+          };
+      }));
+      await callSupabase('UPDATE task name', { taskId, name },
+          supabase.from('tasks').update({ name }).eq('id', taskId)
+      );
+  };
+  
+  const deleteProject = async (projectId: string) => {
+      if (isReadOnlyMode) return;
+      if(!window.confirm("Delete project?")) return;
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+      await callSupabase('DELETE project', { projectId }, supabase.from('projects').delete().eq('id', projectId));
+  };
+
+  const deleteModule = async (projectId: string, moduleId: string) => {
+      if (isReadOnlyMode) return;
+      if(!window.confirm("Delete module?")) return;
+      setProjects(prev => prev.map(p => {
+          if(p.id !== projectId) return p;
+          return { ...p, modules: p.modules.filter(m => m.id !== moduleId) };
+      }));
+      await callSupabase('DELETE module', { moduleId }, supabase.from('modules').delete().eq('id', moduleId));
+  };
+
+  const deleteTask = async (projectId: string, moduleId: string, taskId: string) => {
+      if (isReadOnlyMode) return;
+      if(!window.confirm("Delete task?")) return;
+      setProjects(prev => prev.map(p => {
+          if(p.id !== projectId) return p;
+          return {
+              ...p,
+              modules: p.modules.map(m => {
+                  if(m.id !== moduleId) return m;
+                  return { ...m, tasks: m.tasks.filter(t => t.id !== taskId) };
+              })
+          };
+      }));
+      await callSupabase('DELETE task', { taskId }, supabase.from('tasks').delete().eq('id', taskId));
+  };
+  
+  const deleteAssignment = async (projectId: string, moduleId: string, taskId: string, assignmentId: string) => {
+      if (isReadOnlyMode) return;
+      if(!window.confirm("Delete assignment?")) return;
+      setProjects(prev => prev.map(p => {
+          if(p.id !== projectId) return p;
+          return {
+              ...p,
+              modules: p.modules.map(m => {
+                  if(m.id !== moduleId) return m;
+                  return {
+                      ...m,
+                      tasks: m.tasks.map(t => {
+                          if(t.id !== taskId) return t;
+                          return { ...t, assignments: t.assignments.filter(a => a.id !== assignmentId) };
+                      })
+                  };
+              })
+          };
+      }));
+      await callSupabase('DELETE assignment', { assignmentId }, supabase.from('task_assignments').delete().eq('id', assignmentId));
+  };
+
+  const updateFunctionPoints = async (projectId: string, moduleId: string, legacyFp: number, feFp: number, beFp: number, pVel: number, pTeam: number, fVel: number, fTeam: number, bVel: number, bTeam: number) => {
+      if (isReadOnlyMode) return;
+      setProjects(prev => prev.map(p => {
+          if(p.id !== projectId) return p;
+          return {
+              ...p,
+              modules: p.modules.map(m => {
+                  if(m.id !== moduleId) return m;
+                  return { 
+                      ...m, 
+                      legacyFunctionPoints: legacyFp,
+                      frontendFunctionPoints: feFp,
+                      backendFunctionPoints: beFp,
+                      prepVelocity: pVel,
+                      prepTeamSize: pTeam,
+                      frontendVelocity: fVel,
+                      frontendTeamSize: fTeam,
+                      backendVelocity: bVel,
+                      backendTeamSize: bTeam,
+                      // FIX: Simplify calculation for clarity and to address potential type issues
+                      functionPoints: feFp + beFp // Total FP
+                  };
+              })
+          };
+      }));
+      
+      await callSupabase('UPDATE module metrics', { moduleId }, 
+          supabase.from('modules').update({ 
+              legacy_function_points: legacyFp,
+              frontend_function_points: feFp,
+              backend_function_points: beFp,
+              prep_velocity: pVel,
+              prep_team_size: pTeam,
+              frontend_velocity: fVel,
+              frontend_team_size: fTeam,
+              backend_velocity: bVel,
+              backend_team_size: bTeam,
+              // FIX: Simplify calculation for clarity and to address potential type issues
+              function_points: feFp + beFp
+          }).eq('id', moduleId)
+      );
+  };
+  
+  const updateModuleComplexity = async (projectId: string, moduleId: string, type: 'frontend' | 'backend', complexity: ComplexityLevel) => {
+      if (isReadOnlyMode) return;
+      setProjects(prev => prev.map(p => {
+          if(p.id !== projectId) return p;
+          return {
+              ...p,
+              modules: p.modules.map(m => {
+                  if(m.id !== moduleId) return m;
+                  const updates = type === 'frontend' ? { frontendComplexity: complexity } : { backendComplexity: complexity };
+                  return { ...m, ...updates };
+              })
+          };
+      }));
+      
+      await callSupabase('UPDATE module complexity', { moduleId, type, complexity }, 
+          supabase.from('modules').update({ 
+              [type === 'frontend' ? 'frontend_complexity' : 'backend_complexity']: complexity 
+          }).eq('id', moduleId)
+      );
+  };
+
+  const updateModuleStartDate = async (projectId: string, moduleId: string, startDate: string | null) => {
+      if (isReadOnlyMode) return;
+      setProjects(prev => prev.map(p => {
+          if (p.id !== projectId) return p;
+          return {
+              ...p,
+              modules: p.modules.map(m => {
+                  if (m.id !== moduleId) return m;
+                  return { ...m, startDate: startDate || undefined };
+              })
+          };
+      }));
+      await callSupabase('UPDATE module start date', { moduleId, startDate }, 
+        supabase.from('modules').update({ start_date: startDate }).eq('id', moduleId)
+      );
+  };
+
+  const updateModuleDeliveryTask = async (projectId: string, moduleId: string, deliveryTaskId: string | null) => {
+      if (isReadOnlyMode) return;
+      setProjects(prev => prev.map(p => {
+          if (p.id !== projectId) return p;
+          return {
+              ...p,
+              modules: p.modules.map(m => {
+                  if (m.id !== moduleId) return m;
+                  return { ...m, deliveryTaskId: deliveryTaskId || undefined };
+              })
+          };
+      }));
+      await callSupabase('UPDATE module delivery task', { moduleId, deliveryTaskId }, 
+        supabase.from('modules').update({ delivery_task_id: deliveryTaskId }).eq('id', moduleId)
+      );
+  };
+
+  const updateModuleStartTask = async (projectId: string, moduleId: string, startTaskId: string | null) => {
+      if (isReadOnlyMode) return;
+      setProjects(prev => prev.map(p => {
+          if (p.id !== projectId) return p;
+          return {
+              ...p,
+              modules: p.modules.map(m => {
+                  if (m.id !== moduleId) return m;
+                  return { ...m, startTaskId: startTaskId || undefined };
+              })
+          };
+      }));
+      await callSupabase('UPDATE module start task', { moduleId, startTaskId }, 
+        supabase.from('modules').update({ start_task_id: startTaskId }).eq('id', moduleId)
+      );
+  };
+
+  if (!session) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-100">
+        <div className="bg-white p-8 rounded-xl shadow-lg border border-slate-200 max-w-md w-full">
+            <h1 className="text-2xl font-bold text-slate-800 mb-6 text-center">Resource Planner Login</h1>
+            <Auth supabaseClient={supabase} appearance={{ theme: ThemeSupa }} providers={[]} />
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50 text-slate-500 gap-2">
+        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+        <span>Loading plan...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-screen w-full bg-slate-100 overflow-hidden text-slate-900 font-sans">
+       {/* Sidebar */}
+       <aside className={`${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 flex-shrink-0 z-50 border-r border-slate-800 shadow-xl`}>
+          <div className="p-4 flex items-center gap-3 border-b border-slate-800 h-16">
+            <div className="w-8 h-8 rounded bg-indigo-600 flex items-center justify-center flex-shrink-0 text-white font-bold shadow-lg shadow-indigo-900/50">RP</div>
+            {!isSidebarCollapsed && <span className="font-bold text-white tracking-tight animate-in fade-in duration-300">ResourcePlan</span>}
+          </div>
+          
+          <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+            <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Dashboard">
+               <LayoutDashboard size={20} /> {!isSidebarCollapsed && <span>Dashboard</span>}
+            </button>
+            <button onClick={() => setActiveTab('planner')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'planner' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Planner Grid">
+               <Calendar size={20} /> {!isSidebarCollapsed && <span>Planner</span>}
+            </button>
+            <button onClick={() => setActiveTab('estimator')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'estimator' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Estimator">
+               <Calculator size={20} /> {!isSidebarCollapsed && <span>Estimator</span>}
+            </button>
+            <div className="h-px bg-slate-800 my-2 mx-2"></div>
+            <button onClick={() => setActiveTab('resources')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'resources' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Resources">
+               <Users size={20} /> {!isSidebarCollapsed && <span>Resources</span>}
+            </button>
+            <button onClick={() => setActiveTab('holidays')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'holidays' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Holidays">
+               <Globe size={20} /> {!isSidebarCollapsed && <span>Holidays</span>}
+            </button>
+            <div className="h-px bg-slate-800 my-2 mx-2"></div>
+            <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Settings">
+               <SettingsIcon size={20} /> {!isSidebarCollapsed && <span>Settings</span>}
+            </button>
+          </nav>
+          
+          <div className="p-2 border-t border-slate-800">
+             <button onClick={() => setShowShareModal(true)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 hover:text-white text-slate-400 mb-1" title="Share">
+                <Share2 size={18} /> {!isSidebarCollapsed && <span className="text-sm">Share</span>}
+             </button>
+             <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 hover:text-white text-slate-400 mb-1" title={isSidebarCollapsed ? "Expand" : "Collapse"}>
+               {isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />} {!isSidebarCollapsed && <span className="text-sm">Collapse</span>}
+             </button>
+             <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-red-900/30 hover:text-red-400 text-slate-400 transition-colors" title="Sign Out">
+               <LogOut size={18} /> {!isSidebarCollapsed && <span className="text-sm">Sign Out</span>}
+             </button>
+          </div>
+       </aside>
+
+       {/* Main Content */}
+       <main className="flex-1 flex flex-col min-w-0 h-full bg-white relative overflow-y-auto custom-scrollbar">
+          <div className="flex-1 p-4 relative">
+            {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
+            
+            {activeTab === 'planner' && <PlannerGrid 
+              projects={projects} 
+              holidays={holidays}
+              resources={resources}
+              timelineStart={timelineStart}
+              timelineEnd={timelineEnd}
+              onExtendTimeline={handleExtendTimeline}
+              onUpdateAllocation={updateAllocation}
+              onUpdateAssignmentResourceName={updateAssignmentResourceName}
+              onUpdateAssignmentDependency={updateAssignmentDependency}
+              onAddTask={addTask}
+              onAddAssignment={addAssignment}
+              onCopyAssignment={onCopyAssignment}
+              onReorderModules={reorderModules}
+              onReorderTasks={reorderTasks}
+              onMoveTask={moveTask}
+              onUpdateModuleType={updateModuleType}
+              onReorderAssignments={reorderAssignments}
+              onShiftTask={onShiftTask}
+              onUpdateAssignmentSchedule={updateAssignmentSchedule}
+              onUpdateAssignmentProgress={updateAssignmentProgress}
+              onAddProject={addProject}
+              onAddModule={addModule}
+              onUpdateProjectName={updateProjectName}
+              onUpdateModuleName={updateModuleName}
+              onUpdateTaskName={updateTaskName}
+              onDeleteProject={deleteProject}
+              onDeleteModule={deleteModule}
+              onDeleteTask={deleteTask}
+              onDeleteAssignment={deleteAssignment}
+              onImportPlan={(p, h) => { setProjects(p); setHolidays(h); calculateTimelineBounds(p, resources, h); }}
+              onShowHistory={() => setShowHistory(true)}
+              onRefresh={() => fetchData(true)}
+              saveStatus={saveStatus}
+              isRefreshing={isRefreshing}
+              isReadOnly={isReadOnlyMode}
+            />}
+            
+            {activeTab === 'estimator' && <Estimator 
+              projects={projects} 
+              holidays={holidays} 
+              onUpdateFunctionPoints={updateFunctionPoints}
+              onUpdateModuleComplexity={updateModuleComplexity}
+              onUpdateModuleStartDate={updateModuleStartDate}
+              onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
+              onUpdateModuleStartTask={updateModuleStartTask}
+              onReorderModules={reorderModules}
+              isReadOnly={isReadOnlyMode}
+            />}
+            
+            {activeTab === 'resources' && <Resources 
+              resources={resources} 
+              onAddResource={addResource} 
+              onDeleteResource={deleteResource}
+              onUpdateResourceCategory={updateResourceCategory}
+              onUpdateResourceRegion={updateResourceRegion}
+              onUpdateResourceType={updateResourceType}
+              onUpdateResourceName={updateResourceName}
+              onAddIndividualHoliday={addIndividualHolidays}
+              onDeleteIndividualHoliday={deleteIndividualHoliday}
+              isReadOnly={isReadOnlyMode}
+            />}
+            
+            {activeTab === 'settings' && <Settings 
+              isDebugLogEnabled={isDebugLogEnabled}
+              setIsDebugLogEnabled={setIsDebugLogEnabled}
+              isAIEnabled={isAIEnabled}
+              setIsAIEnabled={setIsAIEnabled}
+            />}
+            
+            {activeTab === 'holidays' && <AdminSettings 
+              holidays={holidays}
+              onAddHolidays={addHoliday}
+              onDeleteHoliday={deleteHoliday}
+              onDeleteHolidaysByCountry={deleteHolidaysByCountry}
+            />}
+          </div>
+       </main>
+
+       {/* Modals & Overlays */}
+       {isAIEnabled && <AIAssistant projects={projects} resources={resources} onAddTask={addTask} onAssignResource={updateAssignmentResourceName} />}
+       {isDebugLogEnabled && <DebugLog entries={logEntries} setEntries={setLogEntries} />}
+       {showShareModal && <ShareModal onClose={() => setShowShareModal(false)} />}
+       {showHistory && <VersionHistory onClose={() => setShowHistory(false)} onRestore={restoreVersion} onSaveCurrent={saveCurrentVersion} />}
+    </div>
+  );
+};
+
+export default App;

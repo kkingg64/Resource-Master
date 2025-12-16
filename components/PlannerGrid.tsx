@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType } from '../types';
+import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
 import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -255,7 +255,6 @@ const ROLE_STYLES: Record<string, { border: string, bg: string, bar: string, fil
 const getRoleStyle = (role: Role) => ROLE_STYLES[role] || ROLE_STYLES['default'];
 
 const MODULE_TYPE_STYLES = {
-  // FIX: Changed ModuleType.Standard to ModuleType.Development
   [ModuleType.Development]: {
     icon: Layers,
     iconColor: 'text-indigo-600',
@@ -267,9 +266,8 @@ const MODULE_TYPE_STYLES = {
     ganttGridColor: 'bg-indigo-200',
     totalTextColor: 'text-indigo-900',
   },
-  // FIX: Changed ModuleType.Milestone to ModuleType.Preparation
   [ModuleType.Preparation]: {
-    icon: Layers,
+    icon: Gem,
     iconColor: 'text-amber-600',
     bgColor: 'bg-amber-100',
     hoverBgColor: 'hover:bg-amber-200/50',
@@ -279,9 +277,8 @@ const MODULE_TYPE_STYLES = {
     ganttGridColor: 'bg-amber-200',
     totalTextColor: 'text-amber-900',
   },
-  // FIX: Changed ModuleType.KeyPhase to ModuleType.PostDevelopment
   [ModuleType.PostDevelopment]: {
-    icon: Layers,
+    icon: ShieldCheck,
     iconColor: 'text-teal-600',
     bgColor: 'bg-teal-100',
     hoverBgColor: 'hover:bg-teal-200/50',
@@ -1113,9 +1110,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     const isModuleCollapsed = collapsedModules[module.id];
                     const moduleEditId = `module::${project.id}::${module.id}`;
                     const isEditingModule = editingId === moduleEditId;
-                    // FIX: Changed ModuleType.Standard to ModuleType.Development
                     const moduleType = module.type || ModuleType.Development;
                     const style = MODULE_TYPE_STYLES[moduleType];
+                    const Icon = style.icon;
 
                     let moduleEarliestStartDate: string | null = null;
                     let moduleLatestEndDate: Date | null = null;
@@ -1138,10 +1135,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   onUpdateModuleType(project.id, module.id, nextType);
                                 }}
                                 className="p-0.5 rounded-full hover:bg-black/10 transition-colors"
-                                title={`Change module type (Current: ${moduleType})`}
+                                title={`Type: ${MODULE_TYPE_DISPLAY_NAMES[moduleType]}`}
                                 disabled={isReadOnly}
                               >
-                                <style.icon className={`w-4 h-4 ${style.iconColor}`} />
+                                <Icon className={`w-4 h-4 ${style.iconColor}`} />
                               </button>
                               {isModuleCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className={`w-4 h-4 ${style.iconColor}`} />}
                               {isEditingModule ? ( <input ref={editInputRef} value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown} className="bg-white text-slate-800 text-xs font-semibold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500" onClick={(e) => e.stopPropagation()} /> ) : ( <span className={`font-semibold text-xs ${style.textColor} truncate select-none flex-1 ${style.hoverTextColor}`} onDoubleClick={(e) => startEditing(moduleEditId, module.name, e)} title="Double click to rename">{module.name}</span> )}
