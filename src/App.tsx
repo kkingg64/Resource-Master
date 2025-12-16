@@ -1290,7 +1290,8 @@ const App: React.FC = () => {
                       frontendTeamSize: fTeam,
                       backendVelocity: bVel,
                       backendTeamSize: bTeam,
-                      functionPoints: feFp + beFp // Total FP
+                      // FIX: Explicitly cast to Number to resolve potential 'unknown' type error during addition.
+                      functionPoints: Number(feFp) + Number(beFp) // Total FP
                   };
               })
           };
@@ -1307,7 +1308,8 @@ const App: React.FC = () => {
               frontend_team_size: fTeam,
               backend_velocity: bVel,
               backend_team_size: bTeam,
-              function_points: feFp + beFp
+              // FIX: Explicitly cast to Number to resolve potential 'unknown' type error during addition.
+              function_points: Number(feFp) + Number(beFp)
           }).eq('id', moduleId)
       );
   };
@@ -1469,7 +1471,6 @@ const App: React.FC = () => {
               onCopyAssignment={onCopyAssignment}
               onReorderModules={reorderModules}
               onReorderTasks={reorderTasks}
-              onMoveTask={moveTask}
               onReorderAssignments={reorderAssignments}
               onShiftTask={onShiftTask}
               onUpdateAssignmentSchedule={updateAssignmentSchedule}

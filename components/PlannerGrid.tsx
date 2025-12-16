@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
@@ -115,6 +114,7 @@ interface PlannerGridProps {
   onCopyAssignment: (projectId: string, moduleId: string, taskId: string, assignmentId: string) => void;
   onReorderModules: (projectId: string, startIndex: number, endIndex: number) => void;
   onReorderTasks: (projectId: string, moduleId: string, startIndex: number, endIndex: number) => void;
+  onMoveTask: (projectId: string, sourceModuleId: string, targetModuleId: string, sourceIndex: number, targetIndex: number) => void;
   onReorderAssignments: (projectId: string, moduleId: string, taskId: string, startIndex: number, endIndex: number) => void;
   onShiftTask: (projectId: string, moduleId: string, taskId: string, direction: 'left' | 'right') => void;
   onUpdateAssignmentSchedule: (assignmentId: string, startDate: string, duration: number) => void;
@@ -268,6 +268,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   onCopyAssignment,
   onReorderModules,
   onReorderTasks,
+  onMoveTask,
   onReorderAssignments,
   onShiftTask,
   onUpdateAssignmentSchedule,
@@ -808,11 +809,63 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const handleModuleDragStart = (e: React.DragEvent, index: number) => { if (isReadOnly) return; e.dataTransfer.setData("text/plain", index.toString()); e.dataTransfer.effectAllowed = "move"; setDraggedModuleIndex(index); };
   const handleModuleDragOver = (e: React.DragEvent) => { if (isReadOnly) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
-  const handleModuleDrop = (e: React.DragEvent, projectId: string, index: number) => { if (isReadOnly) return; e.preventDefault(); setDraggedModuleIndex(null); const startIndex = parseInt(e.dataTransfer.getData("text/plain"), 10); if (!isNaN(startIndex) && startIndex !== index) { onReorderModules(projectId, startIndex, index); } };
+  
+  const handleModuleDrop = (e: React.DragEvent, projectId: string, targetModuleId: string, targetModuleIndex: number) => {
+    if (isReadOnly) return;
+    e.preventDefault();
+    setDraggedModuleIndex(null);
 
-  const handleTaskDragStart = (e: React.DragEvent, moduleId: string, taskIndex: number) => { if (isReadOnly) return; e.dataTransfer.setData("application/json", JSON.stringify({ type: 'task', moduleId, index: taskIndex })); e.dataTransfer.effectAllowed = "move"; setDraggedTask({ moduleId, index: taskIndex }); };
+    // Handle module reordering
+    if (e.dataTransfer.types.includes("text/plain")) {
+        const startIndexStr = e.dataTransfer.getData("text/plain");
+        if (startIndexStr) {
+            const startIndex = parseInt(startIndexStr, 10);
+            if (!isNaN(startIndex) && startIndex !== targetModuleIndex) {
+                onReorderModules(projectId, startIndex, targetModuleIndex);
+            }
+        }
+    }
+    
+    // Handle dropping a task onto a module
+    if (e.dataTransfer.types.includes("application/json")) {
+        try {
+            const data = JSON.parse(e.dataTransfer.getData("application/json"));
+            if (data.type === 'task' && data.projectId === projectId && data.moduleId !== targetModuleId) {
+                const targetModule = projects.find(p => p.id === projectId)?.modules.find(m => m.id === targetModuleId);
+                if (targetModule) {
+                    onMoveTask(projectId, data.moduleId, targetModuleId, data.index, targetModule.tasks.length);
+                }
+            }
+        } catch (err) {
+            console.error("Error dropping task on module", err);
+        }
+    }
+  };
+
+  const handleTaskDragStart = (e: React.DragEvent, projectId: string, moduleId: string, taskIndex: number) => { if (isReadOnly) return; e.dataTransfer.setData("application/json", JSON.stringify({ type: 'task', projectId, moduleId, index: taskIndex })); e.dataTransfer.effectAllowed = "move"; setDraggedTask({ moduleId, index: taskIndex }); };
   const handleTaskDragOver = (e: React.DragEvent) => { if (isReadOnly) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
-  const handleTaskDrop = (e: React.DragEvent, projectId: string, targetModuleId: string, targetTaskIndex: number) => { if (isReadOnly) return; e.preventDefault(); setDraggedTask(null); try { const data = JSON.parse(e.dataTransfer.getData("application/json")); if (data.type === 'task' && data.moduleId === targetModuleId && data.index !== targetTaskIndex) { onReorderTasks(projectId, data.moduleId, data.index, targetTaskIndex); } } catch (err) { console.error("Error dropping task", err); } };
+  
+  const handleTaskDrop = (e: React.DragEvent, targetProjectId: string, targetModuleId: string, targetTaskIndex: number) => { 
+      if (isReadOnly) return; 
+      e.preventDefault(); 
+      setDraggedTask(null); 
+      try { 
+          const data = JSON.parse(e.dataTransfer.getData("application/json")); 
+          if (data.type === 'task' && data.projectId === targetProjectId) {
+              if (data.moduleId === targetModuleId) {
+                  // Reorder within the same module
+                  if (data.index !== targetTaskIndex) {
+                      onReorderTasks(targetProjectId, data.moduleId, data.index, targetTaskIndex); 
+                  }
+              } else {
+                  // Move to a different module
+                  onMoveTask(targetProjectId, data.moduleId, targetModuleId, data.index, targetTaskIndex);
+              }
+          }
+      } catch (err) { 
+          console.error("Error dropping task", err); 
+      } 
+  };
   
   const handleAssignmentDragStart = (e: React.DragEvent, taskId: string, assignmentIndex: number) => { if (isReadOnly) return; e.dataTransfer.setData("application/json", JSON.stringify({ type: 'assignment', taskId, index: assignmentIndex })); e.dataTransfer.effectAllowed = "move"; setDraggedAssignment({ taskId, index: assignmentIndex }); };
   const handleAssignmentDragOver = (e: React.DragEvent) => { if (isReadOnly) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
@@ -1024,7 +1077,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     { const allAssignments = module.tasks.flatMap(t => t.assignments); if (allAssignments.length > 0) { let earliestDate: Date | null = null; let latestEndDate: Date | null = null; const moduleHolidays = new Set<string>(); allAssignments.forEach(a => { const resourceName = a.resourceName || 'Unassigned'; const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'); if (resourceHolidayData) { resourceHolidayData.dateSet.forEach(d => moduleHolidays.add(d)); } }); allAssignments.forEach(assignment => { if (!assignment.startDate || !assignment.duration) return; const startDate = new Date(assignment.startDate.replace(/-/g, '/')); if (!earliestDate || startDate < earliestDate) { earliestDate = startDate; } const resourceName = assignment.resourceName || 'Unassigned'; const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>(); const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidays); const endDate = new Date(endDateStr.replace(/-/g, '/')); if (!latestEndDate || endDate > latestEndDate) { latestEndDate = endDate; } }); if (earliestDate && latestEndDate) { moduleEarliestStartDate = formatDateForInput(earliestDate); moduleLatestEndDate = latestEndDate; moduleTotalDuration = calculateWorkingDaysBetween(formatDateForInput(earliestDate), formatDateForInput(latestEndDate), moduleHolidays); } } }
 
                     return (
-                      <div key={module.id} draggable={!isReadOnly} onDragStart={(e) => handleModuleDragStart(e, index)} onDragOver={handleModuleDragOver} onDrop={(e) => handleModuleDrop(e, project.id, index)} className={`${draggedModuleIndex === index ? 'opacity-50' : 'opacity-100'}`} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'module', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id }); }}>
+                      <div key={module.id} draggable={!isReadOnly} onDragStart={(e) => handleModuleDragStart(e, index)} onDragOver={handleModuleDragOver} onDrop={(e) => handleModuleDrop(e, project.id, module.id, index)} className={`${draggedModuleIndex === index ? 'opacity-50' : 'opacity-100'}`} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'module', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id }); }}>
                         <div className="flex bg-indigo-50 border-b border-slate-100 hover:bg-indigo-100/50 transition-colors group">
                           <div className="flex-shrink-0 py-1.5 px-3 pl-6 border-r border-slate-200 sticky left-0 bg-indigo-50 z-30 flex items-center justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}>
                             <div className="flex items-center gap-2 flex-1 overflow-hidden cursor-pointer" onClick={() => !isEditingModule && toggleModule(module.id)}>
@@ -1061,7 +1114,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                           return (
                             <React.Fragment key={task.id}>
-                              <div draggable={!isReadOnly} onDragStart={(e) => handleTaskDragStart(e, module.id, taskIndex)} onDragOver={handleTaskDragOver} onDrop={(e) => handleTaskDrop(e, project.id, module.id, taskIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'task', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id }); }} className={`flex border-b border-slate-100 bg-slate-50 group/task ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>
+                              <div draggable={!isReadOnly} onDragStart={(e) => handleTaskDragStart(e, project.id, module.id, taskIndex)} onDragOver={handleTaskDragOver} onDrop={(e) => handleTaskDrop(e, project.id, module.id, taskIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'task', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id }); }} className={`flex border-b border-slate-100 bg-slate-50 group/task ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>
                                 <div className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50 z-20 flex items-center justify-between pl-6 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}>
                                   <div className="flex items-center gap-2 overflow-hidden cursor-pointer flex-1" onClick={() => !isEditingTask && toggleTask(task.id)}>
                                     {!isReadOnly && <div className="cursor-grab text-slate-400 hover:text-slate-600" title="Drag to reorder task"><GripVertical size={14} /></div>}
