@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation } from '../types';
+import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft } from 'lucide-react';
+import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 // --- Custom DatePicker Component ---
@@ -115,6 +115,7 @@ interface PlannerGridProps {
   onReorderModules: (projectId: string, startIndex: number, endIndex: number) => void;
   onReorderTasks: (projectId: string, moduleId: string, startIndex: number, endIndex: number) => void;
   onMoveTask: (projectId: string, sourceModuleId: string, targetModuleId: string, sourceIndex: number, targetIndex: number) => void;
+  onUpdateModuleType: (projectId: string, moduleId: string, type: ModuleType) => void;
   onReorderAssignments: (projectId: string, moduleId: string, taskId: string, startIndex: number, endIndex: number) => void;
   onShiftTask: (projectId: string, moduleId: string, taskId: string, direction: 'left' | 'right') => void;
   onUpdateAssignmentSchedule: (assignmentId: string, startDate: string, duration: number) => void;
@@ -253,6 +254,43 @@ const ROLE_STYLES: Record<string, { border: string, bg: string, bar: string, fil
 
 const getRoleStyle = (role: Role) => ROLE_STYLES[role] || ROLE_STYLES['default'];
 
+const MODULE_TYPE_STYLES = {
+  [ModuleType.Standard]: {
+    icon: Layers,
+    iconColor: 'text-indigo-600',
+    bgColor: 'bg-indigo-50',
+    hoverBgColor: 'hover:bg-indigo-100/50',
+    textColor: 'text-slate-800',
+    hoverTextColor: 'hover:text-indigo-600',
+    ganttBarColor: 'bg-indigo-400',
+    ganttGridColor: 'bg-indigo-200',
+    totalTextColor: 'text-indigo-900',
+  },
+  [ModuleType.Milestone]: {
+    icon: Gem,
+    iconColor: 'text-amber-600',
+    bgColor: 'bg-amber-50',
+    hoverBgColor: 'hover:bg-amber-100/50',
+    textColor: 'text-amber-900',
+    hoverTextColor: 'hover:text-amber-700',
+    ganttBarColor: 'bg-amber-400',
+    ganttGridColor: 'bg-amber-200',
+    totalTextColor: 'text-amber-900',
+  },
+  [ModuleType.KeyPhase]: {
+    icon: ShieldCheck,
+    iconColor: 'text-sky-600',
+    bgColor: 'bg-sky-100',
+    hoverBgColor: 'hover:bg-sky-200/50',
+    textColor: 'text-sky-900',
+    hoverTextColor: 'hover:text-sky-700',
+    ganttBarColor: 'bg-sky-400',
+    ganttGridColor: 'bg-sky-200',
+    totalTextColor: 'text-sky-900',
+  }
+};
+
+
 export const PlannerGrid: React.FC<PlannerGridProps> = ({ 
   projects, 
   holidays,
@@ -269,6 +307,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   onReorderModules,
   onReorderTasks,
   onMoveTask,
+  onUpdateModuleType,
   onReorderAssignments,
   onShiftTask,
   onUpdateAssignmentSchedule,
@@ -1071,6 +1110,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     const isModuleCollapsed = collapsedModules[module.id];
                     const moduleEditId = `module::${project.id}::${module.id}`;
                     const isEditingModule = editingId === moduleEditId;
+                    const moduleType = module.type || ModuleType.Standard;
+                    const style = MODULE_TYPE_STYLES[moduleType];
+
                     let moduleEarliestStartDate: string | null = null;
                     let moduleLatestEndDate: Date | null = null;
                     let moduleTotalDuration = 0;
@@ -1078,30 +1120,44 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                     return (
                       <div key={module.id} draggable={!isReadOnly} onDragStart={(e) => handleModuleDragStart(e, index)} onDragOver={handleModuleDragOver} onDrop={(e) => handleModuleDrop(e, project.id, module.id, index)} className={`${draggedModuleIndex === index ? 'opacity-50' : 'opacity-100'}`} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'module', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id }); }}>
-                        <div className="flex bg-indigo-50 border-b border-slate-100 hover:bg-indigo-100/50 transition-colors group">
-                          <div className="flex-shrink-0 py-1.5 px-3 pl-6 border-r border-slate-200 sticky left-0 bg-indigo-50 z-30 flex items-center justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}>
+                        <div className={`flex ${style.bgColor} border-b border-slate-100 ${style.hoverBgColor} transition-colors group`}>
+                          <div className={`flex-shrink-0 py-1.5 px-3 pl-6 border-r border-slate-200 sticky left-0 ${style.bgColor} z-30 flex items-center justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`} style={stickyStyle}>
                             <div className="flex items-center gap-2 flex-1 overflow-hidden cursor-pointer" onClick={() => !isEditingModule && toggleModule(module.id)}>
                               {!isReadOnly && <div className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500" title="Drag to reorder"><GripVertical className="w-4 h-4" /></div>}
-                              {isModuleCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-indigo-500" />}
-                              <Layers className="w-4 h-4 text-indigo-600" />
-                              {isEditingModule ? ( <input ref={editInputRef} value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown} className="bg-white text-slate-800 text-xs font-semibold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500" onClick={(e) => e.stopPropagation()} /> ) : ( <span className="font-semibold text-xs text-slate-800 truncate select-none flex-1 hover:text-indigo-600" onDoubleClick={(e) => startEditing(moduleEditId, module.name, e)} title="Double click to rename">{module.name}</span> )}
+                               <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isReadOnly) return;
+                                  const moduleTypes = Object.values(ModuleType);
+                                  const currentTypeIndex = moduleTypes.indexOf(moduleType);
+                                  const nextType = moduleTypes[(currentTypeIndex + 1) % moduleTypes.length];
+                                  onUpdateModuleType(project.id, module.id, nextType);
+                                }}
+                                className="p-0.5 rounded-full hover:bg-black/10 transition-colors"
+                                title={`Change module type (Current: ${moduleType})`}
+                                disabled={isReadOnly}
+                              >
+                                <style.icon className={`w-4 h-4 ${style.iconColor}`} />
+                              </button>
+                              {isModuleCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className={`w-4 h-4 ${style.iconColor}`} />}
+                              {isEditingModule ? ( <input ref={editInputRef} value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown} className="bg-white text-slate-800 text-xs font-semibold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500" onClick={(e) => e.stopPropagation()} /> ) : ( <span className={`font-semibold text-xs ${style.textColor} truncate select-none flex-1 ${style.hoverTextColor}`} onDoubleClick={(e) => startEditing(moduleEditId, module.name, e)} title="Double click to rename">{module.name}</span> )}
                             </div>
                           </div>
                           
                           {/* Module Details Columns */}
-                          <div className={`flex-shrink-0 text-[10px] font-bold text-indigo-800/80 border-r border-slate-200 flex items-center justify-center bg-indigo-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 29 : undefined }}>
-                            {isModuleCollapsed && moduleEarliestStartDate && <span title="Earliest Start Date" className="bg-indigo-200/50 rounded p-1">{moduleEarliestStartDate}</span>}
+                          <div className={`flex-shrink-0 text-[10px] font-bold ${style.totalTextColor}/80 border-r border-slate-200 flex items-center justify-center ${style.bgColor} ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 29 : undefined }}>
+                            {isModuleCollapsed && moduleEarliestStartDate && <span title="Earliest Start Date" className={`${style.ganttGridColor} rounded p-1`}>{moduleEarliestStartDate}</span>}
                           </div>
-                          <div className={`flex-shrink-0 text-[10px] font-bold text-indigo-800/80 border-r border-slate-200 flex items-center justify-center bg-indigo-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 29 : undefined }}>
-                            {isModuleCollapsed && moduleTotalDuration > 0 && <span title="Total Duration" className="bg-indigo-200/50 rounded p-1">{moduleTotalDuration}d</span>}
+                          <div className={`flex-shrink-0 text-[10px] font-bold ${style.totalTextColor}/80 border-r border-slate-200 flex items-center justify-center ${style.bgColor} ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 29 : undefined }}>
+                            {isModuleCollapsed && moduleTotalDuration > 0 && <span title="Total Duration" className={`${style.ganttGridColor} rounded p-1`}>{moduleTotalDuration}d</span>}
                           </div>
-                          <div className={`flex-shrink-0 border-r border-slate-200 bg-indigo-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 29 : undefined }}></div>
+                          <div className={`flex-shrink-0 border-r border-slate-200 ${style.bgColor} ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 29 : undefined }}></div>
 
                           {timeline.map(col => {
                             const total = getModuleTotal(module, col);
                             let isInModuleRange = false; let isModuleStart = false; let isModuleEnd = false;
                             if (moduleEarliestStartDate && moduleLatestEndDate) { const modStart = new Date(moduleEarliestStartDate.replace(/-/g, '/')); const modEnd = moduleLatestEndDate; if (viewMode === 'day' && col.date) { isInModuleRange = col.date >= modStart && col.date <= modEnd; isModuleStart = col.date.getTime() === modStart.getTime(); isModuleEnd = col.date.getTime() === modEnd.getTime(); if (formatDateForInput(col.date) === formatDateForInput(modStart)) isModuleStart = true; if (formatDateForInput(col.date) === formatDateForInput(modEnd)) isModuleEnd = true; } else if (viewMode === 'week') { const [y, w] = col.id.split('-').map(Number); const colDate = getDateFromWeek(y, w); const colEnd = new Date(colDate); colEnd.setDate(colEnd.getDate() + 6); isInModuleRange = (modStart <= colEnd) && (modEnd >= colDate); if (isInModuleRange) { const startWeekId = getWeekIdFromDate(modStart); const endWeekId = getWeekIdFromDate(modEnd); isModuleStart = col.id === startWeekId; isModuleEnd = col.id === endWeekId; } } else if (viewMode === 'month') { if (col.weekIds && col.weekIds.length > 0) { const startWeek = col.weekIds[0]; const endWeek = col.weekIds[col.weekIds.length - 1]; const [y1, w1] = startWeek.split('-').map(Number); const mStart = getDateFromWeek(y1, w1); const [y2, w2] = endWeek.split('-').map(Number); const mEnd = new Date(getDateFromWeek(y2, w2)); mEnd.setDate(mEnd.getDate() + 6); isInModuleRange = (modStart <= mEnd) && (modEnd >= mStart); isModuleStart = modStart >= mStart && modStart <= mEnd; isModuleEnd = modEnd >= mStart && modEnd <= mEnd; } } }
-                            return ( <div key={col.id} className={`flex-shrink-0 border-r border-slate-200/50 flex items-center justify-center bg-indigo-50 relative`} style={{ width: `${colWidth}px` }}>{isInModuleRange && ( <div className={`absolute pointer-events-none z-10 ${displayMode === 'gantt' ? 'top-1/2 -translate-y-1/2 h-4 bg-indigo-400 rounded' : 'inset-y-1 inset-x-0 bg-indigo-200'} ${isModuleStart ? 'rounded-l-md ml-1' : ''} ${isModuleEnd ? 'rounded-r-md mr-1' : ''}`}></div> )}{total > 0 && displayMode === 'allocation' && (<span className="text-[10px] font-bold text-indigo-900 relative z-10">{formatValue(total)}</span>)}</div> );
+                            return ( <div key={col.id} className={`flex-shrink-0 border-r border-slate-200/50 flex items-center justify-center ${style.bgColor} relative`} style={{ width: `${colWidth}px` }}>{isInModuleRange && ( <div className={`absolute pointer-events-none z-10 ${displayMode === 'gantt' ? `top-1/2 -translate-y-1/2 h-4 ${style.ganttBarColor} rounded` : `inset-y-1 inset-x-0 ${style.ganttGridColor}`} ${isModuleStart ? 'rounded-l-md ml-1' : ''} ${isModuleEnd ? 'rounded-r-md mr-1' : ''}`}></div> )}{total > 0 && displayMode === 'allocation' && (<span className={`text-[10px] font-bold ${style.totalTextColor} relative z-10`}>{formatValue(total)}</span>)}</div> );
                           })}
                         </div>
 

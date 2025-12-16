@@ -19,6 +19,12 @@ export enum Phase {
   BUILD = 'Design, Build & QA',
 }
 
+export enum ModuleType {
+  Standard = 'STANDARD',
+  Milestone = 'MILESTONE',
+  KeyPhase = 'KEY_PHASE',
+}
+
 export interface ResourceAllocation {
   weekId: string; // Format YYYY-WW
   count: number; // Headcount or Man-days (Weekly Total)
@@ -50,6 +56,7 @@ export type ComplexityLevel = 'Low' | 'Medium' | 'High' | 'Complex';
 export interface ProjectModule {
   id: string;
   name: string;
+  type?: ModuleType;
   legacyFunctionPoints: number; // Total legacy system size (for Fact Findings)
   functionPoints: number; // Target MVP size (Legacy field, now split)
   complexity?: ComplexityLevel; // Legacy field

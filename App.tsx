@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
-import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel } from './types';
+import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
 import { Estimator } from './components/Estimator';
@@ -76,6 +76,7 @@ const structureProjectsData = (
     modulesByProject.get(m.project_id)!.push({
       id: m.id,
       name: m.name,
+      type: m.type || ModuleType.Standard,
       legacyFunctionPoints: m.legacy_function_points,
       functionPoints: m.function_points,
       complexity: m.complexity || 'Medium', // Default to Medium if undefined
@@ -778,7 +779,7 @@ const App: React.FC = () => {
       const [removed] = project.modules.splice(startIndex, 1);
       project.modules.splice(endIndex, 0, removed);
       setProjects(updatedProjects);
-      const updates = project.modules.map((module, index) => ({ id: module.id, name: module.name, legacy_function_points: module.legacyFunctionPoints, function_points: module.functionPoints, sort_order: index, project_id: projectId, user_id: session!.user.id }));
+      const updates = project.modules.map((module, index) => ({ id: module.id, name: module.name, type: module.type, legacy_function_points: module.legacyFunctionPoints, function_points: module.functionPoints, sort_order: index, project_id: projectId, user_id: session!.user.id }));
       const { error } = await callSupabase('REORDER modules', { updates }, supabase.from('modules').upsert(updates));
       if (error) { setProjects(previousState); alert("Failed to reorder modules."); }
   };
@@ -1196,6 +1197,20 @@ const App: React.FC = () => {
       );
   };
 
+  const updateModuleType = async (projectId: string, moduleId: string, type: ModuleType) => {
+      if (isReadOnlyMode) return;
+      setProjects(prev => prev.map(p => {
+          if (p.id !== projectId) return p;
+          return {
+              ...p,
+              modules: p.modules.map(m => m.id === moduleId ? { ...m, type } : m)
+          };
+      }));
+      await callSupabase('UPDATE module type', { moduleId, type },
+          supabase.from('modules').update({ type }).eq('id', moduleId)
+      );
+  };
+
   const updateTaskName = async (projectId: string, moduleId: string, taskId: string, name: string) => {
       if (isReadOnlyMode) return;
       setProjects(prev => prev.map(p => {
@@ -1290,7 +1305,7 @@ const App: React.FC = () => {
                       frontendTeamSize: fTeam,
                       backendVelocity: bVel,
                       backendTeamSize: bTeam,
-                      functionPoints: feFp + beFp // Total FP
+                      functionPoints: Number(feFp) + Number(beFp) // Total FP
                   };
               })
           };
@@ -1307,7 +1322,7 @@ const App: React.FC = () => {
               frontend_team_size: fTeam,
               backend_velocity: bVel,
               backend_team_size: bTeam,
-              function_points: feFp + beFp
+              function_points: Number(feFp) + Number(beFp)
           }).eq('id', moduleId)
       );
   };
@@ -1470,6 +1485,7 @@ const App: React.FC = () => {
               onReorderModules={reorderModules}
               onReorderTasks={reorderTasks}
               onMoveTask={moveTask}
+              onUpdateModuleType={updateModuleType}
               onReorderAssignments={reorderAssignments}
               onShiftTask={onShiftTask}
               onUpdateAssignmentSchedule={updateAssignmentSchedule}
