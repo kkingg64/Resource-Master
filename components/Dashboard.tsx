@@ -1,19 +1,17 @@
 
 import React, { useMemo } from 'react';
-import { Project, Role, WeeklySummary, ResourceAllocation, Resource, Holiday } from '../types';
+import { Project, Role, WeeklySummary, ResourceAllocation } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
 import { getTimeline, DEFAULT_START, DEFAULT_END, calculateWorkingDaysBetween, formatDateForInput, getWeekIdFromDate, getWeekdaysForWeekId } from '../constants';
-import { AlertCircle, CheckCircle2, Clock, Users, Briefcase, ChevronRight, AlertTriangle, AlertOctagon, CalendarDays, Activity, Palmtree } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Users, Briefcase, ChevronRight, AlertTriangle, AlertOctagon, CalendarDays, Activity } from 'lucide-react';
 
 interface DashboardProps {
   projects: Project[];
-  resources: Resource[];
-  holidays: Holiday[];
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
-export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holidays }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
   
   const GLOBAL_TIMELINE_DATA = useMemo(() => getTimeline('week', DEFAULT_START, DEFAULT_END), []);
   const today = new Date();
@@ -257,25 +255,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     return { dates: weekDates, activity: activityByDay };
   }, [projects, currentWeekId]);
 
-  // 7. Staff On Leave Logic
-  const staffOnLeave = useMemo(() => {
-    return resources.filter(r => {
-        // Check Individual Holidays
-        if (r.individual_holidays?.some(h => h.date === todayStr)) return true;
-        // Check Regional Holidays
-        if (r.holiday_region) {
-            // Check if there is a global holiday for this region today
-            if (holidays.some(h => h.country === r.holiday_region && h.date === todayStr)) return true;
-        }
-        return false;
-    });
-  }, [resources, holidays, todayStr]);
-
   return (
     <div className="space-y-6 animate-in fade-in duration-500 h-full overflow-y-auto custom-scrollbar p-1">
       
       {/* Top Cards Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-10"><Briefcase size={64} /></div>
             <div>
@@ -334,36 +318,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                  <div className="text-xs font-medium bg-indigo-50 text-indigo-700 px-2 py-1 rounded w-fit flex items-center gap-1" title="Backend Function Points">
                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span> BE: {stats.totalBeFP}
                 </div>
-            </div>
-        </div>
-
-        {/* AL Staff Widget */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-4 opacity-10"><Palmtree size={64} /></div>
-            <div>
-                <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wider">Staff On Leave</h3>
-                <div className="flex items-baseline gap-1 mt-1">
-                    <p className={`text-2xl font-bold ${staffOnLeave.length > 0 ? 'text-amber-600' : 'text-slate-800'}`}>{staffOnLeave.length}</p>
-                    <span className="text-xs text-slate-400">today</span>
-                </div>
-            </div>
-            <div className="mt-4">
-                {staffOnLeave.length === 0 ? (
-                    <div className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded w-fit">Full Team Available</div>
-                ) : (
-                    <div className="flex flex-col gap-1">
-                        {staffOnLeave.slice(0, 2).map(r => (
-                            <div key={r.id} className="text-xs font-medium bg-amber-50 text-amber-700 px-2 py-1 rounded w-fit truncate max-w-full">
-                                {r.name}
-                            </div>
-                        ))}
-                        {staffOnLeave.length > 2 && (
-                            <div className="text-[10px] text-slate-400 pl-1">
-                                +{staffOnLeave.length - 2} others
-                            </div>
-                        )}
-                    </div>
-                )}
             </div>
         </div>
       </div>
