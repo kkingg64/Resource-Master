@@ -1124,7 +1124,7 @@ const App: React.FC = () => {
             if (!error && newAssignment.allocations.length > 0) {
                  const dbAllocations = newAssignment.allocations.map(a => ({
                     assignment_id: newAssignmentId,
-                    user_id: session!.user.id,
+                    user_id: session.user.id,
                     week_id: a.weekId,
                     count: a.count,
                     days: a.days || {}
@@ -1200,21 +1200,17 @@ const App: React.FC = () => {
       );
   };
 
-  // FIX: Added function to handle module type updates
   const updateModuleType = async (projectId: string, moduleId: string, type: ModuleType) => {
       if (isReadOnlyMode) return;
       setProjects(prev => prev.map(p => {
           if (p.id !== projectId) return p;
           return {
               ...p,
-              modules: p.modules.map(m => {
-                  if (m.id !== moduleId) return m;
-                  return { ...m, type };
-              })
+              modules: p.modules.map(m => m.id === moduleId ? { ...m, type } : m)
           };
       }));
-      await callSupabase('UPDATE module type', { moduleId, type }, 
-        supabase.from('modules').update({ type }).eq('id', moduleId)
+      await callSupabase('UPDATE module type', { moduleId, type },
+          supabase.from('modules').update({ type }).eq('id', moduleId)
       );
   };
 
@@ -1313,7 +1309,7 @@ const App: React.FC = () => {
                       backendVelocity: bVel,
                       backendTeamSize: bTeam,
                       // FIX: Operator '+' cannot be applied to types 'unknown' and 'unknown'.
-                      functionPoints: feFp + beFp // Total FP
+                      functionPoints: Number(feFp) + Number(beFp) // Total FP
                   };
               })
           };
@@ -1331,7 +1327,7 @@ const App: React.FC = () => {
               backend_velocity: bVel,
               backend_team_size: bTeam,
               // FIX: Operator '+' cannot be applied to types 'unknown' and 'unknown'.
-              function_points: feFp + beFp
+              function_points: Number(feFp) + Number(beFp)
           }).eq('id', moduleId)
       );
   };
