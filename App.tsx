@@ -292,8 +292,22 @@ const App: React.FC = () => {
     }
   }, [session]);
 
-  const calculateTimelineBounds = (currentProjects: Project[]) => {
-    if (currentProjects.length === 0) return;
+  const calculateTimelineBounds = (currentProjects: Project[], currentResources: Resource[], currentHolidays: Holiday[]) => {
+    if (currentProjects.length === 0) {
+      setTimelineStart(DEFAULT_START);
+      setTimelineEnd(DEFAULT_END);
+      return;
+    }
+
+    const resourceHolidaysMap = new Map<string, Set<string>>();
+    const defaultHolidays = new Set(currentHolidays.filter(h => h.country === 'HK').map(h => h.date));
+    resourceHolidaysMap.set('Unassigned', defaultHolidays);
+
+    currentResources.forEach(res => {
+        const regional = currentHolidays.filter(h => h.country === res.holiday_region);
+        const individual = res.individual_holidays || [];
+        resourceHolidaysMap.set(res.name, new Set([...regional, ...individual].map(h => h.date)));
+    });
 
     let minVal = Infinity;
     let maxVal = -Infinity;
@@ -304,6 +318,7 @@ const App: React.FC = () => {
         if (!dateStr) return;
         try {
             const d = new Date(dateStr.replace(/-/g, '/'));
+            if (isNaN(d.getTime())) return; // Invalid date check
             const weekId = getWeekIdFromDate(d);
             const [y, w] = weekId.split('-').map(Number);
             if (!isNaN(y) && !isNaN(w)) {
@@ -318,7 +333,7 @@ const App: React.FC = () => {
                 }
             }
         } catch (e) {
-            // ignore invalid dates
+            console.error("Error processing date for timeline bounds:", dateStr, e);
         }
     };
 
@@ -330,9 +345,9 @@ const App: React.FC = () => {
                     if (assignment.startDate) {
                         processDate(assignment.startDate);
                         if (assignment.duration) {
-                             const d = new Date(assignment.startDate.replace(/-/g, '/'));
-                             d.setDate(d.getDate() + Math.ceil(assignment.duration * 1.5)); 
-                             processDate(formatDateForInput(d));
+                            const holidaySet = resourceHolidaysMap.get(assignment.resourceName || 'Unassigned') || defaultHolidays;
+                            const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, holidaySet);
+                            processDate(endDateStr);
                         }
                     }
                     
@@ -353,7 +368,11 @@ const App: React.FC = () => {
 
     if (minPoint && maxPoint) {
         setTimelineStart(addWeeksToPoint(minPoint, -1));
-        setTimelineEnd(addWeeksToPoint(maxPoint, 4));
+        setTimelineEnd(addWeeksToPoint(maxPoint, 1));
+    } else {
+        // Fallback if no dates/allocations are found
+        setTimelineStart(DEFAULT_START);
+        setTimelineEnd(DEFAULT_END);
     }
   };
   
@@ -403,12 +422,6 @@ const App: React.FC = () => {
       }
     }
     
-    const structuredProjects = structureProjectsData(finalProjectsData, modulesData, tasksData, assignmentsData, allocationsData);
-    setProjects(structuredProjects);
-    
-    // Calculate timeline BEFORE stopping the loading spinner to prevent UI jumps
-    calculateTimelineBounds(structuredProjects);
-
     const { data: resourcesData, error: resourcesError } = await supabase
       .from('resources')
       .select('*, individual_holidays(*)')
@@ -416,7 +429,8 @@ const App: React.FC = () => {
       .order('name');
     
     if (resourcesError) console.error(resourcesError);
-    else if (resourcesData) setResources(resourcesData);
+    const freshResources = resourcesData || [];
+    setResources(freshResources);
 
     const { data: holidaysData, error: holidaysError } = await supabase
       .from('holidays')
@@ -424,7 +438,13 @@ const App: React.FC = () => {
       .eq('user_id', session.user.id);
       
     if (holidaysError) console.error(holidaysError);
-    else if (holidaysData) setHolidays(holidaysData);
+    const freshHolidays = holidaysData || [];
+    setHolidays(freshHolidays);
+
+    const structuredProjects = structureProjectsData(finalProjectsData, modulesData, tasksData, assignmentsData, allocationsData);
+    setProjects(structuredProjects);
+    
+    calculateTimelineBounds(structuredProjects, freshResources, freshHolidays);
 
     if (isRefresh) setIsRefreshing(false);
     else setLoading(false);
@@ -867,7 +887,7 @@ const App: React.FC = () => {
   const deleteIndividualHoliday = async (holidayId: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('DELETE individual holiday', { id: holidayId }, supabase.from('individual_holidays').delete().eq('id', holidayId)); if (error) alert("Failed to delete holiday."); else fetchData(true); };
   const addHoliday = async (holidays: Omit<Holiday, 'id'>[]) => { if (isReadOnlyMode) return; const toInsert = holidays.map(h => ({ ...h, user_id: session!.user.id })); const { error } = await callSupabase('ADD holidays', { count: toInsert.length }, supabase.from('holidays').insert(toInsert)); if (error) alert("Failed to add holidays."); else fetchData(true); };
   const deleteHoliday = async (id: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('DELETE holiday', { id }, supabase.from('holidays').delete().eq('id', id)); if (error) alert("Failed to delete holiday."); else fetchData(true); };
-  const deleteHolidaysByCountry = async (country: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('DELETE holidays by country', { country }, supabase.from('holidays').delete().eq('country', country).eq('user_id', session!.user.id)); if (error) alert("Failed to delete holidays."); else fetchData(true); };
+  const deleteHolidaysByCountry = async (country: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('DELETE holidays by country', { country }, supabase.from('holidays').delete().eq('country', country).eq('user_id', session.user.id)); if (error) alert("Failed to delete holidays."); else fetchData(true); };
   const saveCurrentVersion = async (name: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('SAVE version', { name }, supabase.from('versions').insert({ name, user_id: session!.user.id, data: { projects, resources, holidays } })); if (error) alert("Failed to save version."); };
   const restoreVersion = async (versionId: number) => { if (isReadOnlyMode) return; const { data, error } = await supabase.from('versions').select('data').eq('id', versionId).single(); if (error || !data) { alert("Failed to restore version."); return; } const snapshot = data.data; if (snapshot.projects) { alert("Version restore logic would implementation deep backend restore. Loading snapshot into memory only."); setProjects(snapshot.projects); setResources(snapshot.resources || []); setHolidays(snapshot.holidays || []); } };
 
