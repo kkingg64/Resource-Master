@@ -1,5 +1,4 @@
 
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
@@ -335,6 +334,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [draggedAssignment, setDraggedAssignment] = useState<{ taskId: string, index: number } | null>(null);
   
   const [sidebarWidth, setSidebarWidth] = useState(350);
+  const [userHasResizedSidebar, setUserHasResizedSidebar] = useState(false);
   const [startColWidth, setStartColWidth] = useState(95);
   const [durationColWidth, setDurationColWidth] = useState(50);
   const [dependencyColWidth, setDependencyColWidth] = useState(50);
@@ -365,6 +365,49 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const resizeGhostRef = useRef<HTMLDivElement>(null);
   const isResizing = useRef(false);
   const resizeData = useRef({ col: '', startX: 0, startWidth: 0 });
+
+  // Auto-fit sidebar width based on longest text
+  useEffect(() => {
+    if (userHasResizedSidebar) return;
+    if (!projects || projects.length === 0) return;
+
+    const calculateOptimalWidth = () => {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        if (!context) return 350; // Fallback
+
+        // Font settings matching UI (Inter, text-xs/12px)
+        context.font = 'bold 12px Inter, ui-sans-serif, system-ui, sans-serif'; 
+
+        let maxPixelWidth = 200; // Minimum start width
+
+        projects.forEach(p => {
+            // Project row padding: ~60px (icons, gap, chevron)
+            const pWidth = context.measureText(p.name).width + 60; 
+            if (pWidth > maxPixelWidth) maxPixelWidth = pWidth;
+
+            p.modules.forEach(m => {
+                // Module row padding: ~80px (indent, icons, gap)
+                const mWidth = context.measureText(m.name).width + 80; 
+                if (mWidth > maxPixelWidth) maxPixelWidth = mWidth;
+
+                m.tasks.forEach(t => {
+                    // Task row padding: ~100px (indent, icons, gap)
+                    const tWidth = context.measureText(t.name).width + 100; 
+                    if (tWidth > maxPixelWidth) maxPixelWidth = tWidth;
+                });
+            });
+        });
+        
+        // Add a small breathing room
+        maxPixelWidth += 20;
+
+        // Clamp values
+        return Math.min(Math.max(250, maxPixelWidth), 600);
+    };
+
+    setSidebarWidth(calculateOptimalWidth());
+  }, [projects, userHasResizedSidebar]);
 
   useEffect(() => {
     if (editingId && editInputRef.current) {
@@ -454,7 +497,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       const newWidth = resizeData.current.startWidth + delta;
       const col = resizeData.current.col;
 
-      if (col === 'sidebar') setSidebarWidth(Math.max(200, Math.min(600, newWidth)));
+      if (col === 'sidebar') {
+          setSidebarWidth(Math.max(200, Math.min(600, newWidth)));
+          setUserHasResizedSidebar(true);
+      }
       if (col === 'start') setStartColWidth(Math.max(80, Math.min(200, newWidth)));
       if (col === 'duration') setDurationColWidth(Math.max(40, Math.min(150, newWidth)));
       if (col === 'dependency') setDependencyColWidth(Math.max(40, Math.min(400, newWidth)));
