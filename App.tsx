@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel } from './types';
@@ -1414,7 +1415,7 @@ const App: React.FC = () => {
             {/* Main Content */}
             <div className="flex-1 bg-slate-50 relative overflow-hidden flex flex-col">
                 <div className="flex-1 p-4 overflow-hidden">
-                    {activeTab === 'dashboard' && <Dashboard projects={projects} />}
+                    {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
                     {activeTab === 'planner' && (
                         <div className="h-full">
                             <PlannerGrid 

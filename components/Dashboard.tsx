@@ -1,17 +1,20 @@
 
+
 import React, { useMemo } from 'react';
-import { Project, Role, WeeklySummary, ResourceAllocation } from '../types';
+import { Project, Role, WeeklySummary, ResourceAllocation, Resource, Holiday } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
 import { getTimeline, DEFAULT_START, DEFAULT_END, calculateWorkingDaysBetween, formatDateForInput, getWeekIdFromDate, getWeekdaysForWeekId } from '../constants';
-import { AlertCircle, CheckCircle2, Clock, Users, Briefcase, ChevronRight, AlertTriangle, AlertOctagon, CalendarDays, Activity } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Users, Briefcase, ChevronRight, AlertTriangle, AlertOctagon, CalendarDays, Activity, CalendarOff } from 'lucide-react';
 
 interface DashboardProps {
   projects: Project[];
+  resources: Resource[];
+  holidays: Holiday[];
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
-export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holidays }) => {
   
   const GLOBAL_TIMELINE_DATA = useMemo(() => getTimeline('week', DEFAULT_START, DEFAULT_END), []);
   const today = new Date();
@@ -255,6 +258,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
     return { dates: weekDates, activity: activityByDay };
   }, [projects, currentWeekId]);
 
+  // 7. Leaves Calculation
+  const todayLeaves = useMemo(() => {
+    const todayDate = new Date();
+    const todayStr = formatDateForInput(todayDate);
+    
+    const onLeave: { resource: string, reason: string, type: 'Public' | 'Personal' }[] = [];
+
+    resources.forEach(r => {
+        // Public Holiday Check
+        const region = r.holiday_region || 'HK'; // Defaulting to HK logic as per other components
+        const regionalHolidays = holidays.filter(h => h.country === region);
+        const publicHol = regionalHolidays.find(h => h.date === todayStr);
+        
+        if (publicHol) {
+            onLeave.push({ resource: r.name, reason: publicHol.name, type: 'Public' });
+            return;
+        }
+
+        // Individual Holiday Check
+        const personalHol = r.individual_holidays?.find(h => h.date === todayStr);
+        if (personalHol) {
+            onLeave.push({ resource: r.name, reason: personalHol.name, type: 'Personal' });
+        }
+    });
+
+    return onLeave;
+  }, [resources, holidays]);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 h-full overflow-y-auto custom-scrollbar p-1">
       
@@ -418,34 +449,66 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects }) => {
             </div>
         </div>
 
-        {/* Unassigned Tasks / Alerts */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-80 lg:h-auto">
-             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                    <AlertTriangle size={16} className="text-amber-500" />
-                    Unassigned Work
-                </h3>
-            </div>
-            <div className="flex-1 overflow-auto custom-scrollbar p-0">
-                {stats.unassignedTasks.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
-                        <CheckCircle2 size={32} className="text-green-500 mb-2" />
-                        <p className="text-sm">All tasks assigned!</p>
-                    </div>
-                ) : (
-                    <ul className="divide-y divide-slate-100">
-                        {stats.unassignedTasks.map((t, idx) => (
-                            <li key={idx} className="px-6 py-3 hover:bg-slate-50 flex flex-col gap-0.5">
-                                <span className="text-sm font-medium text-slate-700">{t.taskName}</span>
-                                <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                                    <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{t.projectName}</span>
-                                    <ChevronRight size={10} />
-                                    <span>{t.moduleName}</span>
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
-                )}
+        {/* Right Column: Leaves & Unassigned */}
+        <div className="flex flex-col gap-6">
+             {/* Today's Leaves */}
+             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col max-h-80">
+                 <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <CalendarOff size={16} className="text-orange-500" />
+                        On Leave Today
+                    </h3>
+                </div>
+                <div className="flex-1 overflow-auto custom-scrollbar p-0">
+                    {todayLeaves.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8 min-h-[150px]">
+                            <CheckCircle2 size={32} className="text-green-500 mb-2" />
+                            <p className="text-sm">Full Team Attendance</p>
+                        </div>
+                    ) : (
+                        <ul className="divide-y divide-slate-100">
+                            {todayLeaves.map((l, idx) => (
+                                <li key={idx} className="px-6 py-3 hover:bg-slate-50 flex items-center justify-between">
+                                    <span className="text-sm font-medium text-slate-700">{l.resource}</span>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${l.type === 'Public' ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>
+                                        {l.reason}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+             </div>
+
+             {/* Unassigned Tasks / Alerts */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col lg:h-auto min-h-[200px]">
+                 <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <AlertTriangle size={16} className="text-amber-500" />
+                        Unassigned Work
+                    </h3>
+                </div>
+                <div className="flex-1 overflow-auto custom-scrollbar p-0">
+                    {stats.unassignedTasks.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
+                            <CheckCircle2 size={32} className="text-green-500 mb-2" />
+                            <p className="text-sm">All tasks assigned!</p>
+                        </div>
+                    ) : (
+                        <ul className="divide-y divide-slate-100">
+                            {stats.unassignedTasks.map((t, idx) => (
+                                <li key={idx} className="px-6 py-3 hover:bg-slate-50 flex flex-col gap-0.5">
+                                    <span className="text-sm font-medium text-slate-700">{t.taskName}</span>
+                                    <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                                        <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{t.projectName}</span>
+                                        <ChevronRight size={10} />
+                                        <span>{t.moduleName}</span>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
             </div>
         </div>
       </div>
