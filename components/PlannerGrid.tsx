@@ -2,8 +2,103 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent } from 'lucide-react';
+import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft } from 'lucide-react';
 import * as XLSX from 'xlsx';
+
+// --- Custom DatePicker Component ---
+interface DatePickerProps {
+  value: Date;
+  onChange: (newDate: Date) => void;
+  onClose: () => void;
+}
+
+const MONTH_NAMES_DP = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const DAY_NAMES_DP = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const DatePicker: React.FC<DatePickerProps> = ({ value, onChange, onClose }) => {
+  const [viewDate, setViewDate] = useState(new Date(value.getFullYear(), value.getMonth(), 1));
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const calendarGrid = useMemo(() => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    const days = [];
+    
+    // Previous month's days
+    const prevMonthDays = new Date(year, month, 0).getDate();
+    for (let i = firstDayOfMonth - 1; i >= 0; i--) {
+        const date = new Date(year, month - 1, prevMonthDays - i);
+        days.push({ date, isCurrentMonth: false });
+    }
+    
+    // Current month's days
+    for (let i = 1; i <= daysInMonth; i++) {
+        const date = new Date(year, month, i);
+        days.push({ date, isCurrentMonth: true });
+    }
+
+    // Next month's days
+    const remaining = 42 - days.length; // 6 rows * 7 days
+    for (let i = 1; i <= remaining; i++) {
+        const date = new Date(year, month + 1, i);
+        days.push({ date, isCurrentMonth: false });
+    }
+    
+    return days;
+  }, [viewDate]);
+
+  const changeMonth = (amount: number) => {
+    setViewDate(prev => new Date(prev.getFullYear(), prev.getMonth() + amount, 1));
+  };
+  
+  const handleDayClick = (day: { date: Date, isCurrentMonth: boolean }) => {
+    onChange(day.date);
+    onClose();
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-2xl border border-slate-200 p-3 w-72 animate-in fade-in zoom-in-95">
+      <div className="flex items-center justify-between mb-3">
+        <button onClick={() => changeMonth(-1)} className="p-1 rounded-full hover:bg-slate-100 text-slate-500"><ChevronLeft size={20} /></button>
+        <div className="font-semibold text-sm text-slate-700">
+          {MONTH_NAMES_DP[viewDate.getMonth()]} {viewDate.getFullYear()}
+        </div>
+        <button onClick={() => changeMonth(1)} className="p-1 rounded-full hover:bg-slate-100 text-slate-500"><ChevronRight size={20} /></button>
+      </div>
+      <div className="grid grid-cols-7 gap-y-1 text-center text-xs text-slate-500 font-medium mb-2">
+        {DAY_NAMES_DP.map(day => <div key={day}>{day.slice(0, 1)}</div>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {calendarGrid.map((day, i) => {
+          const isSelected = day.date.getTime() === new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+          const isToday = day.date.getTime() === today.getTime();
+
+          return (
+            <button 
+              key={i}
+              onClick={() => handleDayClick(day)}
+              className={`w-9 h-9 flex items-center justify-center rounded-full text-sm transition-colors
+                ${!day.isCurrentMonth ? 'text-slate-300' : 'text-slate-700'}
+                ${day.isCurrentMonth && !isSelected ? 'hover:bg-slate-100' : ''}
+                ${isToday && !isSelected ? 'border border-indigo-300' : ''}
+                ${isSelected ? 'bg-indigo-600 text-white font-bold hover:bg-indigo-700' : ''}
+              `}
+            >
+              {day.date.getDate()}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 
 interface PlannerGridProps {
   projects: Project[];
@@ -257,10 +352,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     taskId?: string; 
     assignmentId?: string; 
   } | null>(null);
+
+  const [datePickerState, setDatePickerState] = useState<{ assignmentId: string | null }>({ assignmentId: null });
   
   const importInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const toggleButtonRef = useRef<HTMLButtonElement>(null);
+  const datePickerContainerRef = useRef<HTMLDivElement>(null);
 
   // --- Performance: Ghost Resize Refs ---
   const resizeGhostRef = useRef<HTMLDivElement>(null);
@@ -285,6 +383,25 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     window.addEventListener('click', handleClick);
     return () => window.removeEventListener('click', handleClick);
   }, []);
+
+  useEffect(() => {
+    if (!datePickerState.assignmentId) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+        if (datePickerContainerRef.current && !datePickerContainerRef.current.contains(event.target as Node)) {
+             setDatePickerState({ assignmentId: null });
+        }
+    };
+    
+    // Use timeout to avoid closing immediately on the same click that opened it
+    setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside);
+    }, 0);
+
+    return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [datePickerState.assignmentId]);
 
   const toggleProject = (id: string) => setCollapsedProjects(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleModule = (id: string) => setCollapsedModules(prev => ({ ...prev, [id]: !prev[id] }));
@@ -934,7 +1051,33 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   {/* Assignment Details Columns */}
                                   <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
                                       {!isReadOnly && <div className="cursor-grab text-slate-300 hover:text-slate-500 mr-1" title="Drag to reorder assignment"><GripVertical size={14} /></div>}
-                                      <input type="date" title="Start Date" disabled={isReadOnly || !!assignment.parentAssignmentId} className={`no-calendar-icon text-[11px] py-0.5 px-1 rounded-md bg-transparent border-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full hover:bg-slate-100 ${isReadOnly || !!assignment.parentAssignmentId ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-600'}`} value={formatDateForInput(assignmentStartDate)} onChange={(e) => handleAssignmentStartDateChange(assignment, e.target.value)} />
+                                      <div className="relative w-full">
+                                        <button
+                                            data-datepicker-trigger
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if(isReadOnly || !!assignment.parentAssignmentId) return;
+                                                setDatePickerState(prev => ({ assignmentId: prev.assignmentId === assignment.id ? null : assignment.id }))
+                                            }}
+                                            title="Start Date"
+                                            disabled={isReadOnly || !!assignment.parentAssignmentId}
+                                            className={`text-[11px] text-left w-full py-0.5 px-1 rounded-md bg-transparent hover:bg-slate-100 focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-transparent text-slate-600`}
+                                        >
+                                          {formatDateForInput(assignmentStartDate)}
+                                        </button>
+                                        {datePickerState.assignmentId === assignment.id && (
+                                            <div className="absolute top-full left-0 z-50 mt-1" ref={datePickerContainerRef}>
+                                                <DatePicker 
+                                                    value={assignmentStartDate}
+                                                    onChange={(newDate) => {
+                                                        handleAssignmentStartDateChange(assignment, formatDateForInput(newDate));
+                                                        setDatePickerState({ assignmentId: null });
+                                                    }}
+                                                    onClose={() => setDatePickerState({ assignmentId: null })}
+                                                />
+                                            </div>
+                                        )}
+                                      </div>
                                   </div>
                                   <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
                                       <input type="number" min="1" title="Duration (days)" disabled={isReadOnly} value={isEditingDuration ? editValue : (assignment.duration || 1)} onFocus={() => { setEditingId(`duration::${assignment.id}`); setEditValue((assignment.duration || 1).toString()); }} onChange={(e) => setEditValue(e.target.value)} onBlur={() => saveDuration(assignment)} onKeyDown={(e) => { if (e.key === 'Enter') { saveDuration(assignment); (e.target as HTMLInputElement).blur(); } else if (e.key === 'Escape') { setEditingId(null); (e.target as HTMLInputElement).blur(); } }} ref={isEditingDuration ? editInputRef : undefined} className="text-[11px] py-0.5 px-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center hover:bg-slate-100 disabled:hover:bg-transparent" />
