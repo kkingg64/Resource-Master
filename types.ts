@@ -56,6 +56,8 @@ export interface ProjectTask {
   name: string;
   assignments: TaskAssignment[];
   sort_order?: number;
+  frontendFunctionPoints?: number;
+  backendFunctionPoints?: number;
 }
 
 export type ComplexityLevel = 'Low' | 'Medium' | 'High' | 'Complex';

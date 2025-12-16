@@ -1,12 +1,14 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, ProjectModule, ComplexityLevel, Holiday, Role, ProjectTask, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
-import { Calculator, GripVertical, ArrowRight, Layout, Server, ChevronDown, Calendar as CalendarIcon, Link2, Clock, AlertCircle, CheckCircle2, Layers, Gem, ShieldCheck } from 'lucide-react';
+import { Calculator, GripVertical, ChevronRight, ChevronDown, Calendar as CalendarIcon, Link2, AlertCircle, CheckCircle2, Layers, Gem, ShieldCheck, Dot } from 'lucide-react';
 import { calculateEndDate, formatDateForInput, calculateWorkingDaysBetween } from '../constants';
 
 interface EstimatorProps {
   projects: Project[];
   holidays: Holiday[];
-  onUpdateFunctionPoints: (projectId: string, moduleId: string, legacyFp: number, frontendFp: number, backendFp: number, prepVelocity: number, prepTeamSize: number, feVelocity: number, feTeamSize: number, beVelocity: number, beTeamSize: number) => void;
+  onUpdateModuleEstimates: (projectId: string, moduleId: string, legacyFp: number, prepVelocity: number, prepTeamSize: number, feVelocity: number, feTeamSize: number, beVelocity: number, beTeamSize: number) => void;
+  onUpdateTaskFunctionPoints: (projectId: string, moduleId: string, taskId: string, feFp: number, beFp: number) => void;
   onUpdateModuleComplexity: (projectId: string, moduleId: string, type: 'frontend' | 'backend', complexity: ComplexityLevel) => void;
   onUpdateModuleStartDate: (projectId: string, moduleId: string, startDate: string | null) => void;
   onUpdateModuleDeliveryTask: (projectId: string, moduleId: string, deliveryTaskId: string | null) => void;
@@ -124,9 +126,10 @@ const EstimatorNumberInput: React.FC<EstimatorNumberInputProps> = ({ value, onCh
 };
 
 
-export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateFunctionPoints, onUpdateModuleComplexity, onUpdateModuleStartDate, onUpdateModuleDeliveryTask, onUpdateModuleStartTask, onReorderModules, isReadOnly = false }) => {
+export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateModuleEstimates, onUpdateTaskFunctionPoints, onUpdateModuleComplexity, onUpdateModuleStartDate, onUpdateModuleDeliveryTask, onUpdateModuleStartTask, onReorderModules, isReadOnly = false }) => {
   const [selectedProjectId, setSelectedProjectId] = useState<string>(projects[0]?.id || '');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   
   const holidaySet = useMemo(() => new Set(
     holidays
@@ -174,8 +177,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         const moduleType = m.type || ModuleType.Development;
         const isDev = moduleType === ModuleType.Development;
 
-        const feFP = isDev ? (m.frontendFunctionPoints || 0) : 0;
-        const beFP = isDev ? (m.backendFunctionPoints || 0) : 0;
+        const feFP = isDev ? m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0) : 0;
+        const beFP = isDev ? m.tasks.reduce((s, t) => s + (t.backendFunctionPoints || 0), 0) : 0;
         
         const prepBase = m.legacyFunctionPoints || 0;
         totalRefFP += prepBase;
@@ -283,6 +286,10 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
     return { refFP: totalRefFP, feFP: totalFeFP, beFP: totalBeFP, prepEffort: totalPrepEffort, feEffort: totalFeEffort, beEffort: totalBeEffort, prepDuration: totalPrepDuration, feDuration: totalFeDuration, beDuration: totalBeDuration, projectMaxEstDate, projectMaxPlanDate, totalVarianceDays };
   }, [modules, holidaySet, allTasksMap]);
 
+  const toggleModuleExpansion = (moduleId: string) => {
+    setExpandedModules(prev => ({ ...prev, [moduleId]: !prev[moduleId] }));
+  };
+
   const handleDragStart = (e: React.DragEvent, index: number) => { if (isReadOnly) return; e.dataTransfer.setData("text/plain", index.toString()); setDraggedIndex(index); };
   const handleDragOver = (e: React.DragEvent) => { if (isReadOnly) return; e.preventDefault(); };
   const handleDrop = (e: React.DragEvent, index: number) => { if (isReadOnly) return; e.preventDefault(); const startIndex = parseInt(e.dataTransfer.getData("text/plain"), 10); if (!isNaN(startIndex) && startIndex !== index) { onReorderModules(selectedProjectId, startIndex, index); } setDraggedIndex(null); };
@@ -385,20 +392,22 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     <th className="py-1 text-center border-b border-slate-200 bg-slate-50">Var</th>
                 </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-[11px]">
+            <tbody className="text-[11px]">
                 {modules.length === 0 && (
-                    <tr><td colSpan={22} className="p-12 text-center text-slate-400 bg-slate-50/30"><div className="flex flex-col items-center justify-center gap-2"><Layout className="w-8 h-8 text-slate-300"/><p>No modules found.</p></div></td></tr>
+                    <tr><td colSpan={22} className="p-12 text-center text-slate-400 bg-slate-50/30"><div className="flex flex-col items-center justify-center gap-2">{/* FIX: Cannot find name 'Layout'. Changed to 'Layers' */}
+<Layers className="w-8 h-8 text-slate-300"/><p>No modules found.</p></div></td></tr>
                 )}
                 {modules.map((m, index) => {
                     const moduleType = m.type || ModuleType.Development;
                     const isDev = moduleType === ModuleType.Development;
                     const typeStyle = MODULE_TYPE_STYLES[moduleType];
                     const Icon = typeStyle.icon;
+                    const isExpanded = !!expandedModules[m.id];
                     
-                    const feFP = isDev ? (m.frontendFunctionPoints || 0) : 0;
-                    const beFP = isDev ? (m.backendFunctionPoints || 0) : 0;
+                    const moduleFeFp = isDev ? m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0) : 0;
+                    const moduleBeFp = isDev ? m.tasks.reduce((s, t) => s + (t.backendFunctionPoints || 0), 0) : 0;
+                    
                     const prepBase = m.legacyFunctionPoints || 0;
-
                     const prepVelocity = m.prepVelocity || 10;
                     const prepTeamSize = m.prepTeamSize || 2;
                     const prepEffort = prepBase > 0 ? Math.ceil(prepBase / prepVelocity) : 0;
@@ -407,17 +416,17 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     const feVel = m.frontendVelocity || 5;
                     const feTeam = m.frontendTeamSize || 2;
                     const feComp = m.frontendComplexity || 'Medium';
-                    const feEffort = feFP > 0 ? Math.ceil((feFP / feVel) * COMPLEXITY_MULTIPLIERS[feComp]) : 0;
+                    const feEffort = moduleFeFp > 0 ? Math.ceil((moduleFeFp / feVel) * COMPLEXITY_MULTIPLIERS[feComp]) : 0;
                     const feDuration = feEffort > 0 ? Math.ceil(feEffort / feTeam) : 0;
 
                     const beVel = m.backendVelocity || 5;
                     const beTeam = m.backendTeamSize || 2;
                     const beComp = m.backendComplexity || 'Medium';
-                    const beEffort = beFP > 0 ? Math.ceil((beFP / beVel) * COMPLEXITY_MULTIPLIERS[beComp]) : 0;
+                    const beEffort = moduleBeFp > 0 ? Math.ceil((moduleBeFp / beVel) * COMPLEXITY_MULTIPLIERS[beComp]) : 0;
                     const beDuration = beEffort > 0 ? Math.ceil(beEffort / beTeam) : 0;
 
                     const totalDuration = isDev ? Math.max(feDuration, beDuration) : prepDuration;
-                    const hasEffort = (isDev && (feFP > 0 || beFP > 0)) || (!isDev && prepBase > 0);
+                    const hasEffort = (isDev && (moduleFeFp > 0 || moduleBeFp > 0)) || (!isDev && prepBase > 0);
                     
                     let baseStartDate = m.startDate || null;
                     let isTaskBased = false;
@@ -448,7 +457,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     let varianceText = '-';
                     let varianceClass = 'text-slate-300';
                     if (estimatedDateStr && plannerDateStr) { if (estimatedDateStr <= plannerDateStr) { varianceStatus = 'safe'; let diff = calculateWorkingDaysBetween(estimatedDateStr, plannerDateStr, holidaySet) - 1; if(estimatedDateStr === plannerDateStr) diff = 0; const savedDays = -diff; varianceText = `${savedDays}d`; varianceClass = 'text-green-600 font-bold'; } else { varianceStatus = 'risk'; const diff = calculateWorkingDaysBetween(plannerDateStr, estimatedDateStr, holidaySet) - 1; varianceText = `+${diff}d`; varianceClass = 'text-red-600 font-bold'; } }
-                    const updateParams = (legacyFP: number, feFP: number, beFP: number, pVel: number, pTeam: number, fVel: number, fTeam: number, bVel: number, bTeam: number) => { onUpdateFunctionPoints(selectedProjectId, m.id, legacyFP, feFP, beFP, pVel, pTeam, fVel, fTeam, bVel, bTeam); };
+                    const updateEstimates = (legacyFp: number, pVel: number, pTeam: number, fVel: number, fTeam: number, bVel: number, bTeam: number) => { onUpdateModuleEstimates(selectedProjectId, m.id, legacyFp, pVel, pTeam, fVel, fTeam, bVel, bTeam); };
                     let cellBgClass = 'bg-transparent';
                     if (varianceStatus === 'risk') cellBgClass = 'bg-red-50/50';
                     if (varianceStatus === 'safe') cellBgClass = 'bg-green-50/50';
@@ -456,10 +465,12 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     const baseInputClass = "w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500";
 
                     return (
-                        <tr key={m.id} draggable={!isReadOnly} onDragStart={(e) => handleDragStart(e, index)} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, index)} className={`hover:bg-slate-50 transition-colors group ${draggedIndex === index ? 'opacity-40' : ''} ${typeStyle.rowBg}`}>
+                        <React.Fragment key={m.id}>
+                        <tr draggable={!isReadOnly} onDragStart={(e) => handleDragStart(e, index)} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, index)} className={`hover:bg-slate-50 transition-colors group ${draggedIndex === index ? 'opacity-40' : ''} ${typeStyle.rowBg}`}>
                             <td className="text-center text-slate-300 cursor-grab active:cursor-grabbing border-b border-slate-100"><div className="flex justify-center group-hover:text-slate-500">{!isReadOnly && <GripVertical size={12} />}</div></td>
                             <td className="px-2 py-1.5 border-b border-slate-100 border-r border-slate-200">
                                 <div className="flex items-center gap-1.5">
+                                    {isDev && <button onClick={() => toggleModuleExpansion(m.id)} className="p-0.5 rounded hover:bg-black/5">{isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</button>}
                                     <Icon size={14} className="text-slate-400" title={MODULE_TYPE_DISPLAY_NAMES[moduleType]} />
                                     <span className="font-medium text-slate-700 truncate block w-full" title={m.name}>{m.name}</span>
                                 </div>
@@ -467,26 +478,26 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                             
                             {/* Prep */}
                             <td className="p-0 border-b border-slate-100 relative hover:bg-white/50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={0} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={m.legacyFunctionPoints || 0} onChange={(val) => updateParams(val, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} disabled={isReadOnly} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={0} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={m.legacyFunctionPoints || 0} onChange={(val) => updateEstimates(val, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} disabled={isReadOnly} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-white/50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={1} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={prepVelocity} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, val, prepTeamSize, feVel, feTeam, beVel, beTeam)} disabled={isReadOnly} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={1} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={prepVelocity} onChange={(val) => updateEstimates(m.legacyFunctionPoints || 0, val, prepTeamSize, feVel, feTeam, beVel, beTeam)} disabled={isReadOnly} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-white/50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={2} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={prepTeamSize} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, val, feVel, feTeam, beVel, beTeam)} disabled={isReadOnly} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={2} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={prepTeamSize} onChange={(val) => updateEstimates(m.legacyFunctionPoints || 0, prepVelocity, val, feVel, feTeam, beVel, beTeam)} disabled={isReadOnly} />
                             </td>
                             <td className="px-1 text-center border-b border-slate-100 text-slate-400 font-mono">{prepEffort || '-'}</td>
                             <td className="px-1 text-center border-b border-slate-100 border-r border-slate-200 text-amber-700 font-medium">{formatWeeks(prepDuration)}</td>
 
                             {/* FE */}
-                            <td className="p-0 border-b border-slate-100 relative hover:bg-white/50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={3} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={feFP} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, val, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} disabled={isReadOnly || !isDev} />
+                            <td className="p-0 border-b border-slate-100 relative">
+                                <EstimatorNumberInput rowIndex={index} colIndex={3} onNavigate={handleNavigate} className={`${baseInputClass} font-bold text-slate-800`} min={0} value={moduleFeFp} onChange={() => {}} disabled={true} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-white/50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={4} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={feVel} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, val, feTeam, beVel, beTeam)} disabled={isReadOnly || !isDev} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={4} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={feVel} onChange={(val) => updateEstimates(m.legacyFunctionPoints || 0, prepVelocity, prepTeamSize, val, feTeam, beVel, beTeam)} disabled={isReadOnly || !isDev} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-white/50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={5} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={feTeam} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, val, beVel, beTeam)} disabled={isReadOnly || !isDev} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={5} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={feTeam} onChange={(val) => updateEstimates(m.legacyFunctionPoints || 0, prepVelocity, prepTeamSize, feVel, val, beVel, beTeam)} disabled={isReadOnly || !isDev} />
                             </td>
                             <td className="p-0 border-b border-slate-100">
                                 <ComplexitySelect value={feComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'frontend', val)} isReadOnly={isReadOnly || !isDev} />
@@ -495,14 +506,14 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                             <td className="px-1 text-center border-b border-slate-100 border-r border-slate-200 text-blue-700 font-medium">{formatWeeks(feDuration)}</td>
 
                             {/* BE */}
-                            <td className="p-0 border-b border-slate-100 relative hover:bg-white/50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={6} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={beFP} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, val, prepVelocity, prepTeamSize, feVel, feTeam, beVel, beTeam)} disabled={isReadOnly || !isDev} />
+                            <td className="p-0 border-b border-slate-100 relative">
+                                <EstimatorNumberInput rowIndex={index} colIndex={6} onNavigate={handleNavigate} className={`${baseInputClass} font-bold text-slate-800`} min={0} value={moduleBeFp} onChange={() => {}} disabled={true} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-white/50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={7} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={beVel} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, val, beTeam)} disabled={isReadOnly || !isDev} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={7} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={beVel} onChange={(val) => updateEstimates(m.legacyFunctionPoints || 0, prepVelocity, prepTeamSize, feVel, feTeam, val, beTeam)} disabled={isReadOnly || !isDev} />
                             </td>
                             <td className="p-0 border-b border-slate-100 relative hover:bg-white/50">
-                                <EstimatorNumberInput rowIndex={index} colIndex={8} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={beTeam} onChange={(val) => updateParams(m.legacyFunctionPoints || 0, feFP, beFP, prepVelocity, prepTeamSize, feVel, feTeam, beVel, val)} disabled={isReadOnly || !isDev} />
+                                <EstimatorNumberInput rowIndex={index} colIndex={8} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={beTeam} onChange={(val) => updateEstimates(m.legacyFunctionPoints || 0, prepVelocity, prepTeamSize, feVel, feTeam, beVel, val)} disabled={isReadOnly || !isDev} />
                             </td>
                             <td className="p-0 border-b border-slate-100">
                                 <ComplexitySelect value={beComp} onChange={(val) => onUpdateModuleComplexity(selectedProjectId, m.id, 'backend', val)} isReadOnly={isReadOnly || !isDev} />
@@ -544,6 +555,20 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                              {/* Variance */}
                             <td className={`px-1 border-b border-slate-100 text-center align-middle border-r border-slate-200 ${cellBgClass}`}><span className={`text-[10px] font-mono ${varianceClass}`}>{varianceText}</span></td>
                         </tr>
+                        {isExpanded && isDev && m.tasks.map((task, taskIndex) => (
+                            <tr key={task.id} className="bg-slate-50/50">
+                                <td className="border-b border-slate-100"></td>
+                                <td className="pl-12 pr-2 py-1 text-xs text-slate-600 border-b border-slate-100 border-r border-slate-200">
+                                    <div className="flex items-center gap-2"><Dot size={16} className="text-slate-400"/> <span className="truncate" title={task.name}>{task.name}</span></div>
+                                </td>
+                                <td colSpan={5} className="border-b border-slate-100 border-r border-slate-200"></td>
+                                <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={100+taskIndex} colIndex={3} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={task.frontendFunctionPoints || 0} onChange={val => onUpdateTaskFunctionPoints(selectedProjectId, m.id, task.id, val, task.backendFunctionPoints || 0)} disabled={isReadOnly} /></td>
+                                <td colSpan={5} className="border-b border-slate-100 border-r border-slate-200"></td>
+                                <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={100+taskIndex} colIndex={6} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={task.backendFunctionPoints || 0} onChange={val => onUpdateTaskFunctionPoints(selectedProjectId, m.id, task.id, task.frontendFunctionPoints || 0, val)} disabled={isReadOnly} /></td>
+                                <td colSpan={8} className="border-b border-slate-100 border-r border-slate-200"></td>
+                            </tr>
+                        ))}
+                        </React.Fragment>
                     );
                 })}
             </tbody>

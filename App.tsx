@@ -63,6 +63,8 @@ const structureProjectsData = (
       id: t.id,
       name: t.name,
       sort_order: t.sort_order,
+      frontendFunctionPoints: t.frontend_function_points || 0,
+      backendFunctionPoints: t.backend_function_points || 0,
       assignments: (assignmentsByTask.get(t.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
     });
   });
@@ -76,7 +78,6 @@ const structureProjectsData = (
     modulesByProject.get(m.project_id)!.push({
       id: m.id,
       name: m.name,
-      // FIX: Changed ModuleType.Standard to ModuleType.Development
       type: m.type || ModuleType.Development,
       legacyFunctionPoints: m.legacy_function_points,
       functionPoints: m.function_points,
@@ -1287,8 +1288,8 @@ const App: React.FC = () => {
       await callSupabase('DELETE assignment', { assignmentId }, supabase.from('task_assignments').delete().eq('id', assignmentId));
   };
 
-  const updateFunctionPoints = async (projectId: string, moduleId: string, legacyFp: number, feFp: number, beFp: number, pVel: number, pTeam: number, fVel: number, fTeam: number, bVel: number, bTeam: number) => {
-      if (isReadOnlyMode) return;
+  const updateModuleEstimates = async (projectId: string, moduleId: string, legacyFp: number, pVel: number, pTeam: number, fVel: number, fTeam: number, bVel: number, bTeam: number) => {
+    if (isReadOnlyMode) return;
       setProjects(prev => prev.map(p => {
           if(p.id !== projectId) return p;
           return {
@@ -1298,38 +1299,78 @@ const App: React.FC = () => {
                   return { 
                       ...m, 
                       legacyFunctionPoints: legacyFp,
-                      frontendFunctionPoints: feFp,
-                      backendFunctionPoints: beFp,
                       prepVelocity: pVel,
                       prepTeamSize: pTeam,
                       frontendVelocity: fVel,
                       frontendTeamSize: fTeam,
                       backendVelocity: bVel,
                       backendTeamSize: bTeam,
-                      // FIX: Simplify calculation for clarity and to address potential type issues
-                      functionPoints: feFp + beFp // Total FP
                   };
               })
           };
       }));
       
-      await callSupabase('UPDATE module metrics', { moduleId }, 
+      await callSupabase('UPDATE module estimates', { moduleId }, 
           supabase.from('modules').update({ 
               legacy_function_points: legacyFp,
-              frontend_function_points: feFp,
-              backend_function_points: beFp,
               prep_velocity: pVel,
               prep_team_size: pTeam,
               frontend_velocity: fVel,
               frontend_team_size: fTeam,
               backend_velocity: bVel,
               backend_team_size: bTeam,
-              // FIX: Simplify calculation for clarity and to address potential type issues
-              function_points: feFp + beFp
           }).eq('id', moduleId)
       );
   };
   
+  const updateTaskFunctionPoints = async (projectId: string, moduleId: string, taskId: string, feFp: number, beFp: number) => {
+    if (isReadOnlyMode) return;
+      
+    let moduleFeFpSum = 0;
+    let moduleBeFpSum = 0;
+
+    const newProjects = projects.map(p => {
+        if (p.id !== projectId) return p;
+        return {
+            ...p,
+            modules: p.modules.map(m => {
+                if (m.id !== moduleId) return m;
+                const newTasks = m.tasks.map(t => {
+                    if (t.id !== taskId) return t;
+                    return { ...t, frontendFunctionPoints: feFp, backendFunctionPoints: beFp };
+                });
+                
+                moduleFeFpSum = newTasks.reduce((sum, t) => sum + (t.frontendFunctionPoints || 0), 0);
+                moduleBeFpSum = newTasks.reduce((sum, t) => sum + (t.backendFunctionPoints || 0), 0);
+
+                return {
+                    ...m,
+                    tasks: newTasks,
+                    frontendFunctionPoints: moduleFeFpSum,
+                    backendFunctionPoints: moduleBeFpSum,
+                    functionPoints: moduleFeFpSum + moduleBeFpSum
+                };
+            })
+        };
+    });
+    setProjects(newProjects);
+
+    await callSupabase('UPDATE task function points', { taskId },
+        supabase.from('tasks').update({
+            frontend_function_points: feFp,
+            backend_function_points: beFp
+        }).eq('id', taskId)
+    );
+
+    await callSupabase('UPDATE module aggregated FP', { moduleId },
+        supabase.from('modules').update({
+            frontend_function_points: moduleFeFpSum,
+            backend_function_points: moduleBeFpSum,
+            function_points: moduleFeFpSum + moduleBeFpSum
+        }).eq('id', moduleId)
+    );
+  };
+
   const updateModuleComplexity = async (projectId: string, moduleId: string, type: 'frontend' | 'backend', complexity: ComplexityLevel) => {
       if (isReadOnlyMode) return;
       setProjects(prev => prev.map(p => {
@@ -1513,7 +1554,8 @@ const App: React.FC = () => {
             {activeTab === 'estimator' && <Estimator 
               projects={projects} 
               holidays={holidays} 
-              onUpdateFunctionPoints={updateFunctionPoints}
+              onUpdateModuleEstimates={updateModuleEstimates}
+              onUpdateTaskFunctionPoints={updateTaskFunctionPoints}
               onUpdateModuleComplexity={updateModuleComplexity}
               onUpdateModuleStartDate={updateModuleStartDate}
               onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
