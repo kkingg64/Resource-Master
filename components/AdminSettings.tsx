@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Holiday } from '../types';
 import { GOV_HOLIDAYS_DB } from '../constants';
@@ -21,13 +20,14 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
   const [newHolidayName, setNewHolidayName] = useState('');
 
   const countries = [
-    { code: 'HK', name: 'Hong Kong' },
+    { code: 'CE', name: 'Central Europe' },
     { code: 'CN', name: 'China' },
+    { code: 'HK', name: 'Hong Kong' },
     { code: 'MY', name: 'Malaysia' },
     { code: 'SG', name: 'Singapore' },
-    { code: 'US', name: 'United States' },
+    { code: 'LK', name: 'Sri Lanka' },
     { code: 'UK', name: 'United Kingdom' },
-    { code: 'CE', name: 'Central Europe' },
+    { code: 'US', name: 'United States' },
   ];
 
   const selectedCountryName = countries.find(c => c.code === selectedCountryCode)?.name || selectedCountryCode;

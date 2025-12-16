@@ -63,7 +63,7 @@ export const GOV_HOLIDAYS_DB: Record<string, Omit<Holiday, 'id'>[]> = {
     { date: '2027-12-27', name: 'Boxing Day (substitute day)', country: 'HK' },
   ],
   // ... (Other countries omitted for brevity but would be included here normally) ...
-  'CN': [], 'MY': [], 'SG': [], 'US': [], 'UK': [], 'CE': [] // Preserving keys for TS
+  'CN': [], 'MY': [], 'SG': [], 'US': [], 'UK': [], 'CE': [], 'LK': [] // Preserving keys for TS
 };
 
 // --- Date Utilities for Timeline Generation ---

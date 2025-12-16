@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
-import { Project, ProjectModule, ComplexityLevel, Holiday, Role } from '../types';
+import { Project, ProjectModule, ComplexityLevel, Holiday, Role, ProjectTask } from '../types';
 import { Calculator, GripVertical, ArrowRight, Layout, Server, ChevronDown, Calendar as CalendarIcon, Link2, Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { calculateEndDate, formatDateForInput, calculateWorkingDaysBetween } from '../constants';
 
@@ -138,6 +137,18 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const modules = selectedProject ? selectedProject.modules : [];
 
+  const allTasksMap = useMemo(() => {
+    const map = new Map<string, { task: ProjectTask, module: ProjectModule }>();
+    if (selectedProject) {
+        selectedProject.modules.forEach(module => {
+            module.tasks.forEach(task => {
+                map.set(task.id, { task, module });
+            });
+        });
+    }
+    return map;
+  }, [selectedProject]);
+
   const totals = useMemo(() => {
     let totalRefFP = 0;
     let totalFeFP = 0;
@@ -265,7 +276,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
   const handleDrop = (e: React.DragEvent, index: number) => { if (isReadOnly) return; e.preventDefault(); const startIndex = parseInt(e.dataTransfer.getData("text/plain"), 10); if (!isNaN(startIndex) && startIndex !== index) { onReorderModules(selectedProjectId, startIndex, index); } setDraggedIndex(null); };
 
   const formatWeeks = (days: number) => { if (!days || isNaN(days)) return '0.0w'; const weeks = (days / 5).toFixed(1); return `${weeks}w`; };
-  const getTaskStartDate = (module: ProjectModule, taskId: string): string | null => { const task = module.tasks.find(t => t.id === taskId); if (!task) return null; let minStart: string | null = null; task.assignments.forEach(a => { if (a.startDate) { if (!minStart || a.startDate < minStart) { minStart = a.startDate; } } }); return minStart; };
   const getModuleLatestEndDate = (module: ProjectModule): Date | null => { let maxEndDate: Date | null = null; module.tasks.forEach(task => { task.assignments.forEach(a => { if (a.startDate && a.duration) { const endDateStr = calculateEndDate(a.startDate, a.duration, holidaySet); const endDate = new Date(endDateStr.replace(/-/g, '/')); if (!maxEndDate || endDate > maxEndDate) { maxEndDate = endDate; } } }); }); return maxEndDate; }
   const getModuleEarliestStartDate = (module: ProjectModule): string | null => { let minDate: string | null = null; module.tasks.forEach(task => { task.assignments.forEach(a => { if (a.startDate) { if (!minDate || a.startDate < minDate) { minDate = a.startDate; } } }); }); return minDate; }
 
@@ -391,7 +401,22 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     let baseStartDate = m.startDate || null;
                     let isTaskBased = false;
                     let startTaskName = '';
-                    if (!baseStartDate && m.startTaskId) { const taskStart = getTaskStartDate(m, m.startTaskId); if (taskStart) { baseStartDate = taskStart; isTaskBased = true; startTaskName = m.tasks.find(t => t.id === m.startTaskId)?.name || ''; } }
+                    if (!baseStartDate && m.startTaskId) { 
+                        const taskInfo = allTasksMap.get(m.startTaskId);
+                        if (taskInfo) {
+                            let minStart: string | null = null;
+                            taskInfo.task.assignments.forEach(a => {
+                                if (a.startDate && (!minStart || a.startDate < minStart)) {
+                                    minStart = a.startDate;
+                                }
+                            });
+                            if (minStart) {
+                                baseStartDate = minStart;
+                                isTaskBased = true;
+                                startTaskName = taskInfo.task.name;
+                            }
+                        }
+                    }
                     if (!baseStartDate) { baseStartDate = getModuleEarliestStartDate(m); }
 
                     let estimatedDateStr: string | null = null;
@@ -466,7 +491,13 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                         <select className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" value={m.startTaskId || (m.startDate ? 'manual' : '')} onChange={(e) => { const val = e.target.value; if (val === 'manual' || val === '') { onUpdateModuleStartTask(selectedProjectId, m.id, null); if(val === '') { onUpdateModuleStartDate(selectedProjectId, m.id, null); } } else { onUpdateModuleStartTask(selectedProjectId, m.id, val); } }}>
                                             <option value="">- Auto (Earliest) -</option>
                                             <option value="manual">- Manual Date -</option>
-                                            <optgroup label="Select Task">{m.tasks.map(t => (<option key={t.id} value={t.id}>{t.name}</option>))}</optgroup>
+                                            {selectedProject?.modules.map(mod => (
+                                              <optgroup label={mod.name} key={mod.id}>
+                                                  {mod.tasks.map(t => (
+                                                      <option key={t.id} value={t.id}>{t.name}</option>
+                                                  ))}
+                                              </optgroup>
+                                            ))}
                                         </select>
                                         <div className="w-full h-full flex flex-col items-center justify-center text-[9px] text-indigo-600 pointer-events-none p-1"><Link2 size={10} /> <span className="truncate w-full text-center">Change Source</span></div>
                                     </div>

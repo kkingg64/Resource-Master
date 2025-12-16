@@ -1121,7 +1121,7 @@ const App: React.FC = () => {
             if (!error && newAssignment.allocations.length > 0) {
                  const dbAllocations = newAssignment.allocations.map(a => ({
                     assignment_id: newAssignmentId,
-                    user_id: session.user.id,
+                    user_id: session!.user.id,
                     week_id: a.weekId,
                     count: a.count,
                     days: a.days || {}
@@ -1466,7 +1466,7 @@ const App: React.FC = () => {
 
        {/* Main Content */}
        <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-white relative">
-          <div className="flex-1 overflow-hidden p-4 relative">
+          <div className="flex-1 overflow-y-auto p-4 relative custom-scrollbar">
             {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
             
             {activeTab === 'planner' && <PlannerGrid 
