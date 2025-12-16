@@ -298,81 +298,75 @@ const App: React.FC = () => {
       setTimelineEnd(DEFAULT_END);
       return;
     }
-
+  
+    // Build holiday map for efficient lookup
     const resourceHolidaysMap = new Map<string, Set<string>>();
     const defaultHolidays = new Set(currentHolidays.filter(h => h.country === 'HK').map(h => h.date));
     resourceHolidaysMap.set('Unassigned', defaultHolidays);
-
     currentResources.forEach(res => {
-        const regional = currentHolidays.filter(h => h.country === res.holiday_region);
-        const individual = res.individual_holidays || [];
-        resourceHolidaysMap.set(res.name, new Set([...regional, ...individual].map(h => h.date)));
+      const regional = currentHolidays.filter(h => h.country === res.holiday_region);
+      const individual = res.individual_holidays || [];
+      resourceHolidaysMap.set(res.name, new Set([...regional, ...individual].map(h => h.date)));
     });
-
-    let minVal = Infinity;
-    let maxVal = -Infinity;
-    let minPoint: WeekPoint | null = null;
-    let maxPoint: WeekPoint | null = null;
-
-    const processDate = (dateStr: string) => {
-        if (!dateStr) return;
-        try {
-            const d = new Date(dateStr.replace(/-/g, '/'));
-            if (isNaN(d.getTime())) return; // Invalid date check
-            const weekId = getWeekIdFromDate(d);
-            const [y, w] = weekId.split('-').map(Number);
-            if (!isNaN(y) && !isNaN(w)) {
-                const val = y * 100 + w;
-                if (val < minVal) {
-                    minVal = val;
-                    minPoint = { year: y, week: w };
-                }
-                if (val > maxVal) {
-                    maxVal = val;
-                    maxPoint = { year: y, week: w };
-                }
-            }
-        } catch (e) {
-            console.error("Error processing date for timeline bounds:", dateStr, e);
-        }
+  
+    let minDate: Date | null = null;
+    let maxDate: Date | null = null;
+  
+    const updateMinMax = (date: Date) => {
+      if (!minDate || date < minDate) {
+        minDate = date;
+      }
+      if (!maxDate || date > maxDate) {
+        maxDate = date;
+      }
     };
-
+  
     currentProjects.forEach(project => {
-        project.modules.forEach(module => {
-            if (module.startDate) processDate(module.startDate);
-            module.tasks.forEach(task => {
-                task.assignments.forEach(assignment => {
-                    if (assignment.startDate) {
-                        processDate(assignment.startDate);
-                        if (assignment.duration) {
-                            const holidaySet = resourceHolidaysMap.get(assignment.resourceName || 'Unassigned') || defaultHolidays;
-                            const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, holidaySet);
-                            processDate(endDateStr);
-                        }
+      project.modules.forEach(module => {
+        module.tasks.forEach(task => {
+          task.assignments.forEach(assignment => {
+            if (assignment.startDate) {
+              try {
+                const startDate = new Date(assignment.startDate.replace(/-/g, '/'));
+                if (!isNaN(startDate.getTime())) {
+                  updateMinMax(startDate);
+                  if (assignment.duration) {
+                    const holidaySet = resourceHolidaysMap.get(assignment.resourceName || 'Unassigned') || defaultHolidays;
+                    const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, holidaySet);
+                    const endDate = new Date(endDateStr.replace(/-/g, '/'));
+                    if (!isNaN(endDate.getTime())) {
+                      updateMinMax(endDate);
                     }
-                    
-                    assignment.allocations.forEach(alloc => {
-                        if (alloc.weekId) {
-                            const [y, w] = alloc.weekId.split('-').map(Number);
-                            if (!isNaN(y) && !isNaN(w)) {
-                                const val = y * 100 + w;
-                                if (val < minVal) { minVal = val; minPoint = { year: y, week: w }; }
-                                if (val > maxVal) { maxVal = val; maxPoint = { year: y, week: w }; }
-                            }
-                        }
-                    });
-                });
-            });
+                  }
+                }
+              } catch (e) {
+                console.error('Invalid date format in assignment', assignment.id);
+              }
+            }
+          });
         });
+      });
     });
-
-    if (minPoint && maxPoint) {
-        setTimelineStart(addWeeksToPoint(minPoint, -1));
-        setTimelineEnd(addWeeksToPoint(maxPoint, 1));
-    } else {
-        // Fallback if no dates/allocations are found
+  
+    if (minDate && maxDate) {
+      const startWeekId = getWeekIdFromDate(minDate);
+      const [startY, startW] = startWeekId.split('-').map(Number);
+      
+      const endWeekId = getWeekIdFromDate(maxDate);
+      const [endY, endW] = endWeekId.split('-').map(Number);
+  
+      if (!isNaN(startY) && !isNaN(startW) && !isNaN(endY) && !isNaN(endW)) {
+        const minPoint = { year: startY, week: startW };
+        const maxPoint = { year: endY, week: endW };
+        setTimelineStart(addWeeksToPoint(minPoint, -1)); // 1 week padding
+        setTimelineEnd(addWeeksToPoint(maxPoint, 1));   // 1 week padding
+      } else {
         setTimelineStart(DEFAULT_START);
         setTimelineEnd(DEFAULT_END);
+      }
+    } else {
+      setTimelineStart(DEFAULT_START);
+      setTimelineEnd(DEFAULT_END);
     }
   };
   
@@ -430,7 +424,6 @@ const App: React.FC = () => {
     
     if (resourcesError) console.error(resourcesError);
     const freshResources = resourcesData || [];
-    setResources(freshResources);
 
     const { data: holidaysData, error: holidaysError } = await supabase
       .from('holidays')
@@ -439,11 +432,15 @@ const App: React.FC = () => {
       
     if (holidaysError) console.error(holidaysError);
     const freshHolidays = holidaysData || [];
-    setHolidays(freshHolidays);
-
+    
     const structuredProjects = structureProjectsData(finalProjectsData, modulesData, tasksData, assignmentsData, allocationsData);
+    
+    // Set state after all data is fetched and processed
+    setHolidays(freshHolidays);
+    setResources(freshResources);
     setProjects(structuredProjects);
     
+    // Calculate timeline bounds using the fresh data
     calculateTimelineBounds(structuredProjects, freshResources, freshHolidays);
 
     if (isRefresh) setIsRefreshing(false);
