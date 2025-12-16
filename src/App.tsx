@@ -1120,7 +1120,7 @@ const App: React.FC = () => {
             if (!error && newAssignment.allocations.length > 0) {
                  const dbAllocations = newAssignment.allocations.map(a => ({
                     assignment_id: newAssignmentId,
-                    user_id: session.user.id,
+                    user_id: session!.user.id,
                     week_id: a.weekId,
                     count: a.count,
                     days: a.days || {}
@@ -1290,7 +1290,7 @@ const App: React.FC = () => {
                       frontendTeamSize: fTeam,
                       backendVelocity: bVel,
                       backendTeamSize: bTeam,
-                      // FIX: Explicitly cast to Number to resolve potential 'unknown' type error during addition.
+                      // FIX: Operator '+' cannot be applied to types 'unknown' and 'unknown'.
                       functionPoints: Number(feFp) + Number(beFp) // Total FP
                   };
               })
@@ -1308,7 +1308,7 @@ const App: React.FC = () => {
               frontend_team_size: fTeam,
               backend_velocity: bVel,
               backend_team_size: bTeam,
-              // FIX: Explicitly cast to Number to resolve potential 'unknown' type error during addition.
+              // FIX: Operator '+' cannot be applied to types 'unknown' and 'unknown'.
               function_points: Number(feFp) + Number(beFp)
           }).eq('id', moduleId)
       );
@@ -1471,6 +1471,7 @@ const App: React.FC = () => {
               onCopyAssignment={onCopyAssignment}
               onReorderModules={reorderModules}
               onReorderTasks={reorderTasks}
+              onMoveTask={moveTask}
               onReorderAssignments={reorderAssignments}
               onShiftTask={onShiftTask}
               onUpdateAssignmentSchedule={updateAssignmentSchedule}
