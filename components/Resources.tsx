@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Resource, Role, IndividualHoliday } from '../types';
 import { Users, Plus, Trash2, Calendar, ChevronDown, Edit2, Check, X } from 'lucide-react';
@@ -161,7 +160,7 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
     [Role.APP_SUPPORT]: 'bg-red-100 text-red-800 border-red-200 focus:ring-red-500',
   };
 
-  const countries = Object.keys(GOV_HOLIDAYS_DB);
+  const countries = Object.keys(GOV_HOLIDAYS_DB).sort();
 
   const groupedAndSortedResources = useMemo(() => {
     const groups: Record<string, Record<string, Resource[]>> = {};

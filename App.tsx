@@ -1305,7 +1305,7 @@ const App: React.FC = () => {
                       frontendTeamSize: fTeam,
                       backendVelocity: bVel,
                       backendTeamSize: bTeam,
-                      functionPoints: Number(feFp) + Number(beFp) // Total FP
+                      functionPoints: (Number(feFp) || 0) + (Number(beFp) || 0) // Total FP
                   };
               })
           };
@@ -1322,7 +1322,7 @@ const App: React.FC = () => {
               frontend_team_size: fTeam,
               backend_velocity: bVel,
               backend_team_size: bTeam,
-              function_points: Number(feFp) + Number(beFp)
+              function_points: (Number(feFp) || 0) + (Number(beFp) || 0)
           }).eq('id', moduleId)
       );
   };
@@ -1465,8 +1465,8 @@ const App: React.FC = () => {
        </aside>
 
        {/* Main Content */}
-       <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-white relative">
-          <div className="flex-1 overflow-y-auto p-4 relative custom-scrollbar">
+       <main className="flex-1 flex flex-col min-w-0 h-full bg-white relative overflow-y-auto custom-scrollbar">
+          <div className="flex-1 p-4 relative">
             {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
             
             {activeTab === 'planner' && <PlannerGrid 

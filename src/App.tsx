@@ -1,6 +1,6 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
-// FIX: Added ModuleType to imports
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
@@ -77,7 +77,6 @@ const structureProjectsData = (
     modulesByProject.get(m.project_id)!.push({
       id: m.id,
       name: m.name,
-      // FIX: Added module type property
       type: m.type || ModuleType.Standard,
       legacyFunctionPoints: m.legacy_function_points,
       functionPoints: m.function_points,
@@ -781,7 +780,6 @@ const App: React.FC = () => {
       const [removed] = project.modules.splice(startIndex, 1);
       project.modules.splice(endIndex, 0, removed);
       setProjects(updatedProjects);
-      // FIX: Added module type property to update object
       const updates = project.modules.map((module, index) => ({ id: module.id, name: module.name, type: module.type, legacy_function_points: module.legacyFunctionPoints, function_points: module.functionPoints, sort_order: index, project_id: projectId, user_id: session!.user.id }));
       const { error } = await callSupabase('REORDER modules', { updates }, supabase.from('modules').upsert(updates));
       if (error) { setProjects(previousState); alert("Failed to reorder modules."); }
@@ -1308,7 +1306,7 @@ const App: React.FC = () => {
                       frontendTeamSize: fTeam,
                       backendVelocity: bVel,
                       backendTeamSize: bTeam,
-                      // Fix: Explicitly cast to Number and handle potential NaN values to prevent type errors.
+                      // FIX: Explicitly cast to Number and handle potential NaN values to prevent type errors.
                       functionPoints: (Number(feFp) || 0) + (Number(beFp) || 0) // Total FP
                   };
               })
@@ -1326,7 +1324,7 @@ const App: React.FC = () => {
               frontend_team_size: fTeam,
               backend_velocity: bVel,
               backend_team_size: bTeam,
-              // Fix: Explicitly cast to Number and handle potential NaN values to prevent type errors.
+              // FIX: Explicitly cast to Number and handle potential NaN values to prevent type errors.
               function_points: (Number(feFp) || 0) + (Number(beFp) || 0)
           }).eq('id', moduleId)
       );
@@ -1470,8 +1468,8 @@ const App: React.FC = () => {
        </aside>
 
        {/* Main Content */}
-       <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-white relative">
-          <div className="flex-1 overflow-y-auto p-4 relative custom-scrollbar">
+       <main className="flex-1 flex flex-col min-w-0 h-full bg-white relative overflow-y-auto custom-scrollbar">
+          <div className="flex-1 p-4 relative">
             {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
             
             {activeTab === 'planner' && <PlannerGrid 
@@ -1490,7 +1488,6 @@ const App: React.FC = () => {
               onReorderModules={reorderModules}
               onReorderTasks={reorderTasks}
               onMoveTask={moveTask}
-              // FIX: Added missing prop
               onUpdateModuleType={updateModuleType}
               onReorderAssignments={reorderAssignments}
               onShiftTask={onShiftTask}

@@ -28,7 +28,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
     { code: 'LK', name: 'Sri Lanka' },
     { code: 'UK', name: 'United Kingdom' },
     { code: 'US', name: 'United States' },
-  ];
+  ].sort((a, b) => a.name.localeCompare(b.name));
 
   const selectedCountryName = countries.find(c => c.code === selectedCountryCode)?.name || selectedCountryCode;
   
@@ -108,33 +108,32 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
   const sortedCountryCodes = Object.keys(groupedHolidays).sort();
 
   return (
-    <div className="flex h-full gap-6 overflow-hidden">
-      <div className="w-64 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden flex-shrink-0">
+    <div className="flex flex-col gap-6">
+      <div className="w-full bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden flex-shrink-0">
         <div className="p-4 border-b border-slate-100 bg-slate-50">
           <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
             <Globe className="w-4 h-4 text-indigo-600" />
-            Regions
+            Select Region to Manage
           </h2>
         </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        <div className="flex flex-wrap gap-1 p-2">
           {countries.map(c => (
             <button
               key={c.code}
               onClick={() => setSelectedCountryCode(c.code)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-between
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors
                 ${selectedCountryCode === c.code 
-                  ? 'bg-indigo-50 text-indigo-700' 
-                  : 'text-slate-600 hover:bg-slate-50'
+                  ? 'bg-indigo-600 text-white shadow-sm' 
+                  : 'text-slate-600 hover:bg-slate-100'
                 }`}
             >
-              <span>{c.name}</span>
-              {selectedCountryCode === c.code && <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>}
+              {c.name}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col gap-6 overflow-hidden">
+      <div className="flex-1 flex flex-col gap-6">
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex-shrink-0">
           <div className="flex justify-between items-start mb-4">
              <div>
@@ -237,7 +236,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
           </div>
         </div>
 
-        <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
+        <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
             <h3 className="font-bold text-slate-700 flex items-center gap-2">
               <CalendarDays className="w-5 h-5 text-slate-500" />

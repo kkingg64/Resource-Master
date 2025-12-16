@@ -198,10 +198,10 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         const moduleTotalDuration = Math.max(feDuration, beDuration);
         let baseStartDate = m.startDate || null;
         if (!baseStartDate && m.startTaskId) {
-            const task = m.tasks.find(t => t.id === m.startTaskId);
-            if (task) {
+            const taskInfo = allTasksMap.get(m.startTaskId);
+            if (taskInfo) {
                 let minStart: string | null = null;
-                task.assignments.forEach(a => {
+                taskInfo.task.assignments.forEach(a => {
                     if (a.startDate && (!minStart || a.startDate < minStart)) {
                         minStart = a.startDate;
                     }
@@ -269,7 +269,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
     });
 
     return { refFP: totalRefFP, feFP: totalFeFP, beFP: totalBeFP, prepEffort: totalPrepEffort, feEffort: totalFeEffort, beEffort: totalBeEffort, prepDuration: totalPrepDuration, feDuration: totalFeDuration, beDuration: totalBeDuration, projectMaxEstDate, projectMaxPlanDate, totalVarianceDays };
-  }, [modules, holidaySet]);
+  }, [modules, holidaySet, allTasksMap]);
 
   const handleDragStart = (e: React.DragEvent, index: number) => { if (isReadOnly) return; e.dataTransfer.setData("text/plain", index.toString()); setDraggedIndex(index); };
   const handleDragOver = (e: React.DragEvent) => { if (isReadOnly) return; e.preventDefault(); };
