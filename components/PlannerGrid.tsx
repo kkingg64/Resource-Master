@@ -255,7 +255,8 @@ const ROLE_STYLES: Record<string, { border: string, bg: string, bar: string, fil
 const getRoleStyle = (role: Role) => ROLE_STYLES[role] || ROLE_STYLES['default'];
 
 const MODULE_TYPE_STYLES = {
-  [ModuleType.Standard]: {
+  // FIX: Changed ModuleType.Standard to ModuleType.Development
+  [ModuleType.Development]: {
     icon: Layers,
     iconColor: 'text-indigo-600',
     bgColor: 'bg-indigo-50',
@@ -266,7 +267,8 @@ const MODULE_TYPE_STYLES = {
     ganttGridColor: 'bg-indigo-200',
     totalTextColor: 'text-indigo-900',
   },
-  [ModuleType.Milestone]: {
+  // FIX: Changed ModuleType.Milestone to ModuleType.Preparation
+  [ModuleType.Preparation]: {
     icon: Layers,
     iconColor: 'text-amber-600',
     bgColor: 'bg-amber-100',
@@ -277,7 +279,8 @@ const MODULE_TYPE_STYLES = {
     ganttGridColor: 'bg-amber-200',
     totalTextColor: 'text-amber-900',
   },
-  [ModuleType.KeyPhase]: {
+  // FIX: Changed ModuleType.KeyPhase to ModuleType.PostDevelopment
+  [ModuleType.PostDevelopment]: {
     icon: Layers,
     iconColor: 'text-teal-600',
     bgColor: 'bg-teal-100',
@@ -1110,7 +1113,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     const isModuleCollapsed = collapsedModules[module.id];
                     const moduleEditId = `module::${project.id}::${module.id}`;
                     const isEditingModule = editingId === moduleEditId;
-                    const moduleType = module.type || ModuleType.Standard;
+                    // FIX: Changed ModuleType.Standard to ModuleType.Development
+                    const moduleType = module.type || ModuleType.Development;
                     const style = MODULE_TYPE_STYLES[moduleType];
 
                     let moduleEarliestStartDate: string | null = null;

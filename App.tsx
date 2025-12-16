@@ -76,7 +76,8 @@ const structureProjectsData = (
     modulesByProject.get(m.project_id)!.push({
       id: m.id,
       name: m.name,
-      type: m.type || ModuleType.Standard,
+      // FIX: Changed ModuleType.Standard to ModuleType.Development
+      type: m.type || ModuleType.Development,
       legacyFunctionPoints: m.legacy_function_points,
       functionPoints: m.function_points,
       complexity: m.complexity || 'Medium', // Default to Medium if undefined
@@ -1305,7 +1306,8 @@ const App: React.FC = () => {
                       frontendTeamSize: fTeam,
                       backendVelocity: bVel,
                       backendTeamSize: bTeam,
-                      functionPoints: (Number(feFp) || 0) + (Number(beFp) || 0) // Total FP
+                      // FIX: Simplify calculation for clarity and to address potential type issues
+                      functionPoints: feFp + beFp // Total FP
                   };
               })
           };
@@ -1322,7 +1324,8 @@ const App: React.FC = () => {
               frontend_team_size: fTeam,
               backend_velocity: bVel,
               backend_team_size: bTeam,
-              function_points: (Number(feFp) || 0) + (Number(beFp) || 0)
+              // FIX: Simplify calculation for clarity and to address potential type issues
+              function_points: feFp + beFp
           }).eq('id', moduleId)
       );
   };

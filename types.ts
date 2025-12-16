@@ -1,4 +1,5 @@
 
+
 export enum Role {
   CNF = 'CNF',
   BRAND_SOLUTIONS = 'Brand Solutions',
@@ -20,10 +21,16 @@ export enum Phase {
 }
 
 export enum ModuleType {
-  Standard = 'STANDARD',
-  Milestone = 'MILESTONE',
-  KeyPhase = 'KEY_PHASE',
+  Preparation = 'MILESTONE',
+  Development = 'STANDARD',
+  PostDevelopment = 'KEY_PHASE',
 }
+
+export const MODULE_TYPE_DISPLAY_NAMES: Record<ModuleType, string> = {
+  [ModuleType.Preparation]: 'Preparation',
+  [ModuleType.Development]: 'Development',
+  [ModuleType.PostDevelopment]: 'Post-Development',
+};
 
 export interface ResourceAllocation {
   weekId: string; // Format YYYY-WW
