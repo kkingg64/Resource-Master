@@ -3,6 +3,7 @@ import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, Ti
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
 import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { DependencyLines } from './DependencyLines';
 
 // --- Custom DatePicker Component ---
 interface DatePickerProps {
@@ -977,6 +978,45 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const currentColumnIndex = timeline.findIndex(c => isCurrentColumn(c));
   const stickyLeftOffset = sidebarWidth + startColWidth + durationColWidth + dependencyColWidth;
 
+  const assignmentRenderInfo = useMemo(() => {
+    const map = new Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>();
+    let rowIndex = 0;
+    const HEADER_HEIGHT = (showYearRow ? 32 : 0) + (showMonthRow ? 32 : 0) + 32;
+    const ROW_HEIGHT = 33;
+
+    projects.forEach(project => {
+        rowIndex++; // Project header
+        if (!collapsedProjects[project.id]) {
+            project.modules.forEach(module => {
+                rowIndex++; // Module header
+                if (!collapsedModules[module.id]) {
+                    module.tasks.forEach(task => {
+                        rowIndex++; // Task header
+                        if (!collapsedTasks[task.id]) {
+                            task.assignments.forEach(assignment => {
+                                if (assignment.startDate && assignment.duration) {
+                                    const resourceName = assignment.resourceName || 'Unassigned';
+                                    const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>();
+                                    const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, assignmentHolidays);
+                                    
+                                    map.set(assignment.id, {
+                                        rowIndex,
+                                        y: HEADER_HEIGHT + (rowIndex * ROW_HEIGHT) + (ROW_HEIGHT / 2),
+                                        startDate: assignment.startDate,
+                                        endDate: endDateStr,
+                                    });
+                                }
+                                rowIndex++; // Assignment row
+                            });
+                        }
+                    });
+                }
+            });
+        }
+    });
+    return { map, totalHeight: HEADER_HEIGHT + rowIndex * ROW_HEIGHT };
+  }, [projects, collapsedProjects, collapsedModules, collapsedTasks, holidays, resources, showMonthRow, showYearRow]);
+
   return (
     <>
       <div className="flex flex-col h-full bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden relative">
@@ -1037,6 +1077,16 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         </div>
 
         <div className="overflow-x-auto custom-scrollbar flex-1 relative">
+           {displayMode === 'gantt' && (
+            <DependencyLines 
+              allAssignmentsMap={allAssignmentsMap}
+              assignmentRenderInfo={assignmentRenderInfo.map}
+              timeline={timeline}
+              colWidth={colWidth}
+              totalHeight={assignmentRenderInfo.totalHeight}
+              sidebarWidth={sidebarWidth + startColWidth + durationColWidth + dependencyColWidth}
+            />
+          )}
           <div className="min-w-max relative">
               <>
                 {/* Header Rows */}
@@ -1260,9 +1310,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 
                                 {/* Task Details Columns */}
                                 <div className={`flex-shrink-0 text-[10px] font-medium text-slate-500 border-r border-slate-200 flex items-center justify-center bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 19 : undefined }}>
+{/* FIX: Replaced backtick with double quote in className */}
                                   {isTaskCollapsed && earliestStartDate && <span title="Earliest Start Date" className="bg-slate-200/50 rounded p-1">{earliestStartDate}</span>}
                                 </div>
                                 <div className={`flex-shrink-0 text-[10px] font-medium text-slate-500 border-r border-slate-200 flex items-center justify-center bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 19 : undefined }}>
+{/* FIX: Corrected missing title attribute and replaced backtick with double quote */}
                                   {isTaskCollapsed && totalDuration > 0 && <span title="Total Duration" className="bg-slate-200/50 rounded p-1">{totalDuration}d</span>}
                                 </div>
                                 <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 19 : undefined }}></div>

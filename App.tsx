@@ -203,6 +203,17 @@ const ShareModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   );
 };
 
+// Helper function for shared FP logic
+const getTaskBaseName = (name: string): string => {
+  const prefixes = ["Design & Build-", "QA-", "UAT-"];
+  for (const prefix of prefixes) {
+    if (name.startsWith(prefix)) {
+      return name.substring(prefix.length).trim();
+    }
+  }
+  return name.trim();
+};
+
 const App: React.FC = () => {
   const [session, setSession] = useState<any | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -1330,67 +1341,97 @@ const App: React.FC = () => {
   };
   
   const updateTaskEstimates = async (projectId: string, moduleId: string, taskId: string, updates: Partial<Omit<ProjectTask, 'id' | 'name' | 'assignments'>>) => {
-    if (isReadOnlyMode) return;
+      if (isReadOnlyMode) return;
+
+      const isFpUpdate = 'frontendFunctionPoints' in updates || 'backendFunctionPoints' in updates;
+      const newProjects = deepClone(projects);
+      const taskIdsToUpdate: string[] = [taskId];
+      const dbTaskPayloads: any[] = [];
       
-    let moduleFeFpSum = 0;
-    let moduleBeFpSum = 0;
-
-    const newProjects = projects.map(p => {
-        if (p.id !== projectId) return p;
-        return {
-            ...p,
-            modules: p.modules.map(m => {
-                if (m.id !== moduleId) return m;
-                const newTasks = m.tasks.map(t => {
-                    if (t.id !== taskId) return t;
-                    return { ...t, ...updates };
-                });
-                
-                if (m.type === ModuleType.Development) {
-                    moduleFeFpSum = newTasks.reduce((sum, t) => sum + (t.frontendFunctionPoints || 0), 0);
-                    moduleBeFpSum = newTasks.reduce((sum, t) => sum + (t.backendFunctionPoints || 0), 0);
+      if (isFpUpdate) {
+        let baseName = '';
+        const task = newProjects.flatMap(p => p.modules.flatMap(m => m.tasks)).find(t => t.id === taskId);
+        if (task) {
+          baseName = getTaskBaseName(task.name);
+        }
+        
+        if (baseName) {
+          newProjects.forEach(p => {
+            p.modules.forEach(m => {
+              m.tasks.forEach(t => {
+                if (t.id !== taskId && getTaskBaseName(t.name) === baseName) {
+                  taskIdsToUpdate.push(t.id);
                 }
+              });
+            });
+          });
+        }
+      }
+      
+      const modulesToRecalculate = new Set<string>();
 
-                return {
-                    ...m,
-                    tasks: newTasks,
-                    ...(m.type === ModuleType.Development && ('frontendFunctionPoints' in updates || 'backendFunctionPoints' in updates) && {
-                        frontendFunctionPoints: moduleFeFpSum,
-                        backendFunctionPoints: moduleBeFpSum,
-                        functionPoints: moduleFeFpSum + moduleBeFpSum
-                    })
-                };
-            })
-        };
-    });
-    setProjects(newProjects);
+      newProjects.forEach(p => {
+        if (p.id !== projectId) return;
+        p.modules.forEach(m => {
+          let moduleWasUpdated = false;
+          m.tasks.forEach(t => {
+            if (taskIdsToUpdate.includes(t.id)) {
+              Object.assign(t, updates);
+              moduleWasUpdated = true;
 
-    const dbTaskPayload: any = {};
-    for (const key in updates) {
-        const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-        dbTaskPayload[snakeKey] = (updates as any)[key];
-    }
-    
-    if (Object.keys(dbTaskPayload).length > 0) {
-        await callSupabase('UPDATE task estimates', { taskId, updates: dbTaskPayload },
-            supabase.from('tasks').update(dbTaskPayload).eq('id', taskId)
+              const dbPayload: any = { id: t.id };
+              for (const key in updates) {
+                dbPayload[key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)] = (updates as any)[key];
+              }
+              dbTaskPayloads.push(dbPayload);
+            }
+          });
+          if (moduleWasUpdated) {
+              modulesToRecalculate.add(m.id);
+          }
+        });
+      });
+
+      // Recalculate module FPs for affected modules
+      newProjects.forEach(p => {
+        p.modules.forEach(m => {
+          if (modulesToRecalculate.has(m.id) && m.type === ModuleType.Development) {
+            m.frontendFunctionPoints = m.tasks.reduce((sum, t) => sum + (t.frontendFunctionPoints || 0), 0);
+            m.backendFunctionPoints = m.tasks.reduce((sum, t) => sum + (t.backendFunctionPoints || 0), 0);
+            m.functionPoints = m.frontendFunctionPoints + m.backendFunctionPoints;
+          }
+        });
+      });
+
+      setProjects(newProjects);
+
+      // DB updates
+      if (dbTaskPayloads.length > 0) {
+        await callSupabase('UPDATE task estimates (batch)', { count: dbTaskPayloads.length },
+          supabase.from('tasks').upsert(dbTaskPayloads)
         );
-    }
+      }
 
-    const project = newProjects.find(p => p.id === projectId);
-    const module = project?.modules.find(m => m.id === moduleId);
-    if (module && module.type === ModuleType.Development && ('frontendFunctionPoints' in updates || 'backendFunctionPoints' in updates)) {
-        await callSupabase('UPDATE module aggregated FP', { moduleId },
-            supabase.from('modules').update({
-                frontend_function_points: module.frontendFunctionPoints,
-                backend_function_points: module.backendFunctionPoints,
-                function_points: module.functionPoints
-            }).eq('id', moduleId)
+      const modulePayloads = Array.from(modulesToRecalculate).map(modId => {
+        const mod = newProjects.flatMap(p => p.modules).find(m => m.id === modId);
+        if (mod && mod.type === ModuleType.Development) {
+          return {
+            id: mod.id,
+            frontend_function_points: mod.frontendFunctionPoints,
+            backend_function_points: mod.backendFunctionPoints,
+            function_points: mod.functionPoints
+          };
+        }
+        return null;
+      }).filter(Boolean);
+
+      if (modulePayloads.length > 0) {
+        await callSupabase('UPDATE module aggregated FP (batch)', { count: modulePayloads.length },
+          supabase.from('modules').upsert(modulePayloads)
         );
-    }
+      }
   };
 
-  // FIX: Added 'prep' to the type definition and implemented logic to handle it for state and database updates.
   const updateModuleComplexity = async (projectId: string, moduleId: string, type: 'frontend' | 'backend' | 'prep', complexity: ComplexityLevel) => {
     if (isReadOnlyMode) return;
       setProjects(prev => prev.map(p => {

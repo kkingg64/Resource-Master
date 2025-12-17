@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
+import { GoogleGenAI, Type, FunctionDeclaration, GenerateContentResponse } from "@google/genai";
 import { MessageSquare, Send, X, Bot, Sparkles, User, Loader2, ChevronDown, Trash2, Maximize2, Minimize2 } from 'lucide-react';
 import { Project, Resource, Role } from '../types';
 
@@ -57,7 +57,8 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
       const listProjectsTool: FunctionDeclaration = {
         name: 'listProjects',
         description: 'Get a list of all projects with their IDs and module counts.',
-        // Removed empty parameters object to avoid validation errors
+// FIX: Added empty parameters object to avoid validation errors
+        parameters: { type: Type.OBJECT, properties: {} },
       };
 
       const getProjectDetailsTool: FunctionDeclaration = {
@@ -125,13 +126,22 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
         }))
       });
 
-      let response = await chat.sendMessage({ message: userMsg.text });
+      let responseStream = await chat.sendMessageStream({ message: userMsg.text });
       
+      let text = '';
+      let functionCalls: any[] = [];
+      for await (const chunk of responseStream) {
+        text += chunk.text;
+        if (chunk.functionCalls) {
+          functionCalls.push(...chunk.functionCalls);
+        }
+      }
+
       // Handle Function Calls Loop
-      while (response.functionCalls && response.functionCalls.length > 0) {
+      if (functionCalls.length > 0) {
         const functionResponses = [];
         
-        for (const call of response.functionCalls) {
+        for (const call of functionCalls) {
           let result: any = { error: 'Unknown function' };
           
           try {
@@ -187,11 +197,15 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
         }
 
         // Send function results back to model
-        // IMPORTANT: Must wrap the parts in a `message` object key
-        response = await chat.sendMessage({ message: functionResponses });
+// FIX: Use sendMessageStream for streaming and handle the response correctly.
+        responseStream = await chat.sendMessageStream({ message: functionResponses });
+        text = '';
+        for await (const chunk of responseStream) {
+          text += chunk.text;
+        }
       }
 
-      const modelText = response.text || "I processed that request.";
+      const modelText = text || "I processed that request.";
       setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: modelText }]);
 
     } catch (error: any) {
