@@ -65,9 +65,14 @@ const structureProjectsData = (
       id: t.id,
       name: t.name,
       sort_order: t.sort_order,
-      // FIX: Add missing function point properties to task structure
       frontendFunctionPoints: t.frontend_function_points || 0,
       backendFunctionPoints: t.backend_function_points || 0,
+      frontendVelocity: t.frontend_velocity,
+      frontendTeamSize: t.frontend_team_size,
+      frontendComplexity: t.frontend_complexity,
+      backendVelocity: t.backend_velocity,
+      backendTeamSize: t.backend_team_size,
+      backendComplexity: t.backend_complexity,
       assignments: (assignmentsByTask.get(t.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
     });
   });
@@ -846,7 +851,6 @@ const App: React.FC = () => {
   };
   
   const onShiftTask = async (projectId: string, moduleId: string, taskId: string, direction: 'left' | 'right') => {
-    // ... onShiftTask implementation ...
     if (isReadOnlyMode) return;
     const previousState = deepClone(projects);
     const updatedProjects = deepClone(projects);
@@ -1291,7 +1295,6 @@ const App: React.FC = () => {
       await callSupabase('DELETE assignment', { assignmentId }, supabase.from('task_assignments').delete().eq('id', assignmentId));
   };
 
-  // FIX: Replaced incorrect updateFunctionPoints with updateModuleEstimates
   const updateModuleEstimates = async (projectId: string, moduleId: string, legacyFp: number, pVel: number, pTeam: number, fVel: number, fTeam: number, bVel: number, bTeam: number) => {
     if (isReadOnlyMode) return;
       setProjects(prev => prev.map(p => {
@@ -1327,8 +1330,7 @@ const App: React.FC = () => {
       );
   };
   
-  // FIX: Added missing updateTaskFunctionPoints handler
-  const updateTaskFunctionPoints = async (projectId: string, moduleId: string, taskId: string, feFp: number, beFp: number) => {
+  const updateTaskEstimates = async (projectId: string, moduleId: string, taskId: string, updates: Partial<Omit<ProjectTask, 'id' | 'name' | 'assignments'>>) => {
     if (isReadOnlyMode) return;
       
     let moduleFeFpSum = 0;
@@ -1342,38 +1344,51 @@ const App: React.FC = () => {
                 if (m.id !== moduleId) return m;
                 const newTasks = m.tasks.map(t => {
                     if (t.id !== taskId) return t;
-                    return { ...t, frontendFunctionPoints: feFp, backendFunctionPoints: beFp };
+                    return { ...t, ...updates };
                 });
                 
-                moduleFeFpSum = newTasks.reduce((sum, t) => sum + (t.frontendFunctionPoints || 0), 0);
-                moduleBeFpSum = newTasks.reduce((sum, t) => sum + (t.backendFunctionPoints || 0), 0);
+                if (m.type === ModuleType.Development) {
+                    moduleFeFpSum = newTasks.reduce((sum, t) => sum + (t.frontendFunctionPoints || 0), 0);
+                    moduleBeFpSum = newTasks.reduce((sum, t) => sum + (t.backendFunctionPoints || 0), 0);
+                }
 
                 return {
                     ...m,
                     tasks: newTasks,
-                    frontendFunctionPoints: moduleFeFpSum,
-                    backendFunctionPoints: moduleBeFpSum,
-                    functionPoints: moduleFeFpSum + moduleBeFpSum
+                    ...(m.type === ModuleType.Development && ('frontendFunctionPoints' in updates || 'backendFunctionPoints' in updates) && {
+                        frontendFunctionPoints: moduleFeFpSum,
+                        backendFunctionPoints: moduleBeFpSum,
+                        functionPoints: moduleFeFpSum + moduleBeFpSum
+                    })
                 };
             })
         };
     });
     setProjects(newProjects);
 
-    await callSupabase('UPDATE task function points', { taskId },
-        supabase.from('tasks').update({
-            frontend_function_points: feFp,
-            backend_function_points: beFp
-        }).eq('id', taskId)
-    );
+    const dbTaskPayload: any = {};
+    for (const key in updates) {
+        const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        dbTaskPayload[snakeKey] = (updates as any)[key];
+    }
+    
+    if (Object.keys(dbTaskPayload).length > 0) {
+        await callSupabase('UPDATE task estimates', { taskId, updates: dbTaskPayload },
+            supabase.from('tasks').update(dbTaskPayload).eq('id', taskId)
+        );
+    }
 
-    await callSupabase('UPDATE module aggregated FP', { moduleId },
-        supabase.from('modules').update({
-            frontend_function_points: moduleFeFpSum,
-            backend_function_points: moduleBeFpSum,
-            function_points: moduleFeFpSum + moduleBeFpSum
-        }).eq('id', moduleId)
-    );
+    const project = newProjects.find(p => p.id === projectId);
+    const module = project?.modules.find(m => m.id === moduleId);
+    if (module && module.type === ModuleType.Development && ('frontendFunctionPoints' in updates || 'backendFunctionPoints' in updates)) {
+        await callSupabase('UPDATE module aggregated FP', { moduleId },
+            supabase.from('modules').update({
+                frontend_function_points: module.frontendFunctionPoints,
+                backend_function_points: module.backendFunctionPoints,
+                function_points: module.functionPoints
+            }).eq('id', moduleId)
+        );
+    }
   };
 
   const updateModuleComplexity = async (projectId: string, moduleId: string, type: 'frontend' | 'backend', complexity: ComplexityLevel) => {
@@ -1559,9 +1574,8 @@ const App: React.FC = () => {
             {activeTab === 'estimator' && <Estimator 
               projects={projects} 
               holidays={holidays} 
-              // FIX: Replaced onUpdateFunctionPoints with correct props
               onUpdateModuleEstimates={updateModuleEstimates}
-              onUpdateTaskFunctionPoints={updateTaskFunctionPoints}
+              onUpdateTaskEstimates={updateTaskEstimates}
               onUpdateModuleComplexity={updateModuleComplexity}
               onUpdateModuleStartDate={updateModuleStartDate}
               onUpdateModuleDeliveryTask={updateModuleDeliveryTask}

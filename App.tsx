@@ -1379,7 +1379,7 @@ const App: React.FC = () => {
 
     const project = newProjects.find(p => p.id === projectId);
     const module = project?.modules.find(m => m.id === moduleId);
-    if (module && module.type === ModuleType.Development) {
+    if (module && module.type === ModuleType.Development && ('frontendFunctionPoints' in updates || 'backendFunctionPoints' in updates)) {
         await callSupabase('UPDATE module aggregated FP', { moduleId },
             supabase.from('modules').update({
                 frontend_function_points: module.frontendFunctionPoints,
@@ -1460,11 +1460,6 @@ const App: React.FC = () => {
       await callSupabase('UPDATE module start task', { moduleId, startTaskId }, 
         supabase.from('modules').update({ start_task_id: startTaskId }).eq('id', moduleId)
       );
-  };
-
-  // FIX: Create an adapter function to pass to Estimator's onUpdateTaskFunctionPoints prop
-  const updateTaskFunctionPoints = (projectId: string, moduleId: string, taskId: string, feFp: number, beFp: number) => {
-    updateTaskEstimates(projectId, moduleId, taskId, { frontendFunctionPoints: feFp, backendFunctionPoints: beFp });
   };
 
   if (!session) {
@@ -1579,7 +1574,7 @@ const App: React.FC = () => {
               projects={projects} 
               holidays={holidays} 
               onUpdateModuleEstimates={updateModuleEstimates}
-              onUpdateTaskFunctionPoints={updateTaskFunctionPoints}
+              onUpdateTaskEstimates={updateTaskEstimates}
               onUpdateModuleComplexity={updateModuleComplexity}
               onUpdateModuleStartDate={updateModuleStartDate}
               onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
