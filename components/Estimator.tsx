@@ -214,24 +214,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
             return total + feFP + beFP;
         }, 0);
   }, [modules]);
-  
-  const totalDevelopmentFeFPForQA = useMemo(() => {
-    return modules
-        .filter(m => (m.type || ModuleType.Development) === ModuleType.Development && !m.name.toLowerCase().includes('qa'))
-        .reduce((total, devModule) => {
-            const feFP = devModule.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0);
-            return total + feFP;
-        }, 0);
-  }, [modules]);
-
-  const totalDevelopmentBeFPForQA = useMemo(() => {
-    return modules
-        .filter(m => (m.type || ModuleType.Development) === ModuleType.Development && !m.name.toLowerCase().includes('qa'))
-        .reduce((total, devModule) => {
-            const beFP = devModule.tasks.reduce((s, t) => s + (t.backendFunctionPoints || 0), 0);
-            return total + beFP;
-        }, 0);
-  }, [modules]);
 
   const moduleCalculations = useMemo(() => {
     const calcMap = new Map<string, any>();
@@ -243,14 +225,8 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         let moduleBeFp = 0;
 
         if (isDev) {
-            // Special case for QA modules to inherit FPs from other dev modules
-            if (m.name.toLowerCase().includes('qa')) {
-                moduleFeFp = totalDevelopmentFeFPForQA;
-                moduleBeFp = totalDevelopmentBeFPForQA;
-            } else {
-                moduleFeFp = m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0);
-                moduleBeFp = m.tasks.reduce((s, t) => s + (t.backendFunctionPoints || 0), 0);
-            }
+            moduleFeFp = m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0);
+            moduleBeFp = m.tasks.reduce((s, t) => s + (t.backendFunctionPoints || 0), 0);
         }
 
         let modulePrepFp = 0;
@@ -289,17 +265,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                 const taskBeComp = t.backendComplexity ?? m.backendComplexity ?? 'Medium'; 
                 moduleBeEffort += (t.backendFunctionPoints ?? 0) > 0 ? Math.ceil(((t.backendFunctionPoints ?? 0) / taskBeVel) * COMPLEXITY_MULTIPLIERS[taskBeComp]) : 0; 
             }); 
-            
-            // For QA module, effort is based on inherited FPs
-            if (m.name.toLowerCase().includes('qa')) {
-                const qaFeVel = m.frontendVelocity || 5;
-                const qaFeComp = m.frontendComplexity || 'Medium';
-                moduleFeEffort = moduleFeFp > 0 ? Math.ceil((moduleFeFp / qaFeVel) * COMPLEXITY_MULTIPLIERS[qaFeComp]) : 0;
-                
-                const qaBeVel = m.backendVelocity || 5;
-                const qaBeComp = m.backendComplexity || 'Medium';
-                moduleBeEffort = moduleBeFp > 0 ? Math.ceil((moduleBeFp / qaBeVel) * COMPLEXITY_MULTIPLIERS[qaBeComp]) : 0;
-            }
         }
         const feTeam = m.frontendTeamSize || 2; 
         const feDuration = (moduleFeEffort > 0 && feTeam > 0) ? Math.ceil(moduleFeEffort / feTeam) : 0;
@@ -367,7 +332,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         });
     });
     return calcMap;
-  }, [modules, holidaySet, allTasksMap, totalDevelopmentFP, totalDevelopmentFeFPForQA, totalDevelopmentBeFPForQA]);
+  }, [modules, holidaySet, allTasksMap, totalDevelopmentFP]);
 
   const groupedTotalsMap = useMemo(() => {
     const subtotals: Record<string, any> = {};
