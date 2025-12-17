@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, ProjectModule, ComplexityLevel, Holiday, Role, ProjectTask, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { Calculator, GripVertical, ChevronRight, ChevronDown, Calendar as CalendarIcon, Link2, AlertCircle, CheckCircle2, Layers, Gem, ShieldCheck, Dot } from 'lucide-react';
@@ -8,7 +9,8 @@ interface EstimatorProps {
   projects: Project[];
   holidays: Holiday[];
   onUpdateModuleEstimates: (projectId: string, moduleId: string, legacyFp: number, prepVelocity: number, prepTeamSize: number, feVelocity: number, feTeamSize: number, beVelocity: number, beTeamSize: number) => void;
-  onUpdateTaskFunctionPoints: (projectId: string, moduleId: string, taskId: string, feFp: number, beFp: number) => void;
+  // FIX: Changed onUpdateTaskFunctionPoints to onUpdateTaskEstimates to match the more generic handler in App.tsx
+  onUpdateTaskEstimates: (projectId: string, moduleId: string, taskId: string, updates: Partial<Omit<ProjectTask, 'id' | 'name' | 'assignments'>>) => void;
   onUpdateModuleComplexity: (projectId: string, moduleId: string, type: 'frontend' | 'backend', complexity: ComplexityLevel) => void;
   onUpdateModuleStartDate: (projectId: string, moduleId: string, startDate: string | null) => void;
   onUpdateModuleDeliveryTask: (projectId: string, moduleId: string, deliveryTaskId: string | null) => void;
@@ -126,7 +128,7 @@ const EstimatorNumberInput: React.FC<EstimatorNumberInputProps> = ({ value, onCh
 };
 
 
-export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateModuleEstimates, onUpdateTaskFunctionPoints, onUpdateModuleComplexity, onUpdateModuleStartDate, onUpdateModuleDeliveryTask, onUpdateModuleStartTask, onReorderModules, isReadOnly = false }) => {
+export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateModuleEstimates, onUpdateTaskEstimates, onUpdateModuleComplexity, onUpdateModuleStartDate, onUpdateModuleDeliveryTask, onUpdateModuleStartTask, onReorderModules, isReadOnly = false }) => {
   const [selectedProjectId, setSelectedProjectId] = useState<string>(projects[0]?.id || '');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
@@ -562,9 +564,11 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                     <div className="flex items-center gap-2"><Dot size={16} className="text-slate-400"/> <span className="truncate" title={task.name}>{task.name}</span></div>
                                 </td>
                                 <td colSpan={5} className="border-b border-slate-100 border-r border-slate-200"></td>
-                                <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={100+taskIndex} colIndex={3} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={task.frontendFunctionPoints || 0} onChange={val => onUpdateTaskFunctionPoints(selectedProjectId, m.id, task.id, val, task.backendFunctionPoints || 0)} disabled={isReadOnly} /></td>
+                                {/* FIX: Call onUpdateTaskEstimates with a partial update object */}
+                                <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={100+taskIndex} colIndex={3} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={task.frontendFunctionPoints || 0} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendFunctionPoints: val })} disabled={isReadOnly} /></td>
                                 <td colSpan={5} className="border-b border-slate-100 border-r border-slate-200"></td>
-                                <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={100+taskIndex} colIndex={6} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={task.backendFunctionPoints || 0} onChange={val => onUpdateTaskFunctionPoints(selectedProjectId, m.id, task.id, task.frontendFunctionPoints || 0, val)} disabled={isReadOnly} /></td>
+                                {/* FIX: Call onUpdateTaskEstimates with a partial update object */}
+                                <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={100+taskIndex} colIndex={6} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} min={0} value={task.backendFunctionPoints || 0} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { backendFunctionPoints: val })} disabled={isReadOnly} /></td>
                                 <td colSpan={8} className="border-b border-slate-100 border-r border-slate-200"></td>
                             </tr>
                         ))}

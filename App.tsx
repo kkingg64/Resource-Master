@@ -65,6 +65,12 @@ const structureProjectsData = (
       sort_order: t.sort_order,
       frontendFunctionPoints: t.frontend_function_points || 0,
       backendFunctionPoints: t.backend_function_points || 0,
+      frontendVelocity: t.frontend_velocity,
+      frontendTeamSize: t.frontend_team_size,
+      frontendComplexity: t.frontend_complexity,
+      backendVelocity: t.backend_velocity,
+      backendTeamSize: t.backend_team_size,
+      backendComplexity: t.backend_complexity,
       assignments: (assignmentsByTask.get(t.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
     });
   });
@@ -1323,7 +1329,7 @@ const App: React.FC = () => {
       );
   };
   
-  const updateTaskFunctionPoints = async (projectId: string, moduleId: string, taskId: string, feFp: number, beFp: number) => {
+  const updateTaskEstimates = async (projectId: string, moduleId: string, taskId: string, updates: Partial<Omit<ProjectTask, 'id' | 'name' | 'assignments'>>) => {
     if (isReadOnlyMode) return;
       
     let moduleFeFpSum = 0;
@@ -1337,38 +1343,51 @@ const App: React.FC = () => {
                 if (m.id !== moduleId) return m;
                 const newTasks = m.tasks.map(t => {
                     if (t.id !== taskId) return t;
-                    return { ...t, frontendFunctionPoints: feFp, backendFunctionPoints: beFp };
+                    return { ...t, ...updates };
                 });
                 
-                moduleFeFpSum = newTasks.reduce((sum, t) => sum + (t.frontendFunctionPoints || 0), 0);
-                moduleBeFpSum = newTasks.reduce((sum, t) => sum + (t.backendFunctionPoints || 0), 0);
+                if (m.type === ModuleType.Development) {
+                    moduleFeFpSum = newTasks.reduce((sum, t) => sum + (t.frontendFunctionPoints || 0), 0);
+                    moduleBeFpSum = newTasks.reduce((sum, t) => sum + (t.backendFunctionPoints || 0), 0);
+                }
 
                 return {
                     ...m,
                     tasks: newTasks,
-                    frontendFunctionPoints: moduleFeFpSum,
-                    backendFunctionPoints: moduleBeFpSum,
-                    functionPoints: moduleFeFpSum + moduleBeFpSum
+                    ...(m.type === ModuleType.Development && {
+                        frontendFunctionPoints: moduleFeFpSum,
+                        backendFunctionPoints: moduleBeFpSum,
+                        functionPoints: moduleFeFpSum + moduleBeFpSum
+                    })
                 };
             })
         };
     });
     setProjects(newProjects);
 
-    await callSupabase('UPDATE task function points', { taskId },
-        supabase.from('tasks').update({
-            frontend_function_points: feFp,
-            backend_function_points: beFp
-        }).eq('id', taskId)
-    );
+    const dbTaskPayload: any = {};
+    for (const key in updates) {
+        const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        dbTaskPayload[snakeKey] = (updates as any)[key];
+    }
+    
+    if (Object.keys(dbTaskPayload).length > 0) {
+        await callSupabase('UPDATE task estimates', { taskId, updates: dbTaskPayload },
+            supabase.from('tasks').update(dbTaskPayload).eq('id', taskId)
+        );
+    }
 
-    await callSupabase('UPDATE module aggregated FP', { moduleId },
-        supabase.from('modules').update({
-            frontend_function_points: moduleFeFpSum,
-            backend_function_points: moduleBeFpSum,
-            function_points: moduleFeFpSum + moduleBeFpSum
-        }).eq('id', moduleId)
-    );
+    const project = newProjects.find(p => p.id === projectId);
+    const module = project?.modules.find(m => m.id === moduleId);
+    if (module && module.type === ModuleType.Development) {
+        await callSupabase('UPDATE module aggregated FP', { moduleId },
+            supabase.from('modules').update({
+                frontend_function_points: module.frontendFunctionPoints,
+                backend_function_points: module.backendFunctionPoints,
+                function_points: module.functionPoints
+            }).eq('id', moduleId)
+        );
+    }
   };
 
   const updateModuleComplexity = async (projectId: string, moduleId: string, type: 'frontend' | 'backend', complexity: ComplexityLevel) => {
@@ -1441,6 +1460,11 @@ const App: React.FC = () => {
       await callSupabase('UPDATE module start task', { moduleId, startTaskId }, 
         supabase.from('modules').update({ start_task_id: startTaskId }).eq('id', moduleId)
       );
+  };
+
+  // FIX: Create an adapter function to pass to Estimator's onUpdateTaskFunctionPoints prop
+  const updateTaskFunctionPoints = (projectId: string, moduleId: string, taskId: string, feFp: number, beFp: number) => {
+    updateTaskEstimates(projectId, moduleId, taskId, { frontendFunctionPoints: feFp, backendFunctionPoints: beFp });
   };
 
   if (!session) {

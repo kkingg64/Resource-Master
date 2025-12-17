@@ -58,6 +58,14 @@ export interface ProjectTask {
   sort_order?: number;
   frontendFunctionPoints?: number;
   backendFunctionPoints?: number;
+  
+  // New fields for task-level estimation overrides
+  frontendVelocity?: number;
+  frontendTeamSize?: number;
+  frontendComplexity?: ComplexityLevel;
+  backendVelocity?: number;
+  backendTeamSize?: number;
+  backendComplexity?: ComplexityLevel;
 }
 
 export type ComplexityLevel = 'Low' | 'Medium' | 'High' | 'Complex';
@@ -137,7 +145,7 @@ export interface Holiday {
   id: string;
   date: string; // YYYY-MM-DD
   name: string;
-  country: string; // Country code e.g. 'MY', 'SG', 'Global'
+  country: string; // Country code e.g., 'MY', 'SG', 'Global'
 }
 
 export interface IndividualHoliday {
