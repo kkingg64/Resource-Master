@@ -204,122 +204,52 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
 
   const getModuleLatestEndDate = (module: ProjectModule): Date | null => { let maxEndDate: Date | null = null; module.tasks.forEach(task => { const taskEndDate = getTaskLatestEndDate(task); if (taskEndDate && (!maxEndDate || taskEndDate > maxEndDate)) { maxEndDate = taskEndDate; } }); return maxEndDate; }
   const getModuleEarliestStartDate = (module: ProjectModule): string | null => { let minDate: string | null = null; module.tasks.forEach(task => { const taskStartDate = getTaskEarliestStartDate(task); if (taskStartDate && (!minDate || taskStartDate < minDate)) { minDate = taskStartDate; } }); return minDate; }
-
-  const totals = useMemo(() => {
-    let totalRefFP = 0;
-    let totalFeFP = 0;
-    let totalBeFP = 0;
-    let totalPrepEffort = 0;
-    let totalFeEffort = 0;
-    let totalBeEffort = 0;
-    let totalPrepDuration = 0;
-    let totalFeDuration = 0;
-    let totalBeDuration = 0;
-    let projectMaxEstDate: Date | null = null;
-    let projectMaxPlanDate: Date | null = null;
-    let totalVarianceDays = 0;
-
+  
+  const totalDevelopmentFP = useMemo(() => {
+    return modules
+        .filter(m => (m.type || ModuleType.Development) === ModuleType.Development)
+        .reduce((total, devModule) => {
+            const feFP = devModule.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0);
+            const beFP = devModule.tasks.reduce((s, t) => s + (t.backendFunctionPoints || 0), 0);
+            return total + feFP + beFP;
+        }, 0);
+  }, [modules]);
+  
+  const moduleCalculations = useMemo(() => {
+    const calcMap = new Map<string, any>();
     modules.forEach(m => {
         const moduleType = m.type || ModuleType.Development;
         const isDev = moduleType === ModuleType.Development;
 
-        const feFP = isDev ? m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0) : 0;
-        const beFP = isDev ? m.tasks.reduce((s, t) => s + (t.backendFunctionPoints || 0), 0) : 0;
-        
-        const prepBase = m.legacyFunctionPoints || 0;
-        totalRefFP += prepBase;
+        // FP Calculations
+        const moduleFeFp = isDev ? m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0) : 0;
+        const moduleBeFp = isDev ? m.tasks.reduce((s, t) => s + (t.backendFunctionPoints || 0), 0) : 0;
 
-        const prepVelocity = m.prepVelocity || 10;
-        const prepTeamSize = m.prepTeamSize || 2;
-        const prepEffort = prepBase > 0 ? Math.ceil(prepBase / prepVelocity) : 0;
-        totalPrepEffort += prepEffort;
-        const prepDuration = prepEffort > 0 ? Math.ceil(prepEffort / prepTeamSize) : 0;
-        totalPrepDuration += prepDuration;
-
-        let moduleFeEffort = 0;
-        let moduleBeEffort = 0;
-
-        if (isDev) {
-            m.tasks.forEach(t => {
-                const taskFeVel = t.frontendVelocity ?? m.frontendVelocity ?? 5;
-                const taskFeTeam = t.frontendTeamSize ?? (t.assignments.length > 0 ? t.assignments.length : m.frontendTeamSize) ?? 2;
-                const taskFeComp = t.frontendComplexity ?? m.frontendComplexity ?? 'Medium';
-                const taskFeEffort = (t.frontendFunctionPoints ?? 0) > 0 ? Math.ceil(((t.frontendFunctionPoints ?? 0) / taskFeVel) * COMPLEXITY_MULTIPLIERS[taskFeComp]) : 0;
-                moduleFeEffort += taskFeEffort;
-                
-                const taskBeVel = t.backendVelocity ?? m.backendVelocity ?? 5;
-                const taskBeTeam = t.backendTeamSize ?? (t.assignments.length > 0 ? t.assignments.length : m.backendTeamSize) ?? 2;
-                const taskBeComp = t.backendComplexity ?? m.backendComplexity ?? 'Medium';
-                const taskBeEffort = (t.backendFunctionPoints ?? 0) > 0 ? Math.ceil(((t.backendFunctionPoints ?? 0) / taskBeVel) * COMPLEXITY_MULTIPLIERS[taskBeComp]) : 0;
-                moduleBeEffort += taskBeEffort;
-            });
-        }
-        
-        const feVel = m.frontendVelocity || 5;
-        const feTeam = m.frontendTeamSize || 2;
-        const feDuration = moduleFeEffort > 0 ? Math.ceil(moduleFeEffort / feTeam) : 0;
-        totalFeFP += feFP;
-        totalFeEffort += moduleFeEffort;
-        totalFeDuration += feDuration;
-
-        const beVel = m.backendVelocity || 5;
-        const beTeam = m.backendTeamSize || 2;
-        const beDuration = moduleBeEffort > 0 ? Math.ceil(moduleBeEffort / beTeam) : 0;
-        totalBeFP += beFP;
-        totalBeEffort += moduleBeEffort;
-        totalBeDuration += beDuration;
-
-        const moduleTotalDuration = isDev ? Math.max(feDuration, beDuration) : prepDuration;
-        const hasEffort = (isDev && (feFP > 0 || beFP > 0)) || (!isDev && prepBase > 0);
-
-        let baseStartDate = m.startDate || null;
-        if (!baseStartDate && m.startTaskId) { const taskInfo = allTasksMap.get(m.startTaskId); if (taskInfo) { baseStartDate = getTaskEarliestStartDate(taskInfo.task); }
-        }
-        if (!baseStartDate) { baseStartDate = getModuleEarliestStartDate(m); }
-
-        let estDate: Date | null = null;
-        if (hasEffort && baseStartDate) {
-            if (moduleTotalDuration > 0) { const estDateStr = calculateEndDate(baseStartDate, moduleTotalDuration, holidaySet); estDate = new Date(estDateStr.replace(/-/g, '/')); } else { estDate = new Date(baseStartDate.replace(/-/g, '/')); }
-            if (estDate && (!projectMaxEstDate || estDate > projectMaxEstDate)) { projectMaxEstDate = estDate; }
-        }
-
-        let modMaxEndDate: Date | null = getModuleLatestEndDate(m);
-        if (modMaxEndDate) { if (!projectMaxPlanDate || modMaxEndDate > projectMaxPlanDate) { projectMaxPlanDate = modMaxEndDate; } }
-        if (estDate && modMaxEndDate) { const estStr = formatDateForInput(estDate); const planStr = formatDateForInput(modMaxEndDate); let days = 0; if (estStr === planStr) { days = 0; } else if (estStr < planStr) { days = - (calculateWorkingDaysBetween(estStr, planStr, holidaySet) - 1); } else { days = calculateWorkingDaysBetween(planStr, estStr, holidaySet) - 1; } totalVarianceDays += days; }
-    });
-
-    return { refFP: totalRefFP, feFP: totalFeFP, beFP: totalBeFP, prepEffort: totalPrepEffort, feEffort: totalFeEffort, beEffort: totalBeEffort, prepDuration: totalPrepDuration, feDuration: totalFeDuration, beDuration: totalBeDuration, projectMaxEstDate, projectMaxPlanDate, totalVarianceDays };
-  }, [modules, holidaySet, allTasksMap]);
-
-  const groupedTotals = useMemo(() => {
-    const subtotals: Record<string, any> = {};
-
-    modules.forEach(m => {
-        const moduleType = m.type || ModuleType.Development;
-
-        if (!subtotals[moduleType]) {
-            subtotals[moduleType] = { refFP: 0, feFP: 0, beFP: 0, prepEffort: 0, feEffort: 0, beEffort: 0, prepDuration: 0, feDuration: 0, beDuration: 0 };
-        }
-
-        const isDev = moduleType === ModuleType.Development;
-        
-        const prepFP = !isDev ? m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0) : 0;
-        subtotals[moduleType].refFP += prepFP;
-        
+        let modulePrepFp = 0;
         let modulePrepEffort = 0;
-        if (!isDev) { m.tasks.forEach(t => { const taskVel = t.frontendVelocity ?? m.prepVelocity ?? 10; const taskComp = t.frontendComplexity ?? m.complexity ?? 'Medium'; modulePrepEffort += (t.frontendFunctionPoints ?? 0) > 0 ? Math.ceil(((t.frontendFunctionPoints ?? 0) / taskVel) * COMPLEXITY_MULTIPLIERS[taskComp]) : 0; }); }
+
+        if (!isDev) {
+            if (moduleType === ModuleType.PostDevelopment) {
+                modulePrepFp = totalDevelopmentFP;
+                const prepVel = m.prepVelocity || 10;
+                const prepComp = m.complexity || 'Medium';
+                modulePrepEffort = modulePrepFp > 0 ? Math.ceil((modulePrepFp / prepVel) * COMPLEXITY_MULTIPLIERS[prepComp]) : 0;
+            } else {
+                modulePrepFp = m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0);
+                 m.tasks.forEach(t => { 
+                    const taskVel = t.frontendVelocity ?? m.prepVelocity ?? 10; 
+                    const taskComp = t.frontendComplexity ?? m.complexity ?? 'Medium'; 
+                    modulePrepEffort += (t.frontendFunctionPoints ?? 0) > 0 ? Math.ceil(((t.frontendFunctionPoints ?? 0) / taskVel) * COMPLEXITY_MULTIPLIERS[taskComp]) : 0; 
+                });
+            }
+        }
+        
+        // Effort & Duration Calculations
         const prepTeamSize = m.prepTeamSize || 2;
         const prepDuration = modulePrepEffort > 0 ? Math.ceil(modulePrepEffort / prepTeamSize) : 0;
-        subtotals[moduleType].prepEffort += modulePrepEffort;
-        subtotals[moduleType].prepDuration += prepDuration;
-        
-        let moduleFeEffort = 0, moduleBeEffort = 0;
-        if (isDev) {
-            const feFP = m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0);
-            const beFP = m.tasks.reduce((s, t) => s + (t.backendFunctionPoints || 0), 0);
-            subtotals[moduleType].feFP += feFP;
-            subtotals[moduleType].beFP += beFP;
 
+        let moduleFeEffort = 0, moduleBeEffort = 0;
+        if (isDev) { 
             m.tasks.forEach(t => { 
                 const taskFeVel = t.frontendVelocity ?? m.frontendVelocity ?? 5; 
                 const taskFeComp = t.frontendComplexity ?? m.frontendComplexity ?? 'Medium'; 
@@ -329,23 +259,151 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                 const taskBeComp = t.backendComplexity ?? m.backendComplexity ?? 'Medium'; 
                 moduleBeEffort += (t.backendFunctionPoints ?? 0) > 0 ? Math.ceil(((t.backendFunctionPoints ?? 0) / taskBeVel) * COMPLEXITY_MULTIPLIERS[taskBeComp]) : 0; 
             }); 
-            const feTeam = m.frontendTeamSize || 2; 
-            const feDuration = moduleFeEffort > 0 ? Math.ceil(moduleFeEffort / feTeam) : 0;
-            const beTeam = m.backendTeamSize || 2; 
-            const beDuration = moduleBeEffort > 0 ? Math.ceil(moduleBeEffort / beTeam) : 0;
-
-            subtotals[moduleType].feEffort += moduleFeEffort;
-            subtotals[moduleType].beEffort += moduleBeEffort;
-            subtotals[moduleType].feDuration += feDuration;
-            subtotals[moduleType].beDuration += beDuration;
         }
+        const feTeam = m.frontendTeamSize || 2; 
+        const feDuration = moduleFeEffort > 0 ? Math.ceil(moduleFeEffort / feTeam) : 0;
+        const beTeam = m.backendTeamSize || 2; 
+        const beDuration = moduleBeEffort > 0 ? Math.ceil(moduleBeEffort / beTeam) : 0;
+        
+        // Delivery Date Calculations
+        const totalDuration = Math.max(prepDuration, feDuration, beDuration);
+        const hasEffort = modulePrepFp > 0 || moduleFeFp > 0 || moduleBeFp > 0;
+        
+        let baseStartDate = m.startDate || null; 
+        let isTaskBased = false; 
+        let startTaskName = '';
+        if (!baseStartDate && m.startTaskId) { 
+            const taskInfo = allTasksMap.get(m.startTaskId); 
+            if (taskInfo) { 
+                const minStart = getTaskEarliestStartDate(taskInfo.task); 
+                if (minStart) { baseStartDate = minStart; isTaskBased = true; startTaskName = taskInfo.task.name; } 
+            } 
+        }
+        if (!baseStartDate) { 
+            baseStartDate = getModuleEarliestStartDate(m); 
+        }
+
+        let estimatedDateStr: string | null = null;
+        if (hasEffort && baseStartDate) { 
+            if (totalDuration > 0) { 
+                estimatedDateStr = calculateEndDate(baseStartDate, totalDuration, holidaySet); 
+            } else if (baseStartDate) { 
+                estimatedDateStr = formatDateForInput(new Date(baseStartDate.replace(/-/g, '/'))); 
+            } 
+        }
+        const plannerDateObj = getModuleLatestEndDate(m);
+        const plannerDateStr = plannerDateObj ? formatDateForInput(plannerDateObj) : null;
+        
+        let varianceStatus: 'safe' | 'risk' | 'unknown' = 'unknown'; 
+        let varianceText = '-'; 
+        let varianceClass = 'text-slate-300';
+        if (estimatedDateStr && plannerDateStr) { 
+            if (estimatedDateStr <= plannerDateStr) { 
+                varianceStatus = 'safe'; 
+                let diff = calculateWorkingDaysBetween(estimatedDateStr, plannerDateStr, holidaySet) - 1; 
+                if(estimatedDateStr === plannerDateStr) diff = 0; 
+                const savedDays = -diff; 
+                varianceText = `${savedDays}d`; 
+                varianceClass = 'text-green-600 font-bold'; 
+            } else { 
+                varianceStatus = 'risk'; 
+                const diff = calculateWorkingDaysBetween(plannerDateStr, estimatedDateStr, holidaySet) - 1; 
+                varianceText = `+${diff}d`; 
+                varianceClass = 'text-red-600 font-bold'; 
+            } 
+        }
+        let cellBgClass = 'bg-transparent'; 
+        if (varianceStatus === 'risk') cellBgClass = 'bg-red-50/50'; 
+        if (varianceStatus === 'safe') cellBgClass = 'bg-green-50/50';
+
+        calcMap.set(m.id, {
+            moduleFeFp, moduleBeFp, modulePrepFp,
+            modulePrepEffort, moduleFeEffort, moduleBeEffort,
+            prepDuration, feDuration, beDuration,
+            baseStartDate, isTaskBased, startTaskName,
+            estimatedDateStr, plannerDateStr,
+            varianceStatus, varianceText, varianceClass, cellBgClass,
+        });
+    });
+    return calcMap;
+  }, [modules, holidaySet, allTasksMap, totalDevelopmentFP]);
+
+  const totals = useMemo(() => {
+    let totalPrepEffort = 0, totalFeEffort = 0, totalBeEffort = 0;
+    let totalPrepDuration = 0, totalFeDuration = 0, totalBeDuration = 0;
+    let totalFeFP = 0, totalBeFP = 0;
+    let projectMaxEstDate: Date | null = null;
+    let projectMaxPlanDate: Date | null = null;
+
+    modules.forEach(m => {
+        const calcs = moduleCalculations.get(m.id);
+        if (!calcs) return;
+
+        totalPrepEffort += calcs.modulePrepEffort;
+        totalFeEffort += calcs.moduleFeEffort;
+        totalBeEffort += calcs.moduleBeEffort;
+        totalPrepDuration += calcs.prepDuration;
+        totalFeDuration += calcs.feDuration;
+        totalBeDuration += calcs.beDuration;
+        totalFeFP += calcs.moduleFeFp;
+        totalBeFP += calcs.moduleBeFp;
+
+        if (calcs.estimatedDateStr) {
+            const estDate = new Date(calcs.estimatedDateStr.replace(/-/g, '/'));
+            if (!projectMaxEstDate || estDate > projectMaxEstDate) {
+                projectMaxEstDate = estDate;
+            }
+        }
+        if (calcs.plannerDateStr) {
+            const planDate = new Date(calcs.plannerDateStr.replace(/-/g, '/'));
+            if (!projectMaxPlanDate || planDate > projectMaxPlanDate) {
+                projectMaxPlanDate = planDate;
+            }
+        }
+    });
+    
+    let totalVarianceDays = 0;
+    if (projectMaxEstDate && projectMaxPlanDate) {
+        const estStr = formatDateForInput(projectMaxEstDate);
+        const planStr = formatDateForInput(projectMaxPlanDate);
+        if (estStr < planStr) {
+            totalVarianceDays = -(calculateWorkingDaysBetween(estStr, planStr, holidaySet) - 1);
+        } else if (estStr > planStr) {
+            totalVarianceDays = calculateWorkingDaysBetween(planStr, estStr, holidaySet) - 1;
+        }
+    }
+
+    return { totalPrepEffort, totalFeEffort, totalBeEffort, totalPrepDuration, totalFeDuration, totalBeDuration, totalFeFP, totalBeFP, projectMaxEstDate, projectMaxPlanDate, totalVarianceDays };
+  }, [modules, moduleCalculations, holidaySet]);
+
+  const groupedTotals = useMemo(() => {
+    const subtotals: Record<string, any> = {};
+
+    modules.forEach(m => {
+        const moduleType = m.type || ModuleType.Development;
+        const calcs = moduleCalculations.get(m.id);
+        if (!calcs) return;
+
+        if (!subtotals[moduleType]) {
+            subtotals[moduleType] = { prepEffort: 0, feEffort: 0, beEffort: 0, prepDuration: 0, feDuration: 0, beDuration: 0, feFP: 0, beFP: 0, refFP: 0 };
+        }
+
+        subtotals[moduleType].prepEffort += calcs.modulePrepEffort;
+        subtotals[moduleType].feEffort += calcs.moduleFeEffort;
+        subtotals[moduleType].beEffort += calcs.moduleBeEffort;
+        subtotals[moduleType].prepDuration += calcs.prepDuration;
+        subtotals[moduleType].feDuration += calcs.feDuration;
+        subtotals[moduleType].beDuration += calcs.beDuration;
+        subtotals[moduleType].feFP += calcs.moduleFeFp;
+        subtotals[moduleType].beFP += calcs.moduleBeFp;
+        subtotals[moduleType].refFP += calcs.modulePrepFp;
     });
 
     return Object.entries(subtotals).sort(([typeA], [typeB]) => {
       const order = Object.values(ModuleType);
       return order.indexOf(typeA as ModuleType) - order.indexOf(typeB as ModuleType);
     });
-  }, [modules]);
+  }, [modules, moduleCalculations]);
 
 
   const toggleModuleExpansion = (moduleId: string) => {
@@ -471,36 +529,20 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                 const typeStyle = MODULE_TYPE_STYLES[moduleType];
                                 const Icon = typeStyle.icon;
                                 const isExpanded = !!expandedModules[m.id];
-                                
-                                const moduleFeFp = isDev ? m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0) : 0;
-                                const moduleBeFp = isDev ? m.tasks.reduce((s, t) => s + (t.backendFunctionPoints || 0), 0) : 0;
-                                
-                                const modulePrepFp = !isDev ? m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0) : 0;
-                                let modulePrepEffort = 0;
-                                if (!isDev) { m.tasks.forEach(t => { const taskVel = t.frontendVelocity ?? m.prepVelocity ?? 10; const taskComp = t.frontendComplexity ?? m.complexity ?? 'Medium'; modulePrepEffort += (t.frontendFunctionPoints ?? 0) > 0 ? Math.ceil(((t.frontendFunctionPoints ?? 0) / taskVel) * COMPLEXITY_MULTIPLIERS[taskComp]) : 0; }); }
-                                const prepTeamSize = m.prepTeamSize || 2;
-                                const prepDuration = modulePrepEffort > 0 ? Math.ceil(modulePrepEffort / prepTeamSize) : 0;
-                                
-                                let moduleFeEffort = 0, moduleBeEffort = 0;
-                                if (isDev) { m.tasks.forEach(t => { const taskFeVel = t.frontendVelocity ?? m.frontendVelocity ?? 5; const taskFeTeam = t.frontendTeamSize ?? (t.assignments.length > 0 ? t.assignments.length : m.frontendTeamSize) ?? 2; const taskFeComp = t.frontendComplexity ?? m.frontendComplexity ?? 'Medium'; moduleFeEffort += (t.frontendFunctionPoints ?? 0) > 0 ? Math.ceil(((t.frontendFunctionPoints ?? 0) / taskFeVel) * COMPLEXITY_MULTIPLIERS[taskFeComp]) : 0; const taskBeVel = t.backendVelocity ?? m.backendVelocity ?? 5; const taskBeTeam = t.backendTeamSize ?? (t.assignments.length > 0 ? t.assignments.length : m.backendTeamSize) ?? 2; const taskBeComp = t.backendComplexity ?? m.backendComplexity ?? 'Medium'; moduleBeEffort += (t.backendFunctionPoints ?? 0) > 0 ? Math.ceil(((t.backendFunctionPoints ?? 0) / taskBeVel) * COMPLEXITY_MULTIPLIERS[taskBeComp]) : 0; }); }
-                                const feTeam = m.frontendTeamSize || 2; const feDuration = moduleFeEffort > 0 ? Math.ceil(moduleFeEffort / feTeam) : 0;
-                                const beTeam = m.backendTeamSize || 2; const beDuration = moduleBeEffort > 0 ? Math.ceil(moduleBeEffort / beTeam) : 0;
+                                const calcs = moduleCalculations.get(m.id);
 
-                                const totalDuration = Math.max(prepDuration, feDuration, beDuration);
-                                const hasEffort = modulePrepFp > 0 || moduleFeFp > 0 || moduleBeFp > 0;
-                                
-                                let baseStartDate = m.startDate || null; let isTaskBased = false; let startTaskName = '';
-                                if (!baseStartDate && m.startTaskId) { const taskInfo = allTasksMap.get(m.startTaskId); if (taskInfo) { const minStart = getTaskEarliestStartDate(taskInfo.task); if (minStart) { baseStartDate = minStart; isTaskBased = true; startTaskName = taskInfo.task.name; } } }
-                                if (!baseStartDate) { baseStartDate = getModuleEarliestStartDate(m); }
+                                if (!calcs) return null; // Should not happen
 
-                                let estimatedDateStr: string | null = null;
-                                if (hasEffort && baseStartDate) { if (totalDuration > 0) { estimatedDateStr = calculateEndDate(baseStartDate, totalDuration, holidaySet); } else if (baseStartDate) { estimatedDateStr = formatDateForInput(new Date(baseStartDate.replace(/-/g, '/'))); } }
-                                const plannerDateObj = getModuleLatestEndDate(m);
-                                const plannerDateStr = plannerDateObj ? formatDateForInput(plannerDateObj) : null;
-                                let varianceStatus: 'safe' | 'risk' | 'unknown' = 'unknown'; let varianceText = '-'; let varianceClass = 'text-slate-300';
-                                if (estimatedDateStr && plannerDateStr) { if (estimatedDateStr <= plannerDateStr) { varianceStatus = 'safe'; let diff = calculateWorkingDaysBetween(estimatedDateStr, plannerDateStr, holidaySet) - 1; if(estimatedDateStr === plannerDateStr) diff = 0; const savedDays = -diff; varianceText = `${savedDays}d`; varianceClass = 'text-green-600 font-bold'; } else { varianceStatus = 'risk'; const diff = calculateWorkingDaysBetween(plannerDateStr, estimatedDateStr, holidaySet) - 1; varianceText = `+${diff}d`; varianceClass = 'text-red-600 font-bold'; } }
+                                const { 
+                                    moduleFeFp, moduleBeFp, modulePrepFp,
+                                    modulePrepEffort, moduleFeEffort, moduleBeEffort,
+                                    prepDuration, feDuration, beDuration,
+                                    baseStartDate, isTaskBased, startTaskName,
+                                    estimatedDateStr, plannerDateStr,
+                                    varianceStatus, varianceText, varianceClass, cellBgClass,
+                                } = calcs;
+
                                 const updateEstimates = (pVel: number, pTeam: number, fVel: number, fTeam: number, bVel: number, bTeam: number) => { onUpdateModuleEstimates(selectedProjectId, m.id, m.legacyFunctionPoints, pVel, pTeam, fVel, fTeam, bVel, bTeam); };
-                                let cellBgClass = 'bg-transparent'; if (varianceStatus === 'risk') cellBgClass = 'bg-red-50/50'; if (varianceStatus === 'safe') cellBgClass = 'bg-green-50/50';
                                 const baseInputClass = "w-full h-full text-center bg-transparent border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500";
                                 const nonEditableCell = "px-1 text-center border-b border-slate-100 text-slate-400 font-mono";
 
@@ -594,22 +636,78 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                     </React.Fragment>
                                 );
                             })}
-                            <tr key={`${type}-subtotal`} className="bg-slate-100 font-semibold text-[10px] border-t border-b-2 border-slate-200">
-                                <td colSpan={2} className="px-2 py-1.5 text-right text-slate-500 uppercase">{MODULE_TYPE_DISPLAY_NAMES[type as ModuleType]}<br/>Sub-total</td>
-                                <td className="text-center text-slate-700">{subtotal.refFP || '-'}</td>
-                                <td colSpan={3} className="text-center text-slate-300">-</td>
-                                <td className="text-center text-slate-700">{subtotal.prepEffort || '-'}</td>
-                                <td className="text-center text-amber-700 border-r border-slate-200">{formatWeeks(subtotal.prepDuration)}</td>
-                                <td className="text-center text-slate-700">{subtotal.feFP || '-'}</td>
-                                <td colSpan={3} className="text-center text-slate-300">-</td>
-                                <td className="text-center text-slate-700">{subtotal.feEffort || '-'}</td>
-                                <td className="text-center text-blue-700 border-r border-slate-200">{formatWeeks(subtotal.feDuration)}</td>
-                                <td className="text-center text-slate-700">{subtotal.beFP || '-'}</td>
-                                <td colSpan={3} className="text-center text-slate-300">-</td>
-                                <td className="text-center text-slate-700">{subtotal.beEffort || '-'}</td>
-                                <td className="text-center text-indigo-700 border-r border-slate-200">{formatWeeks(subtotal.beDuration)}</td>
-                                <td colSpan={3} className="border-r border-slate-200"></td>
-                            </tr>
+                            
+                            {(() => {
+                                let subtotalMaxEstDate: Date | null = null;
+                                let subtotalMaxPlanDate: Date | null = null;
+
+                                modulesOfType.forEach(m => {
+                                    const calcs = moduleCalculations.get(m.id);
+                                    if (calcs?.estimatedDateStr) {
+                                        const estDate = new Date(calcs.estimatedDateStr.replace(/-/g, '/'));
+                                        if (!subtotalMaxEstDate || estDate > subtotalMaxEstDate) {
+                                            subtotalMaxEstDate = estDate;
+                                        }
+                                    }
+                                    if (calcs?.plannerDateStr) {
+                                        const planDate = new Date(calcs.plannerDateStr.replace(/-/g, '/'));
+                                        if (!subtotalMaxPlanDate || planDate > subtotalMaxPlanDate) {
+                                            subtotalMaxPlanDate = planDate;
+                                        }
+                                    }
+                                });
+
+                                let subtotalVarianceText = '-';
+                                let subtotalVarianceClass = 'text-slate-400';
+                                if (subtotalMaxEstDate && subtotalMaxPlanDate) {
+                                    const estStr = formatDateForInput(subtotalMaxEstDate);
+                                    const planStr = formatDateForInput(subtotalMaxPlanDate);
+                                    if (estStr <= planStr) {
+                                        let diff = calculateWorkingDaysBetween(estStr, planStr, holidaySet) - 1;
+                                        if(estStr === planStr) diff = 0;
+                                        subtotalVarianceText = `${-diff}d`;
+                                        subtotalVarianceClass = 'text-green-600 font-bold';
+                                    } else {
+                                        const diff = calculateWorkingDaysBetween(planStr, estStr, holidaySet) - 1;
+                                        subtotalVarianceText = `+${diff}d`;
+                                        subtotalVarianceClass = 'text-red-600 font-bold';
+                                    }
+                                }
+
+                                return (
+                                    <tr key={`${type}-subtotal`} className="bg-slate-100 font-semibold text-[10px] border-t border-b-2 border-slate-200">
+                                        <td colSpan={2} className="px-2 py-1.5 text-right text-slate-500 uppercase">{MODULE_TYPE_DISPLAY_NAMES[type as ModuleType]}<br/>Sub-total</td>
+                                        <td className="text-center text-slate-700">{subtotal.refFP || '-'}</td>
+                                        <td colSpan={3} className="text-center text-slate-300">-</td>
+                                        <td className="text-center text-slate-700">{subtotal.prepEffort || '-'}</td>
+                                        <td className="text-center text-amber-700 border-r border-slate-200">{formatWeeks(subtotal.prepDuration)}</td>
+                                        <td className="text-center text-slate-700">{subtotal.feFP || '-'}</td>
+                                        <td colSpan={3} className="text-center text-slate-300">-</td>
+                                        <td className="text-center text-slate-700">{subtotal.feEffort || '-'}</td>
+                                        <td className="text-center text-blue-700 border-r border-slate-200">{formatWeeks(subtotal.feDuration)}</td>
+                                        <td className="text-center text-slate-700">{subtotal.beFP || '-'}</td>
+                                        <td colSpan={3} className="text-center text-slate-300">-</td>
+                                        <td className="text-center text-slate-700">{subtotal.beEffort || '-'}</td>
+                                        <td className="text-center text-indigo-700 border-r border-slate-200">{formatWeeks(subtotal.beDuration)}</td>
+                                        <td colSpan={1} className="text-center text-slate-400 border-r border-slate-200"></td>
+                                        <td className="px-1 py-1 text-right">
+                                            <div className="flex flex-col gap-0.5 justify-center h-full text-[9px]">
+                                                <div className="flex items-center justify-between gap-2 text-slate-500">
+                                                    <span>Max Est:</span>
+                                                    <span className="font-mono">{subtotalMaxEstDate ? subtotalMaxEstDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-2 text-slate-600 font-bold">
+                                                    <span>Max Plan:</span>
+                                                    <span className="font-mono">{subtotalMaxPlanDate ? subtotalMaxPlanDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-1 text-center border-r border-slate-200">
+                                            <span className={`text-xs font-mono ${subtotalVarianceClass}`}>{subtotalVarianceText}</span>
+                                        </td>
+                                    </tr>
+                                )
+                            })()}
                         </React.Fragment>
                     );
                 })}
@@ -617,21 +715,20 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
             <tfoot className="bg-slate-100 font-semibold text-[10px] border-t-2 border-slate-300 sticky bottom-0 z-20 shadow-[0_-2px_4px_rgba(0,0,0,0.05)]">
                  <tr className="bg-slate-200 text-slate-800 font-bold">
                     <td colSpan={2} className="px-2 py-2 text-right uppercase">Grand Total</td>
-                    <td className="text-center">{totals.refFP}</td>
+                    <td className="text-center" colSpan={4}></td>
+                    <td className="text-center">{totals.totalPrepEffort}</td>
+                    <td className="text-center text-amber-800 border-r border-slate-300">{formatWeeks(totals.totalPrepDuration)}</td>
+                    <td className="text-center">{totals.totalFeFP}</td>
                     <td colSpan={3} className="text-center text-slate-400">-</td>
-                    <td className="text-center">{totals.prepEffort}</td>
-                    <td className="text-center text-amber-800 border-r border-slate-300">{formatWeeks(totals.prepDuration)}</td>
-                    <td className="text-center">{totals.feFP}</td>
+                    <td className="text-center">{totals.totalFeEffort}</td>
+                    <td className="text-center text-blue-800 border-r border-slate-300">{formatWeeks(totals.totalFeDuration)}</td>
+                    <td className="text-center">{totals.totalBeFP}</td>
                     <td colSpan={3} className="text-center text-slate-400">-</td>
-                    <td className="text-center">{totals.feEffort}</td>
-                    <td className="text-center text-blue-800 border-r border-slate-300">{formatWeeks(totals.feDuration)}</td>
-                    <td className="text-center">{totals.beFP}</td>
-                    <td colSpan={3} className="text-center text-slate-400">-</td>
-                    <td className="text-center">{totals.beEffort}</td>
-                    <td className="text-center text-indigo-800 border-r border-slate-300">{formatWeeks(totals.beDuration)}</td>
+                    <td className="text-center">{totals.totalBeEffort}</td>
+                    <td className="text-center text-indigo-800 border-r border-slate-300">{formatWeeks(totals.totalBeDuration)}</td>
                     <td className="text-center text-slate-400">-</td>
                     <td className="px-1 py-1 text-right"><div className="flex flex-col gap-0.5 justify-center h-full"><div className="flex items-center justify-between gap-2 text-[9px] text-slate-500 border-b border-slate-300/50 pb-0.5"><span>Max Est:</span><span className="font-mono">{totals.projectMaxEstDate ? totals.projectMaxEstDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div><div className="flex items-center justify-between gap-2 text-[10px]"><span>Max Plan:</span><span className="font-mono">{totals.projectMaxPlanDate ? totals.projectMaxPlanDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div></div></td>
-                    <td className="px-1 text-center">{(() => { const days = totals.totalVarianceDays; let varianceClass = 'text-slate-500'; let varianceText = '-'; if (days !== 0) { const sign = days > 0 ? '+' : ''; varianceText = `${sign}${days}d`; if (days > 0) varianceClass = 'text-red-700'; else varianceClass = 'text-green-700'; } else if (totals.projectMaxEstDate) { varianceText = '0d'; varianceClass = 'text-green-700'; } return <span className={`text-xs font-mono ${varianceClass}`}>{varianceText}</span>; })()}</td>
+                    <td className="px-1 text-center">{(() => { const days = totals.totalVarianceDays; let varianceClass = 'text-slate-500'; let varianceText = '-'; if (days !== 0) { const sign = days > 0 ? '+' : ''; varianceText = `${sign}${days}d`; if (days > 0) varianceClass = 'text-red-700'; else varianceClass = 'text-green-700'; } else if (totals.projectMaxEstDate && totals.projectMaxPlanDate) { varianceText = '0d'; varianceClass = 'text-green-700'; } return <span className={`text-xs font-mono ${varianceClass}`}>{varianceText}</span>; })()}</td>
                 </tr>
             </tfoot>
         </table>
