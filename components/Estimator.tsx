@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, ProjectModule, ComplexityLevel, Holiday, Role, ProjectTask, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { Calculator, GripVertical, ChevronRight, ChevronDown, Calendar as CalendarIcon, Link2, AlertCircle, CheckCircle2, Layers, Gem, ShieldCheck, Dot, Rocket, Server, Trash2 } from 'lucide-react';
@@ -291,6 +292,63 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
     return { refFP: totalRefFP, feFP: totalFeFP, beFP: totalBeFP, prepEffort: totalPrepEffort, feEffort: totalFeEffort, beEffort: totalBeEffort, prepDuration: totalPrepDuration, feDuration: totalFeDuration, beDuration: totalBeDuration, projectMaxEstDate, projectMaxPlanDate, totalVarianceDays };
   }, [modules, holidaySet, allTasksMap]);
 
+  const groupedTotals = useMemo(() => {
+    const subtotals: Record<string, any> = {};
+
+    modules.forEach(m => {
+        const moduleType = m.type || ModuleType.Development;
+
+        if (!subtotals[moduleType]) {
+            subtotals[moduleType] = { refFP: 0, feFP: 0, beFP: 0, prepEffort: 0, feEffort: 0, beEffort: 0, prepDuration: 0, feDuration: 0, beDuration: 0 };
+        }
+
+        const isDev = moduleType === ModuleType.Development;
+        
+        const prepFP = !isDev ? m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0) : 0;
+        subtotals[moduleType].refFP += prepFP;
+        
+        let modulePrepEffort = 0;
+        if (!isDev) { m.tasks.forEach(t => { const taskVel = t.frontendVelocity ?? m.prepVelocity ?? 10; const taskComp = t.frontendComplexity ?? m.complexity ?? 'Medium'; modulePrepEffort += (t.frontendFunctionPoints ?? 0) > 0 ? Math.ceil(((t.frontendFunctionPoints ?? 0) / taskVel) * COMPLEXITY_MULTIPLIERS[taskComp]) : 0; }); }
+        const prepTeamSize = m.prepTeamSize || 2;
+        const prepDuration = modulePrepEffort > 0 ? Math.ceil(modulePrepEffort / prepTeamSize) : 0;
+        subtotals[moduleType].prepEffort += modulePrepEffort;
+        subtotals[moduleType].prepDuration += prepDuration;
+        
+        let moduleFeEffort = 0, moduleBeEffort = 0;
+        if (isDev) {
+            const feFP = m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0);
+            const beFP = m.tasks.reduce((s, t) => s + (t.backendFunctionPoints || 0), 0);
+            subtotals[moduleType].feFP += feFP;
+            subtotals[moduleType].beFP += beFP;
+
+            m.tasks.forEach(t => { 
+                const taskFeVel = t.frontendVelocity ?? m.frontendVelocity ?? 5; 
+                const taskFeComp = t.frontendComplexity ?? m.frontendComplexity ?? 'Medium'; 
+                moduleFeEffort += (t.frontendFunctionPoints ?? 0) > 0 ? Math.ceil(((t.frontendFunctionPoints ?? 0) / taskFeVel) * COMPLEXITY_MULTIPLIERS[taskFeComp]) : 0; 
+                
+                const taskBeVel = t.backendVelocity ?? m.backendVelocity ?? 5; 
+                const taskBeComp = t.backendComplexity ?? m.backendComplexity ?? 'Medium'; 
+                moduleBeEffort += (t.backendFunctionPoints ?? 0) > 0 ? Math.ceil(((t.backendFunctionPoints ?? 0) / taskBeVel) * COMPLEXITY_MULTIPLIERS[taskBeComp]) : 0; 
+            }); 
+            const feTeam = m.frontendTeamSize || 2; 
+            const feDuration = moduleFeEffort > 0 ? Math.ceil(moduleFeEffort / feTeam) : 0;
+            const beTeam = m.backendTeamSize || 2; 
+            const beDuration = moduleBeEffort > 0 ? Math.ceil(moduleBeEffort / beTeam) : 0;
+
+            subtotals[moduleType].feEffort += moduleFeEffort;
+            subtotals[moduleType].beEffort += moduleBeEffort;
+            subtotals[moduleType].feDuration += feDuration;
+            subtotals[moduleType].beDuration += beDuration;
+        }
+    });
+
+    return Object.entries(subtotals).sort(([typeA], [typeB]) => {
+      const order = Object.values(ModuleType);
+      return order.indexOf(typeA as ModuleType) - order.indexOf(typeB as ModuleType);
+    });
+  }, [modules]);
+
+
   const toggleModuleExpansion = (moduleId: string) => {
     setExpandedModules(prev => ({ ...prev, [moduleId]: !prev[moduleId] }));
   };
@@ -531,24 +589,42 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     );
                 })}
             </tbody>
-            <tfoot className="bg-slate-50 font-semibold text-[10px] border-t border-slate-200 sticky bottom-0 z-20 shadow-[0_-2px_4px_rgba(0,0,0,0.05)]">
-                 <tr>
-                    <td colSpan={2} className="px-2 py-2 text-right text-slate-500 uppercase">Totals</td>
-                    <td className="text-center text-slate-700">{totals.refFP}</td>
-                    <td colSpan={3} className="text-center text-slate-300">-</td>
-                    <td className="text-center text-slate-700">{totals.prepEffort}</td>
-                    <td className="text-center text-amber-700 border-r border-slate-300">{formatWeeks(totals.prepDuration)}</td>
-                    <td className="text-center text-slate-700">{totals.feFP}</td>
-                    <td colSpan={3} className="text-center text-slate-300">-</td>
-                    <td className="text-center text-slate-700">{totals.feEffort}</td>
-                    <td className="text-center text-blue-700 border-r border-slate-300">{formatWeeks(totals.feDuration)}</td>
-                    <td className="text-center text-slate-700">{totals.beFP}</td>
-                    <td colSpan={3} className="text-center text-slate-300">-</td>
-                    <td className="text-center text-slate-700">{totals.beEffort}</td>
-                    <td className="text-center text-indigo-700 border-r border-slate-300">{formatWeeks(totals.beDuration)}</td>
-                    <td className="text-center text-slate-400 border-b border-slate-200 bg-slate-50">-</td>
-                    <td className="px-1 py-1 border-b border-slate-200 bg-slate-50 text-right"><div className="flex flex-col gap-0.5 justify-center h-full"><div className="flex items-center justify-between gap-2 text-[9px] text-slate-400 border-b border-slate-200/50 pb-0.5"><span>Max Est:</span><span className="font-mono">{totals.projectMaxEstDate ? totals.projectMaxEstDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div><div className="flex items-center justify-between gap-2 text-[10px] font-bold text-slate-700"><span>Max Plan:</span><span className="font-mono">{totals.projectMaxPlanDate ? totals.projectMaxPlanDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div></div></td>
-                    <td className="px-1 border-b border-slate-200 bg-slate-50 text-center">{(() => { const days = totals.totalVarianceDays; let varianceClass = 'text-slate-300'; let varianceText = '-'; if (days !== 0) { const sign = days > 0 ? '+' : ''; varianceText = `${sign}${days}d`; if (days > 0) varianceClass = 'text-red-600 font-bold'; else varianceClass = 'text-green-600 font-bold'; } else { varianceText = '0d'; varianceClass = 'text-green-600 font-bold'; } return <span className={`text-[10px] font-mono ${varianceClass}`}>{varianceText}</span>; })()}</td>
+            <tfoot className="bg-slate-100 font-semibold text-[10px] border-t-2 border-slate-300 sticky bottom-0 z-20 shadow-[0_-2px_4px_rgba(0,0,0,0.05)]">
+                {groupedTotals.map(([type, subtotal]) => (
+                    <tr key={type} className="bg-slate-100 border-b border-slate-200">
+                        <td colSpan={2} className="px-2 py-1.5 text-right text-slate-500 uppercase">{MODULE_TYPE_DISPLAY_NAMES[type as ModuleType]}<br/>Sub-total</td>
+                        <td className="text-center text-slate-700">{subtotal.refFP || '-'}</td>
+                        <td colSpan={3} className="text-center text-slate-300">-</td>
+                        <td className="text-center text-slate-700">{subtotal.prepEffort || '-'}</td>
+                        <td className="text-center text-amber-700 border-r border-slate-200">{formatWeeks(subtotal.prepDuration)}</td>
+                        <td className="text-center text-slate-700">{subtotal.feFP || '-'}</td>
+                        <td colSpan={3} className="text-center text-slate-300">-</td>
+                        <td className="text-center text-slate-700">{subtotal.feEffort || '-'}</td>
+                        <td className="text-center text-blue-700 border-r border-slate-200">{formatWeeks(subtotal.feDuration)}</td>
+                        <td className="text-center text-slate-700">{subtotal.beFP || '-'}</td>
+                        <td colSpan={3} className="text-center text-slate-300">-</td>
+                        <td className="text-center text-slate-700">{subtotal.beEffort || '-'}</td>
+                        <td className="text-center text-indigo-700 border-r border-slate-200">{formatWeeks(subtotal.beDuration)}</td>
+                        <td colSpan={3} className="border-r border-slate-200"></td>
+                    </tr>
+                ))}
+                 <tr className="bg-slate-200 text-slate-800 font-bold">
+                    <td colSpan={2} className="px-2 py-2 text-right uppercase">Grand Total</td>
+                    <td className="text-center">{totals.refFP}</td>
+                    <td colSpan={3} className="text-center text-slate-400">-</td>
+                    <td className="text-center">{totals.prepEffort}</td>
+                    <td className="text-center text-amber-800 border-r border-slate-300">{formatWeeks(totals.prepDuration)}</td>
+                    <td className="text-center">{totals.feFP}</td>
+                    <td colSpan={3} className="text-center text-slate-400">-</td>
+                    <td className="text-center">{totals.feEffort}</td>
+                    <td className="text-center text-blue-800 border-r border-slate-300">{formatWeeks(totals.feDuration)}</td>
+                    <td className="text-center">{totals.beFP}</td>
+                    <td colSpan={3} className="text-center text-slate-400">-</td>
+                    <td className="text-center">{totals.beEffort}</td>
+                    <td className="text-center text-indigo-800 border-r border-slate-300">{formatWeeks(totals.beDuration)}</td>
+                    <td className="text-center text-slate-400">-</td>
+                    <td className="px-1 py-1 text-right"><div className="flex flex-col gap-0.5 justify-center h-full"><div className="flex items-center justify-between gap-2 text-[9px] text-slate-500 border-b border-slate-300/50 pb-0.5"><span>Max Est:</span><span className="font-mono">{totals.projectMaxEstDate ? totals.projectMaxEstDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div><div className="flex items-center justify-between gap-2 text-[10px]"><span>Max Plan:</span><span className="font-mono">{totals.projectMaxPlanDate ? totals.projectMaxPlanDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div></div></td>
+                    <td className="px-1 text-center">{(() => { const days = totals.totalVarianceDays; let varianceClass = 'text-slate-500'; let varianceText = '-'; if (days !== 0) { const sign = days > 0 ? '+' : ''; varianceText = `${sign}${days}d`; if (days > 0) varianceClass = 'text-red-700'; else varianceClass = 'text-green-700'; } else if (totals.projectMaxEstDate) { varianceText = '0d'; varianceClass = 'text-green-700'; } return <span className={`text-xs font-mono ${varianceClass}`}>{varianceText}</span>; })()}</td>
                 </tr>
             </tfoot>
         </table>
@@ -557,7 +633,9 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         <div style={{ top: contextMenu.y, left: contextMenu.x }} className="absolute z-50 bg-white shadow-xl rounded-md border border-slate-200 p-1 animate-in fade-in">
           <button
             onClick={() => {
-              onDeleteModule(selectedProjectId, contextMenu.moduleId);
+              if (window.confirm('Are you sure you want to delete this module?')) {
+                onDeleteModule(selectedProjectId, contextMenu.moduleId);
+              }
               setContextMenu(null);
             }}
             className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"
