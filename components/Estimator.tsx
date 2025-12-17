@@ -192,6 +192,9 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
       return maxEndDate;
   };
 
+  const getModuleLatestEndDate = (module: ProjectModule): Date | null => { let maxEndDate: Date | null = null; module.tasks.forEach(task => { const taskEndDate = getTaskLatestEndDate(task); if (taskEndDate && (!maxEndDate || taskEndDate > maxEndDate)) { maxEndDate = taskEndDate; } }); return maxEndDate; }
+  const getModuleEarliestStartDate = (module: ProjectModule): string | null => { let minDate: string | null = null; module.tasks.forEach(task => { const taskStartDate = getTaskEarliestStartDate(task); if (taskStartDate && (!minDate || taskStartDate < minDate)) { minDate = taskStartDate; } }); return minDate; }
+
   const totals = useMemo(() => {
     let totalRefFP = 0;
     let totalFeFP = 0;
@@ -287,8 +290,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
   const handleDrop = (e: React.DragEvent, index: number) => { if (isReadOnly) return; e.preventDefault(); const startIndex = parseInt(e.dataTransfer.getData("text/plain"), 10); if (!isNaN(startIndex) && startIndex !== index) { onReorderModules(selectedProjectId, startIndex, index); } setDraggedIndex(null); };
 
   const formatWeeks = (days: number) => { if (!days || isNaN(days)) return '0.0w'; const weeks = (days / 5).toFixed(1); return `${weeks}w`; };
-  const getModuleLatestEndDate = (module: ProjectModule): Date | null => { let maxEndDate: Date | null = null; module.tasks.forEach(task => { const taskEndDate = getTaskLatestEndDate(task); if (taskEndDate && (!maxEndDate || taskEndDate > maxEndDate)) { maxEndDate = taskEndDate; } }); return maxEndDate; }
-  const getModuleEarliestStartDate = (module: ProjectModule): string | null => { let minDate: string | null = null; module.tasks.forEach(task => { const taskStartDate = getTaskEarliestStartDate(task); if (taskStartDate && (!minDate || taskStartDate < minDate)) { minDate = taskStartDate; } }); return minDate; }
 
   // --- Estimator Navigation ---
   const handleNavigate = (direction: string, currentRow: number, currentCol: number) => {
