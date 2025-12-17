@@ -10,7 +10,7 @@ import { VersionHistory } from './components/VersionHistory';
 import { DebugLog } from './components/DebugLog';
 import { AdminSettings } from './components/AdminSettings';
 import { AIAssistant } from './components/AIAssistant';
-import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X } from 'lucide-react';
+import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X, Mail } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
@@ -149,12 +149,24 @@ const shiftWeekIdByAmount = (weekId: string, amount: number): string => {
 
 const ShareModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [copied, setCopied] = useState(false);
+  const [email, setEmail] = useState('');
   const shareUrl = `${window.location.origin}${window.location.pathname}?mode=readonly`;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(shareUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleShareViaEmail = () => {
+    if (!email.trim()) return;
+    
+    const subject = encodeURIComponent("Project Plan for OMS Resource Master");
+    const body = encodeURIComponent(
+      `Hi,\n\nPlease find the read-only project plan here:\n${shareUrl}\n\nThanks!`
+    );
+    
+    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
   };
 
   return (
@@ -168,28 +180,56 @@ const ShareModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             <X size={20} />
           </button>
         </div>
-        
-        <p className="text-sm text-slate-600 mb-4">
-          Share this link with your team members to give them <strong>Read-Only</strong> access to the Dashboard, Planner, and Estimator.
-        </p>
 
-        <div className="flex items-center gap-2 mb-4">
-          <input 
-            type="text" 
-            readOnly 
-            value={shareUrl} 
-            className="flex-1 bg-slate-50 border border-slate-300 text-slate-600 text-sm rounded-lg p-2.5 focus:ring-indigo-500 focus:border-indigo-500 block w-full"
-          />
-          <button 
-            onClick={copyToClipboard}
-            className={`p-2.5 rounded-lg border flex items-center justify-center transition-all ${copied ? 'bg-green-50 border-green-200 text-green-600' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'}`}
-            title="Copy to clipboard"
-          >
-            {copied ? <Check size={18} /> : <Copy size={18} />}
-          </button>
+        <div>
+          <label className="text-sm font-medium text-slate-700">Copy Link</label>
+          <p className="text-xs text-slate-500 mb-2">Anyone with the link can view the plan.</p>
+          <div className="flex items-center gap-2">
+            <input 
+              type="text" 
+              readOnly 
+              value={shareUrl} 
+              className="flex-1 bg-slate-50 border border-slate-300 text-slate-600 text-sm rounded-lg p-2.5 focus:ring-indigo-500 focus:border-indigo-500 block w-full"
+            />
+            <button 
+              onClick={copyToClipboard}
+              className={`p-2.5 rounded-lg border flex items-center justify-center transition-all ${copied ? 'bg-green-50 border-green-200 text-green-600' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'}`}
+              title="Copy to clipboard"
+            >
+              {copied ? <Check size={18} /> : <Copy size={18} />}
+            </button>
+          </div>
+        </div>
+        
+        <div className="relative flex py-5 items-center">
+          <div className="flex-grow border-t border-slate-200"></div>
+          <span className="flex-shrink mx-4 text-slate-400 text-xs font-semibold">OR</span>
+          <div className="flex-grow border-t border-slate-200"></div>
         </div>
 
-        <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800">
+        <div>
+          <label className="text-sm font-medium text-slate-700">Invite via Email</label>
+          <p className="text-xs text-slate-500 mb-2">Draft an email with the link to send to a teammate.</p>
+          <div className="flex items-center gap-2">
+            <input 
+              type="email" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="teammate@example.com"
+              className="flex-1 bg-slate-50 border border-slate-300 text-slate-600 text-sm rounded-lg p-2.5 focus:ring-indigo-500 focus:border-indigo-500 block w-full"
+            />
+            <button 
+              onClick={handleShareViaEmail}
+              className="p-2.5 rounded-lg border flex items-center justify-center bg-slate-800 text-white hover:bg-slate-700 transition-colors disabled:opacity-50"
+              title="Open Email Client"
+              disabled={!email.trim()}
+            >
+              <Mail size={18} />
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800 mt-6">
            <strong>Note:</strong> Team members must have access to the underlying project data in the system for this link to populate correctly.
         </div>
         
