@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, ProjectModule, ComplexityLevel, Holiday, Role, ProjectTask, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
-import { Calculator, GripVertical, ChevronRight, ChevronDown, Calendar as CalendarIcon, Link2, AlertCircle, CheckCircle2, Layers, Gem, ShieldCheck, Dot, Rocket, Server } from 'lucide-react';
+import { Calculator, GripVertical, ChevronRight, ChevronDown, Calendar as CalendarIcon, Link2, AlertCircle, CheckCircle2, Layers, Gem, ShieldCheck, Dot, Rocket, Server, Trash2 } from 'lucide-react';
 import { calculateEndDate, formatDateForInput, calculateWorkingDaysBetween } from '../constants';
 
 interface EstimatorProps {
@@ -13,6 +13,7 @@ interface EstimatorProps {
   onUpdateModuleDeliveryTask: (projectId: string, moduleId: string, deliveryTaskId: string | null) => void;
   onUpdateModuleStartTask: (projectId: string, moduleId: string, startTaskId: string | null) => void;
   onReorderModules: (projectId: string, startIndex: number, endIndex: number) => void;
+  onDeleteModule: (projectId: string, moduleId: string) => void;
   isReadOnly?: boolean;
 }
 
@@ -135,11 +136,18 @@ const EstimatorNumberInput: React.FC<EstimatorNumberInputProps> = ({ value, onCh
 };
 
 
-export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateModuleEstimates, onUpdateTaskEstimates, onUpdateModuleComplexity, onUpdateModuleStartDate, onUpdateModuleDeliveryTask, onUpdateModuleStartTask, onReorderModules, isReadOnly = false }) => {
+export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateModuleEstimates, onDeleteModule, onUpdateTaskEstimates, onUpdateModuleComplexity, onUpdateModuleStartDate, onUpdateModuleDeliveryTask, onUpdateModuleStartTask, onReorderModules, isReadOnly = false }) => {
   const [selectedProjectId, setSelectedProjectId] = useState<string>(projects[0]?.id || '');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
-  
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; moduleId: string; } | null>(null);
+
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, []);
+
   const holidaySet = useMemo(() => new Set(
     holidays
         .filter(h => h.country === 'HK')
@@ -434,7 +442,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
 
                     return (
                         <React.Fragment key={m.id}>
-                        <tr draggable={!isReadOnly} onDragStart={(e) => handleDragStart(e, index)} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, index)} className={`hover:bg-slate-50 transition-colors group ${draggedIndex === index ? 'opacity-40' : ''} ${typeStyle.rowBg}`}>
+                        <tr draggable={!isReadOnly} onDragStart={(e) => handleDragStart(e, index)} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, index)} className={`hover:bg-slate-50 transition-colors group ${draggedIndex === index ? 'opacity-40' : ''} ${typeStyle.rowBg}`} onContextMenu={(e) => { if (isReadOnly) return; e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.pageX, y: e.pageY, moduleId: m.id }); }}>
                             <td className="text-center text-slate-300 cursor-grab active:cursor-grabbing border-b border-slate-100"><div className="flex justify-center group-hover:text-slate-500">{!isReadOnly && <GripVertical size={12} />}</div></td>
                             <td className="px-2 py-1.5 border-b border-slate-100 border-r border-slate-200"><div className="flex items-center gap-1.5">{m.tasks.length > 0 && <button onClick={() => toggleModuleExpansion(m.id)} className="p-0.5 rounded hover:bg-black/5">{isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</button>}<Icon size={14} className="text-slate-400" title={MODULE_TYPE_DISPLAY_NAMES[moduleType]} /><span className="font-medium text-slate-700 truncate block w-full" title={m.name}>{m.name}</span></div></td>
                             {/* PREP COLS */}
@@ -545,6 +553,19 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
             </tfoot>
         </table>
       </div>
+      {contextMenu && (
+        <div style={{ top: contextMenu.y, left: contextMenu.x }} className="absolute z-50 bg-white shadow-xl rounded-md border border-slate-200 p-1 animate-in fade-in">
+          <button
+            onClick={() => {
+              onDeleteModule(selectedProjectId, contextMenu.moduleId);
+              setContextMenu(null);
+            }}
+            className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"
+          >
+            <Trash2 size={12} /> Delete Module
+          </button>
+        </div>
+      )}
       <div className="bg-slate-50 border-t border-slate-200 p-2 text-[10px] text-slate-400 text-center flex justify-between items-center px-4"><span>* FE/BE in parallel</span><div className="flex gap-4"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Saved Days (Negative)</span><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Delays (Positive)</span></div></div>
     </div>
   );
