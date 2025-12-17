@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, ProjectModule, ComplexityLevel, Holiday, Role, ProjectTask, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { Calculator, GripVertical, ChevronRight, ChevronDown, Calendar as CalendarIcon, Link2, AlertCircle, CheckCircle2, Layers, Gem, ShieldCheck, Dot, Rocket, Server, Trash2 } from 'lucide-react';
