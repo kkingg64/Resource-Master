@@ -443,73 +443,83 @@ const App: React.FC = () => {
       setLoading(true);
     }
     
-    const userIdToFetch = sharedUserId || session.user.id;
+    let projectsData, modulesData, tasksData, assignmentsData, allocationsData, resourcesData, holidaysData;
 
-    const { data: projectsData, error: projectsError } = await supabase.from('projects').select('*').eq('user_id', userIdToFetch);
-    if (projectsError) { console.error("Error fetching projects", projectsError); setLoading(false); return; }
+    if (sharedUserId) {
+      // --- NEW LOGIC FOR SHARED VIEW ---
+      const { data: sharedData, error: rpcError } = await supabase.rpc('get_shared_plan_data', { user_id_to_fetch: sharedUserId });
 
-    let finalProjectsData = projectsData;
-    // Only create a default project for a new user, not when viewing a shared plan.
-    if (!sharedUserId && projectsData && projectsData.length === 0) {
-      const { data: newProject, error: newProjectError } = await callSupabase(
-        'CREATE default project', { name: 'My First Project' },
-        supabase.from('projects').insert({ name: 'My First Project', user_id: session!.user.id }).select().single()
-      );
-      if (newProject && !newProjectError) { finalProjectsData = [newProject]; }
-    }
-    
-    const projectIds = finalProjectsData.map(p => p.id);
-    let modulesData = [], tasksData = [], assignmentsData = [], allocationsData = [];
-
-    if (projectIds.length > 0) {
-      const { data: modules, error: modulesError } = await supabase.from('modules').select('*').in('project_id', projectIds);
-      if (modulesError) console.error(modulesError); else modulesData = modules;
+      if (rpcError) {
+          console.error("Error fetching shared plan", rpcError);
+          alert("Could not load the shared plan. The link may be invalid, or the database function may not be set up correctly.");
+          setLoading(false);
+          setIsRefreshing(false);
+          return;
+      }
       
-      const moduleIds = modulesData.map(m => m.id);
-      if (moduleIds.length > 0) {
-        const { data: tasks, error: tasksError } = await supabase.from('tasks').select('*').in('module_id', moduleIds);
-        if (tasksError) console.error(tasksError); else tasksData = tasks;
+      projectsData = sharedData.projects || [];
+      modulesData = sharedData.modules || [];
+      tasksData = sharedData.tasks || [];
+      assignmentsData = sharedData.assignments || [];
+      allocationsData = sharedData.allocations || [];
+      resourcesData = sharedData.resources || [];
+      holidaysData = sharedData.holidays || [];
 
-        const taskIds = tasksData.map(t => t.id);
-        if (taskIds.length > 0) {
-          const { data: assignments, error: assignmentsError } = await supabase.from('task_assignments').select('*').in('task_id', taskIds);
-          if (assignmentsError) console.error(assignmentsError); else assignmentsData = assignments;
-          
-          const assignmentIds = assignmentsData.map(a => a.id);
-          if (assignmentIds.length > 0) {
-            const { data: allocations, error: allocationsError } = await supabase.from('resource_allocations').select('*').in('assignment_id', assignmentIds);
-            if (allocationsError) console.error(allocationsError); else allocationsData = allocations;
+    } else {
+      // --- EXISTING LOGIC FOR USER'S OWN DATA ---
+      const userIdToFetch = session.user.id;
+      const { data: pData, error: pError } = await supabase.from('projects').select('*').eq('user_id', userIdToFetch);
+      if (pError) { console.error("Error fetching projects", pError); setLoading(false); return; }
+      projectsData = pData;
+
+      if (projectsData && projectsData.length === 0) {
+        const { data: newProject, error: newProjectError } = await callSupabase( 'CREATE default project', { name: 'My First Project' }, supabase.from('projects').insert({ name: 'My First Project', user_id: session!.user.id }).select().single() );
+        if (newProject && !newProjectError) { projectsData = [newProject]; }
+      }
+      
+      const projectIds = projectsData.map(p => p.id);
+      modulesData = [], tasksData = [], assignmentsData = [], allocationsData = [];
+
+      if (projectIds.length > 0) {
+        const { data: modules, error: modulesError } = await supabase.from('modules').select('*').in('project_id', projectIds);
+        if (modulesError) console.error(modulesError); else modulesData = modules;
+        
+        const moduleIds = modulesData.map(m => m.id);
+        if (moduleIds.length > 0) {
+          const { data: tasks, error: tasksError } = await supabase.from('tasks').select('*').in('module_id', moduleIds);
+          if (tasksError) console.error(tasksError); else tasksData = tasks;
+
+          const taskIds = tasksData.map(t => t.id);
+          if (taskIds.length > 0) {
+            const { data: assignments, error: assignmentsError } = await supabase.from('task_assignments').select('*').in('task_id', taskIds);
+            if (assignmentsError) console.error(assignmentsError); else assignmentsData = assignments;
+            
+            const assignmentIds = assignmentsData.map(a => a.id);
+            if (assignmentIds.length > 0) {
+              const { data: allocations, error: allocationsError } = await supabase.from('resource_allocations').select('*').in('assignment_id', assignmentIds);
+              if (allocationsError) console.error(allocationsError); else allocationsData = allocations;
+            }
           }
         }
       }
+      
+      const { data: resData, error: resError } = await supabase.from('resources').select('*, individual_holidays(*)').eq('user_id', userIdToFetch).order('name');
+      if (resError) console.error(resError);
+      resourcesData = resData || [];
+
+      const { data: holData, error: holError } = await supabase.from('holidays').select('*').eq('user_id', userIdToFetch);
+      if (holError) console.error(holError);
+      holidaysData = holData || [];
     }
     
-    const { data: resourcesData, error: resourcesError } = await supabase
-      .from('resources')
-      .select('*, individual_holidays(*)')
-      .eq('user_id', userIdToFetch)
-      .order('name');
+    const structuredProjects = structureProjectsData(projectsData, modulesData, tasksData, assignmentsData, allocationsData);
     
-    if (resourcesError) console.error(resourcesError);
-    const freshResources = resourcesData || [];
-
-    const { data: holidaysData, error: holidaysError } = await supabase
-      .from('holidays')
-      .select('*')
-      .eq('user_id', userIdToFetch);
-      
-    if (holidaysError) console.error(holidaysError);
-    const freshHolidays = holidaysData || [];
-    
-    const structuredProjects = structureProjectsData(finalProjectsData, modulesData, tasksData, assignmentsData, allocationsData);
-    
-    // Set state after all data is fetched and processed
-    setHolidays(freshHolidays);
-    setResources(freshResources);
+    setHolidays(holidaysData);
+    // Ensure individual_holidays is always an array, even if null from DB
+    setResources(resourcesData.map((r: any) => ({...r, individual_holidays: r.individual_holidays || []})));
     setProjects(structuredProjects);
     
-    // Calculate timeline bounds using the fresh data
-    calculateTimelineBounds(structuredProjects, freshResources, freshHolidays);
+    calculateTimelineBounds(structuredProjects, resourcesData, holidaysData);
 
     if (isRefresh) setIsRefreshing(false);
     else setLoading(false);
