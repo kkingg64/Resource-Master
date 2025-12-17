@@ -1581,7 +1581,7 @@ const App: React.FC = () => {
        </aside>
 
        {/* Main Content */}
-       <main className="flex-1 flex flex-col min-w-0 h-full bg-white relative overflow-y-auto custom-scrollbar">
+       <main className="flex-1 flex flex-col min-w-0 h-full bg-white relative overflow-hidden">
           <div className="flex-1 p-4 relative">
             {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
             
