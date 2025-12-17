@@ -147,10 +147,10 @@ const shiftWeekIdByAmount = (weekId: string, amount: number): string => {
     return `${newPoint.year}-${String(newPoint.week).padStart(2, '0')}`;
 };
 
-const ShareModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+const ShareModal: React.FC<{ onClose: () => void, session: any }> = ({ onClose, session }) => {
   const [copied, setCopied] = useState(false);
   const [email, setEmail] = useState('');
-  const shareUrl = `${window.location.origin}${window.location.pathname}?mode=readonly`;
+  const shareUrl = `${window.location.origin}${window.location.pathname}?share=${session.user.id}`;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(shareUrl);
@@ -183,7 +183,9 @@ const ShareModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
         <div>
           <label className="text-sm font-medium text-slate-700">Copy Link</label>
-          <p className="text-xs text-slate-500 mb-2">Anyone with the link can view the plan.</p>
+          <p className="text-xs text-slate-500 mb-2">
+            Share this unique link with your team members. It will give them <strong>Read-Only</strong> access to your project plan.
+          </p>
           <div className="flex items-center gap-2">
             <input 
               type="text" 
@@ -230,7 +232,7 @@ const ShareModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </div>
 
         <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800 mt-6">
-           <strong>Note:</strong> Team members must have access to the underlying project data in the system for this link to populate correctly.
+           <strong>Note:</strong> Team members will need to be logged into the application to view the shared plan.
         </div>
         
         <div className="mt-6 flex justify-end">
@@ -266,13 +268,16 @@ const App: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
   
-  // Read Only Mode Logic
+  // Read Only Mode & Sharing Logic
   const [isReadOnlyMode, setIsReadOnlyMode] = useState(false);
+  const [sharedUserId, setSharedUserId] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('mode') === 'readonly') {
+    const shareId = params.get('share');
+    if (shareId) {
         setIsReadOnlyMode(true);
+        setSharedUserId(shareId);
     }
   }, []);
   
@@ -350,7 +355,7 @@ const App: React.FC = () => {
     if (session) {
       fetchData(false);
     }
-  }, [session]);
+  }, [session, sharedUserId]); // Re-fetch if sharedUserId changes
 
   const calculateTimelineBounds = (currentProjects: Project[], currentResources: Resource[], currentHolidays: Holiday[]) => {
     if (currentProjects.length === 0) {
@@ -431,19 +436,21 @@ const App: React.FC = () => {
   };
   
   const fetchData = async (isRefresh: boolean = false) => {
-    // ... existing fetchData ...
     if (!session) return;
     if (isRefresh) {
       setIsRefreshing(true);
     } else {
       setLoading(true);
     }
+    
+    const userIdToFetch = sharedUserId || session.user.id;
 
-    const { data: projectsData, error: projectsError } = await supabase.from('projects').select('*').eq('user_id', session.user.id);
+    const { data: projectsData, error: projectsError } = await supabase.from('projects').select('*').eq('user_id', userIdToFetch);
     if (projectsError) { console.error("Error fetching projects", projectsError); setLoading(false); return; }
 
     let finalProjectsData = projectsData;
-    if (projectsData && projectsData.length === 0) {
+    // Only create a default project for a new user, not when viewing a shared plan.
+    if (!sharedUserId && projectsData && projectsData.length === 0) {
       const { data: newProject, error: newProjectError } = await callSupabase(
         'CREATE default project', { name: 'My First Project' },
         supabase.from('projects').insert({ name: 'My First Project', user_id: session!.user.id }).select().single()
@@ -480,7 +487,7 @@ const App: React.FC = () => {
     const { data: resourcesData, error: resourcesError } = await supabase
       .from('resources')
       .select('*, individual_holidays(*)')
-      .eq('user_id', session.user.id)
+      .eq('user_id', userIdToFetch)
       .order('name');
     
     if (resourcesError) console.error(resourcesError);
@@ -489,7 +496,7 @@ const App: React.FC = () => {
     const { data: holidaysData, error: holidaysError } = await supabase
       .from('holidays')
       .select('*')
-      .eq('user_id', session.user.id);
+      .eq('user_id', userIdToFetch);
       
     if (holidaysError) console.error(holidaysError);
     const freshHolidays = holidaysData || [];
@@ -1709,7 +1716,7 @@ const App: React.FC = () => {
        {/* Modals & Overlays */}
        {isAIEnabled && <AIAssistant projects={projects} resources={resources} onAddTask={addTask} onAssignResource={updateAssignmentResourceName} />}
        {isDebugLogEnabled && <DebugLog entries={logEntries} setEntries={setLogEntries} />}
-       {showShareModal && <ShareModal onClose={() => setShowShareModal(false)} />}
+       {showShareModal && <ShareModal onClose={() => setShowShareModal(false)} session={session} />}
        {showHistory && <VersionHistory onClose={() => setShowHistory(false)} onRestore={restoreVersion} onSaveCurrent={saveCurrentVersion} />}
     </div>
   );
