@@ -55,6 +55,7 @@ export interface ProjectTask {
   id: string;
   name: string;
   assignments: TaskAssignment[];
+  startDate?: string; // Manual Start Date Override for Estimator
   sort_order?: number;
   frontendFunctionPoints?: number;
   backendFunctionPoints?: number;

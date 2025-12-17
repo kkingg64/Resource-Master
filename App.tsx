@@ -63,6 +63,7 @@ const structureProjectsData = (
     tasksByModule.get(t.module_id)!.push({
       id: t.id,
       name: t.name,
+      startDate: t.start_date,
       sort_order: t.sort_order,
       frontendFunctionPoints: t.frontend_function_points || 0,
       backendFunctionPoints: t.backend_function_points || 0,
