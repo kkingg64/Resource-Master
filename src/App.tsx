@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 // FIX: Corrected import paths to be relative to the `src` directory.
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from '../constants';
@@ -64,6 +65,7 @@ const structureProjectsData = (
     tasksByModule.get(t.module_id)!.push({
       id: t.id,
       name: t.name,
+      startDate: t.start_date,
       sort_order: t.sort_order,
       frontendFunctionPoints: t.frontend_function_points || 0,
       backendFunctionPoints: t.backend_function_points || 0,
@@ -1391,24 +1393,36 @@ const App: React.FC = () => {
     }
   };
 
-  const updateModuleComplexity = async (projectId: string, moduleId: string, type: 'frontend' | 'backend', complexity: ComplexityLevel) => {
-      if (isReadOnlyMode) return;
+  // FIX: Added 'prep' to the type definition and implemented logic to handle it for state and database updates.
+  const updateModuleComplexity = async (projectId: string, moduleId: string, type: 'frontend' | 'backend' | 'prep', complexity: ComplexityLevel) => {
+    if (isReadOnlyMode) return;
       setProjects(prev => prev.map(p => {
           if(p.id !== projectId) return p;
           return {
               ...p,
               modules: p.modules.map(m => {
                   if(m.id !== moduleId) return m;
-                  const updates = type === 'frontend' ? { frontendComplexity: complexity } : { backendComplexity: complexity };
-                  return { ...m, ...updates };
+                  if (type === 'frontend') {
+                    return { ...m, frontendComplexity: complexity };
+                  } else if (type === 'backend') {
+                    return { ...m, backendComplexity: complexity };
+                  } else if (type === 'prep') {
+                    return { ...m, complexity: complexity };
+                  }
+                  return m;
               })
           };
       }));
       
+      const dbFieldMap = {
+        frontend: 'frontend_complexity',
+        backend: 'backend_complexity',
+        prep: 'complexity',
+      };
+      const dbField = dbFieldMap[type];
+
       await callSupabase('UPDATE module complexity', { moduleId, type, complexity }, 
-          supabase.from('modules').update({ 
-              [type === 'frontend' ? 'frontend_complexity' : 'backend_complexity']: complexity 
-          }).eq('id', moduleId)
+          supabase.from('modules').update({ [dbField]: complexity }).eq('id', moduleId)
       );
   };
 

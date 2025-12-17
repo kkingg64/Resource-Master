@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType } from './types';
@@ -1391,17 +1392,22 @@ const App: React.FC = () => {
     }
   };
 
+  // FIX: Added 'prep' to the type definition and implemented logic to handle it for state and database updates.
   const updateModuleComplexity = async (projectId: string, moduleId: string, type: 'frontend' | 'backend' | 'prep', complexity: ComplexityLevel) => {
-      if (isReadOnlyMode) return;
+    if (isReadOnlyMode) return;
       setProjects(prev => prev.map(p => {
           if(p.id !== projectId) return p;
           return {
               ...p,
               modules: p.modules.map(m => {
                   if(m.id !== moduleId) return m;
-                  if (type === 'frontend') return { ...m, frontendComplexity: complexity };
-                  if (type === 'backend') return { ...m, backendComplexity: complexity };
-                  if (type === 'prep') return { ...m, complexity: complexity };
+                  if (type === 'frontend') {
+                    return { ...m, frontendComplexity: complexity };
+                  } else if (type === 'backend') {
+                    return { ...m, backendComplexity: complexity };
+                  } else if (type === 'prep') {
+                    return { ...m, complexity: complexity };
+                  }
                   return m;
               })
           };
