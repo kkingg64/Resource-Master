@@ -1582,7 +1582,7 @@ const App: React.FC = () => {
 
        {/* Main Content */}
        <main className="flex-1 flex flex-col min-w-0 h-full bg-white relative overflow-hidden">
-          <div className="flex-1 p-4 flex flex-col relative">
+          <div className="flex-1 p-4 flex flex-col relative min-h-0">
             {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
             
             {activeTab === 'planner' && <PlannerGrid 
