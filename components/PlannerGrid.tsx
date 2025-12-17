@@ -1076,7 +1076,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           </div>
         </div>
 
-        <div className="overflow-x-auto custom-scrollbar flex-1 relative">
+        <div className="overflow-auto custom-scrollbar flex-1 relative">
            {displayMode === 'gantt' && (
             <DependencyLines 
               allAssignmentsMap={allAssignmentsMap}

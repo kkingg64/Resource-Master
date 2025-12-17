@@ -979,6 +979,7 @@ const App: React.FC = () => {
           
           if (dayDate) {
                if (!allocation.days) allocation.days = {};
+               // FIX: Use the 'dayDate' parameter instead of the undefined 'dateStr'.
                allocation.days[dayDate] = count; 
                allocation.count = Object.values(allocation.days).reduce((sum, val) => sum + val, 0);
           } else {
@@ -1412,6 +1413,7 @@ const App: React.FC = () => {
         );
       }
 
+      // FIX: Use a type guard with filter to ensure TypeScript knows nulls are removed.
       const modulePayloads = Array.from(modulesToRecalculate).map(modId => {
         const mod = newProjects.flatMap(p => p.modules).find(m => m.id === modId);
         if (mod && mod.type === ModuleType.Development) {
@@ -1423,7 +1425,7 @@ const App: React.FC = () => {
           };
         }
         return null;
-      }).filter(Boolean);
+      }).filter((p): p is NonNullable<typeof p> => p !== null);
 
       if (modulePayloads.length > 0) {
         await callSupabase('UPDATE module aggregated FP (batch)', { count: modulePayloads.length },
@@ -1558,13 +1560,15 @@ const App: React.FC = () => {
             <button onClick={() => setActiveTab('resources')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'resources' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Resources">
                <Users size={20} /> {!isSidebarCollapsed && <span>Resources</span>}
             </button>
-            <button onClick={() => setActiveTab('holidays')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'holidays' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Holidays">
-               <Globe size={20} /> {!isSidebarCollapsed && <span>Holidays</span>}
-            </button>
-            <div className="h-px bg-slate-800 my-2 mx-2"></div>
-            <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Settings">
-               <SettingsIcon size={20} /> {!isSidebarCollapsed && <span>Settings</span>}
-            </button>
+            {!isReadOnlyMode && <>
+              <button onClick={() => setActiveTab('holidays')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'holidays' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Holidays">
+                <Globe size={20} /> {!isSidebarCollapsed && <span>Holidays</span>}
+              </button>
+              <div className="h-px bg-slate-800 my-2 mx-2"></div>
+              <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Settings">
+                <SettingsIcon size={20} /> {!isSidebarCollapsed && <span>Settings</span>}
+              </button>
+            </>}
           </nav>
           
           <div className="p-2 border-t border-slate-800">
@@ -1650,14 +1654,14 @@ const App: React.FC = () => {
               isReadOnly={isReadOnlyMode}
             />}
             
-            {activeTab === 'settings' && <Settings 
+            {!isReadOnlyMode && activeTab === 'settings' && <Settings 
               isDebugLogEnabled={isDebugLogEnabled}
               setIsDebugLogEnabled={setIsDebugLogEnabled}
               isAIEnabled={isAIEnabled}
               setIsAIEnabled={setIsAIEnabled}
             />}
             
-            {activeTab === 'holidays' && <AdminSettings 
+            {!isReadOnlyMode && activeTab === 'holidays' && <AdminSettings 
               holidays={holidays}
               onAddHolidays={addHoliday}
               onDeleteHoliday={deleteHoliday}
@@ -1675,4 +1679,5 @@ const App: React.FC = () => {
   );
 };
 
+// FIX: Add default export to fix module resolution error.
 export default App;
