@@ -246,7 +246,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         
         // Effort & Duration Calculations
         const prepTeamSize = m.prepTeamSize || 2;
-        const prepDuration = modulePrepEffort > 0 ? Math.ceil(modulePrepEffort / prepTeamSize) : 0;
+        const prepDuration = (modulePrepEffort > 0 && prepTeamSize > 0) ? Math.ceil(modulePrepEffort / prepTeamSize) : 0;
 
         let moduleFeEffort = 0, moduleBeEffort = 0;
         if (isDev) { 
@@ -261,9 +261,9 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
             }); 
         }
         const feTeam = m.frontendTeamSize || 2; 
-        const feDuration = moduleFeEffort > 0 ? Math.ceil(moduleFeEffort / feTeam) : 0;
+        const feDuration = (moduleFeEffort > 0 && feTeam > 0) ? Math.ceil(moduleFeEffort / feTeam) : 0;
         const beTeam = m.backendTeamSize || 2; 
-        const beDuration = moduleBeEffort > 0 ? Math.ceil(moduleBeEffort / beTeam) : 0;
+        const beDuration = (moduleBeEffort > 0 && beTeam > 0) ? Math.ceil(moduleBeEffort / beTeam) : 0;
         
         // Delivery Date Calculations
         const totalDuration = Math.max(prepDuration, feDuration, beDuration);
@@ -578,10 +578,13 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                         <td className={`px-1 border-b border-slate-100 text-center align-middle border-r border-slate-200 ${cellBgClass}`}><span className={`text-[10px] font-mono ${varianceClass}`}>{varianceText}</span></td>
                                     </tr>
                                     {isExpanded && m.tasks.map((task, taskIndex) => {
-                                         const taskFeVel = task.frontendVelocity ?? m.frontendVelocity ?? 5; const taskFeTeam = task.frontendTeamSize ?? (task.assignments.length > 0 ? task.assignments.length : m.frontendTeamSize) ?? 2; const taskFeComp = task.frontendComplexity ?? m.frontendComplexity ?? 'Medium'; const taskFeEffort = (task.frontendFunctionPoints ?? 0) > 0 ? Math.ceil(((task.frontendFunctionPoints ?? 0) / taskFeVel) * COMPLEXITY_MULTIPLIERS[taskFeComp]) : 0; const taskFeDuration = taskFeEffort > 0 ? Math.ceil(taskFeEffort / taskFeTeam) : 0;
-                                         const taskBeVel = task.backendVelocity ?? m.backendVelocity ?? 5; const taskBeTeam = task.backendTeamSize ?? (task.assignments.length > 0 ? task.assignments.length : m.backendTeamSize) ?? 2; const taskBeComp = task.backendComplexity ?? m.backendComplexity ?? 'Medium'; const taskBeEffort = (task.backendFunctionPoints ?? 0) > 0 ? Math.ceil(((task.backendFunctionPoints ?? 0) / taskBeVel) * COMPLEXITY_MULTIPLIERS[taskBeComp]) : 0; const taskBeDuration = taskBeEffort > 0 ? Math.ceil(taskBeEffort / taskBeTeam) : 0;
+                                         const taskFeVel = task.frontendVelocity ?? m.frontendVelocity ?? 5; const taskFeTeam = task.frontendTeamSize ?? (task.assignments.length > 0 ? task.assignments.length : m.frontendTeamSize) ?? 2; const taskFeComp = task.frontendComplexity ?? m.frontendComplexity ?? 'Medium'; const taskFeEffort = (task.frontendFunctionPoints ?? 0) > 0 ? Math.ceil(((task.frontendFunctionPoints ?? 0) / taskFeVel) * COMPLEXITY_MULTIPLIERS[taskFeComp]) : 0; 
+                                         const taskFeDuration = (taskFeEffort > 0 && taskFeTeam > 0) ? Math.ceil(taskFeEffort / taskFeTeam) : 0;
+                                         const taskBeVel = task.backendVelocity ?? m.backendVelocity ?? 5; const taskBeTeam = task.backendTeamSize ?? (task.assignments.length > 0 ? task.assignments.length : m.backendTeamSize) ?? 2; const taskBeComp = task.backendComplexity ?? m.backendComplexity ?? 'Medium'; const taskBeEffort = (task.backendFunctionPoints ?? 0) > 0 ? Math.ceil(((task.backendFunctionPoints ?? 0) / taskBeVel) * COMPLEXITY_MULTIPLIERS[taskBeComp]) : 0; 
+                                         const taskBeDuration = (taskBeEffort > 0 && taskBeTeam > 0) ? Math.ceil(taskBeEffort / taskBeTeam) : 0;
                                          
-                                         const taskPrepVel = task.frontendVelocity ?? m.prepVelocity ?? 10; const taskPrepTeam = task.frontendTeamSize ?? (task.assignments.length > 0 ? task.assignments.length : m.prepTeamSize) ?? 2; const taskPrepComp = task.frontendComplexity ?? m.complexity ?? 'Medium'; const taskPrepEffort = (task.frontendFunctionPoints ?? 0) > 0 ? Math.ceil(((task.frontendFunctionPoints ?? 0) / taskPrepVel) * COMPLEXITY_MULTIPLIERS[taskPrepComp]) : 0; const taskPrepDuration = taskPrepEffort > 0 ? Math.ceil(taskPrepEffort / taskPrepTeam) : 0;
+                                         const taskPrepVel = task.frontendVelocity ?? m.prepVelocity ?? 10; const taskPrepTeam = task.frontendTeamSize ?? (task.assignments.length > 0 ? task.assignments.length : m.prepTeamSize) ?? 2; const taskPrepComp = task.frontendComplexity ?? m.complexity ?? 'Medium'; const taskPrepEffort = (task.frontendFunctionPoints ?? 0) > 0 ? Math.ceil(((task.frontendFunctionPoints ?? 0) / taskPrepVel) * COMPLEXITY_MULTIPLIERS[taskPrepComp]) : 0; 
+                                         const taskPrepDuration = (taskPrepEffort > 0 && taskPrepTeam > 0) ? Math.ceil(taskPrepEffort / taskPrepTeam) : 0;
 
                                          const taskTotalDuration = isDev ? Math.max(taskFeDuration, taskBeDuration) : taskPrepDuration;
                                          const plannerTaskStartDate = getTaskEarliestStartDate(task);
