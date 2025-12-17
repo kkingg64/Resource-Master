@@ -428,6 +428,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const isResizing = useRef(false);
   const resizeData = useRef({ col: '', startX: 0, startWidth: 0 });
 
+  // Use a consistent project-level holiday calendar (HK) for duration calculations.
+  const projectHolidaySet = useMemo(() => new Set(
+    holidays.filter(h => h.country === 'HK').map(h => h.date)
+  ), [holidays]);
+
   // Auto-fit sidebar width based on longest text
   useEffect(() => {
     if (userHasResizedSidebar) return;
@@ -937,7 +942,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     const newTaskId = crypto.randomUUID();
     if (collapsedModules[moduleId]) { toggleModule(moduleId); }
     onAddTask(projectId, moduleId, newTaskId, "New Task", Role.EA);
-    // FIX: Cannot find name 'project'. Did you mean 'projectId'?
     startEditing(`task::${projectId}::${moduleId}::${newTaskId}`, "New Task");
   };
 
@@ -1140,7 +1144,34 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     let moduleEarliestStartDate: string | null = null;
                     let moduleLatestEndDate: Date | null = null;
                     let moduleTotalDuration = 0;
-                    { const allAssignments = module.tasks.flatMap(t => t.assignments); if (allAssignments.length > 0) { let earliestDate: Date | null = null; let latestEndDate: Date | null = null; const moduleHolidays = new Set<string>(); allAssignments.forEach(a => { const resourceName = a.resourceName || 'Unassigned'; const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'); if (resourceHolidayData) { resourceHolidayData.dateSet.forEach(d => moduleHolidays.add(d)); } }); allAssignments.forEach(assignment => { if (!assignment.startDate || !assignment.duration) return; const startDate = new Date(assignment.startDate.replace(/-/g, '/')); if (!earliestDate || startDate < earliestDate) { earliestDate = startDate; } const resourceName = assignment.resourceName || 'Unassigned'; const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>(); const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidays); const endDate = new Date(endDateStr.replace(/-/g, '/')); if (!latestEndDate || endDate > latestEndDate) { latestEndDate = endDate; } }); if (earliestDate && latestEndDate) { moduleEarliestStartDate = formatDateForInput(earliestDate); moduleLatestEndDate = latestEndDate; moduleTotalDuration = calculateWorkingDaysBetween(formatDateForInput(earliestDate), formatDateForInput(latestEndDate), moduleHolidays); } } }
+                    {
+                        const allAssignments = module.tasks.flatMap(t => t.assignments);
+                        if (allAssignments.length > 0) {
+                            let earliestDate: Date | null = null;
+                            let latestEndDate: Date | null = null;
+                            
+                            allAssignments.forEach(assignment => {
+                                if (!assignment.startDate || !assignment.duration) return;
+                                const startDate = new Date(assignment.startDate.replace(/-/g, '/'));
+                                if (!earliestDate || startDate < earliestDate) {
+                                    earliestDate = startDate;
+                                }
+                                const resourceName = assignment.resourceName || 'Unassigned';
+                                const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>();
+                                const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidays);
+                                const endDate = new Date(endDateStr.replace(/-/g, '/'));
+                                if (!latestEndDate || endDate > latestEndDate) {
+                                    latestEndDate = endDate;
+                                }
+                            });
+                            
+                            if (earliestDate && latestEndDate) {
+                                moduleEarliestStartDate = formatDateForInput(earliestDate);
+                                moduleLatestEndDate = latestEndDate;
+                                moduleTotalDuration = calculateWorkingDaysBetween(formatDateForInput(earliestDate), formatDateForInput(latestEndDate), projectHolidaySet);
+                            }
+                        }
+                    }
 
                     return (
                       <div key={module.id} draggable={!isReadOnly} onDragStart={(e) => handleModuleDragStart(e, index)} onDragOver={handleModuleDragOver} onDrop={(e) => handleModuleDrop(e, project.id, module.id, index)} className={`${draggedModuleIndex === index ? 'opacity-50' : 'opacity-100'}`} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'module', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id }); }}>
@@ -1189,8 +1220,30 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           const taskEditId = `task::${project.id}::${module.id}::${task.id}`;
                           const isTaskCollapsed = collapsedTasks[task.id];
                           const isEditingTask = editingId === taskEditId;
-                          let earliestStartDate: string | null = null; let latestEndDate: Date | null = null; let totalDuration = 0;
-                          if (task.assignments.length > 0) { let earliestDate: Date | null = null; const taskHolidays = new Set<string>(); task.assignments.forEach(a => { const resourceName = a.resourceName || 'Unassigned'; const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'); if (resourceHolidayData) { resourceHolidayData.dateSet.forEach(d => taskHolidays.add(d)); } }); task.assignments.forEach(assignment => { if (!assignment.startDate || !assignment.duration) return; const startDate = new Date(assignment.startDate.replace(/-/g, '/')); if (!earliestDate || startDate < earliestDate) { earliestDate = startDate; } const resourceName = assignment.resourceName || 'Unassigned'; const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>(); const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidays); const endDate = new Date(endDateStr.replace(/-/g, '/')); if (!latestEndDate || endDate > latestEndDate) { latestEndDate = endDate; } }); if (earliestDate && latestEndDate) { earliestStartDate = formatDateForInput(earliestDate); totalDuration = calculateWorkingDaysBetween(formatDateForInput(earliestDate), formatDateForInput(latestEndDate), taskHolidays); } }
+                          let earliestStartDate: string | null = null;
+                          let latestEndDate: Date | null = null;
+                          let totalDuration = 0;
+                          if (task.assignments.length > 0) {
+                              let earliestDate: Date | null = null;
+                              task.assignments.forEach(assignment => {
+                                  if (!assignment.startDate || !assignment.duration) return;
+                                  const startDate = new Date(assignment.startDate.replace(/-/g, '/'));
+                                  if (!earliestDate || startDate < earliestDate) {
+                                      earliestDate = startDate;
+                                  }
+                                  const resourceName = assignment.resourceName || 'Unassigned';
+                                  const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>();
+                                  const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidays);
+                                  const endDate = new Date(endDateStr.replace(/-/g, '/'));
+                                  if (!latestEndDate || endDate > latestEndDate) {
+                                      latestEndDate = endDate;
+                                  }
+                              });
+                              if (earliestDate && latestEndDate) {
+                                  earliestStartDate = formatDateForInput(earliestDate);
+                                  totalDuration = calculateWorkingDaysBetween(formatDateForInput(earliestDate), formatDateForInput(latestEndDate), projectHolidaySet);
+                              }
+                          }
 
                           return (
                             <React.Fragment key={task.id}>
