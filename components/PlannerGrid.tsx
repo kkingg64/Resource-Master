@@ -1153,7 +1153,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             {/* Today/Current Column Highlighter Overlay */}
             {currentColumnIndex !== -1 && (
                 <div 
-                    className="absolute top-0 bottom-0 pointer-events-none z-35 border-l-2 border-r-2 border-amber-400 bg-amber-400/10 mix-blend-multiply"
+                    className="absolute top-0 bottom-0 pointer-events-none z-30 border-l-2 border-r-2 border-amber-400 bg-amber-400/10"
                     style={{
                         left: stickyLeftOffset + (currentColumnIndex * colWidth),
                         width: colWidth
