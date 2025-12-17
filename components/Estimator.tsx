@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, ProjectModule, ComplexityLevel, Holiday, Role, ProjectTask, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
-import { Calculator, GripVertical, ChevronRight, ChevronDown, Calendar as CalendarIcon, Link2, AlertCircle, CheckCircle2, Layers, Gem, ShieldCheck, Dot } from 'lucide-react';
+import { Calculator, GripVertical, ChevronRight, ChevronDown, Calendar as CalendarIcon, Link2, AlertCircle, CheckCircle2, Layers, Gem, ShieldCheck, Dot, Rocket, Server } from 'lucide-react';
 import { calculateEndDate, formatDateForInput, calculateWorkingDaysBetween } from '../constants';
 
 interface EstimatorProps {
@@ -27,6 +27,8 @@ const MODULE_TYPE_STYLES: Record<ModuleType, { icon: React.ElementType, rowBg: s
   [ModuleType.Development]: { icon: Layers, rowBg: 'bg-white', header: 'Preparation' },
   [ModuleType.Preparation]: { icon: Gem, rowBg: 'bg-amber-50', header: 'Preparation' },
   [ModuleType.PostDevelopment]: { icon: ShieldCheck, rowBg: 'bg-teal-50', header: 'Post-Dev Effort' },
+  [ModuleType.MVP]: { icon: Rocket, rowBg: 'bg-sky-50', header: 'MVP Effort' },
+  [ModuleType.Production]: { icon: Server, rowBg: 'bg-slate-50', header: 'Production Effort' },
 };
 
 const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: ComplexityLevel) => void, isReadOnly?: boolean, placeholder?: string }> = ({ value, onChange, isReadOnly, placeholder }) => {

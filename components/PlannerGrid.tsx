@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck } from 'lucide-react';
+import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 // --- Custom DatePicker Component ---
@@ -287,7 +287,29 @@ const MODULE_TYPE_STYLES = {
     ganttBarColor: 'bg-teal-500',
     ganttGridColor: 'bg-teal-200',
     totalTextColor: 'text-teal-900',
-  }
+  },
+  [ModuleType.MVP]: {
+    icon: Rocket,
+    iconColor: 'text-sky-600',
+    bgColor: 'bg-sky-100',
+    hoverBgColor: 'hover:bg-sky-200/50',
+    textColor: 'text-sky-900',
+    hoverTextColor: 'hover:text-sky-700',
+    ganttBarColor: 'bg-sky-500',
+    ganttGridColor: 'bg-sky-200',
+    totalTextColor: 'text-sky-900',
+  },
+  [ModuleType.Production]: {
+    icon: Server,
+    iconColor: 'text-slate-600',
+    bgColor: 'bg-slate-100',
+    hoverBgColor: 'hover:bg-slate-200/50',
+    textColor: 'text-slate-900',
+    hoverTextColor: 'hover:text-slate-700',
+    ganttBarColor: 'bg-slate-500',
+    ganttGridColor: 'bg-slate-200',
+    totalTextColor: 'text-slate-900',
+  },
 };
 
 
@@ -915,6 +937,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     const newTaskId = crypto.randomUUID();
     if (collapsedModules[moduleId]) { toggleModule(moduleId); }
     onAddTask(projectId, moduleId, newTaskId, "New Task", Role.EA);
+    // FIX: Cannot find name 'project'. Did you mean 'projectId'?
     startEditing(`task::${projectId}::${moduleId}::${newTaskId}`, "New Task");
   };
 

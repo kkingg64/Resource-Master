@@ -24,12 +24,16 @@ export enum ModuleType {
   Preparation = 'MILESTONE',
   Development = 'STANDARD',
   PostDevelopment = 'KEY_PHASE',
+  MVP = 'MVP',
+  Production = 'PRODUCTION',
 }
 
 export const MODULE_TYPE_DISPLAY_NAMES: Record<ModuleType, string> = {
   [ModuleType.Preparation]: 'Preparation',
   [ModuleType.Development]: 'Development',
   [ModuleType.PostDevelopment]: 'Post-Development',
+  [ModuleType.MVP]: 'MVP',
+  [ModuleType.Production]: 'Production',
 };
 
 export interface ResourceAllocation {
