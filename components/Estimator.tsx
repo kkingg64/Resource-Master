@@ -215,22 +215,52 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         }, 0);
   }, [modules]);
   
+  const totalDevelopmentFeFPForQA = useMemo(() => {
+    return modules
+        .filter(m => (m.type || ModuleType.Development) === ModuleType.Development && !m.name.toLowerCase().includes('qa'))
+        .reduce((total, devModule) => {
+            const feFP = devModule.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0);
+            return total + feFP;
+        }, 0);
+  }, [modules]);
+
+  const totalDevelopmentBeFPForQA = useMemo(() => {
+    return modules
+        .filter(m => (m.type || ModuleType.Development) === ModuleType.Development && !m.name.toLowerCase().includes('qa'))
+        .reduce((total, devModule) => {
+            const beFP = devModule.tasks.reduce((s, t) => s + (t.backendFunctionPoints || 0), 0);
+            return total + beFP;
+        }, 0);
+  }, [modules]);
+
   const moduleCalculations = useMemo(() => {
     const calcMap = new Map<string, any>();
     modules.forEach(m => {
         const moduleType = m.type || ModuleType.Development;
         const isDev = moduleType === ModuleType.Development;
 
-        // FP Calculations
-        const moduleFeFp = isDev ? m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0) : 0;
-        const moduleBeFp = isDev ? m.tasks.reduce((s, t) => s + (t.backendFunctionPoints || 0), 0) : 0;
+        let moduleFeFp = 0;
+        let moduleBeFp = 0;
+
+        if (isDev) {
+            // Special case for QA modules to inherit FPs from other dev modules
+            if (m.name.toLowerCase().includes('qa')) {
+                moduleFeFp = totalDevelopmentFeFPForQA;
+                moduleBeFp = totalDevelopmentBeFPForQA;
+            } else {
+                moduleFeFp = m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0);
+                moduleBeFp = m.tasks.reduce((s, t) => s + (t.backendFunctionPoints || 0), 0);
+            }
+        }
 
         let modulePrepFp = 0;
         let modulePrepEffort = 0;
 
         if (!isDev) {
             if (moduleType === ModuleType.PostDevelopment) {
-                modulePrepFp = totalDevelopmentFP;
+                 if (!m.name.toLowerCase().includes('uat')) {
+                    modulePrepFp = totalDevelopmentFP;
+                }
                 const prepVel = m.prepVelocity || 10;
                 const prepComp = m.complexity || 'Medium';
                 modulePrepEffort = modulePrepFp > 0 ? Math.ceil((modulePrepFp / prepVel) * COMPLEXITY_MULTIPLIERS[prepComp]) : 0;
@@ -259,6 +289,17 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                 const taskBeComp = t.backendComplexity ?? m.backendComplexity ?? 'Medium'; 
                 moduleBeEffort += (t.backendFunctionPoints ?? 0) > 0 ? Math.ceil(((t.backendFunctionPoints ?? 0) / taskBeVel) * COMPLEXITY_MULTIPLIERS[taskBeComp]) : 0; 
             }); 
+            
+            // For QA module, effort is based on inherited FPs
+            if (m.name.toLowerCase().includes('qa')) {
+                const qaFeVel = m.frontendVelocity || 5;
+                const qaFeComp = m.frontendComplexity || 'Medium';
+                moduleFeEffort = moduleFeFp > 0 ? Math.ceil((moduleFeFp / qaFeVel) * COMPLEXITY_MULTIPLIERS[qaFeComp]) : 0;
+                
+                const qaBeVel = m.backendVelocity || 5;
+                const qaBeComp = m.backendComplexity || 'Medium';
+                moduleBeEffort = moduleBeFp > 0 ? Math.ceil((moduleBeFp / qaBeVel) * COMPLEXITY_MULTIPLIERS[qaBeComp]) : 0;
+            }
         }
         const feTeam = m.frontendTeamSize || 2; 
         const feDuration = (moduleFeEffort > 0 && feTeam > 0) ? Math.ceil(moduleFeEffort / feTeam) : 0;
@@ -326,7 +367,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         });
     });
     return calcMap;
-  }, [modules, holidaySet, allTasksMap, totalDevelopmentFP]);
+  }, [modules, holidaySet, allTasksMap, totalDevelopmentFP, totalDevelopmentFeFPForQA, totalDevelopmentBeFPForQA]);
 
   const groupedTotalsMap = useMemo(() => {
     const subtotals: Record<string, any> = {};
@@ -589,13 +630,13 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                     </>}
 
                                     {isDev ? <>
-                                    <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={3} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} value={task.frontendFunctionPoints} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendFunctionPoints: val })} disabled={isReadOnly} /></td>
+                                    <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={3} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} value={task.frontendFunctionPoints} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendFunctionPoints: val })} disabled={isReadOnly || m.name.toLowerCase().includes('qa')} /></td>
                                     <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={4} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={task.frontendVelocity} placeholder={m.frontendVelocity} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendVelocity: val })} disabled={isReadOnly} /></td>
                                     <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={5} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={task.frontendTeamSize} placeholder={task.assignments.length > 0 ? task.assignments.length : m.frontendTeamSize} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendTeamSize: val })} disabled={isReadOnly} /></td>
                                     <td className="p-0 border-b border-slate-100"><ComplexitySelect value={taskFeComp} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendComplexity: val })} isReadOnly={isReadOnly} placeholder={m.frontendComplexity} /></td>
                                     <td className="px-1 text-center border-b border-slate-100 text-slate-400 font-mono">{taskFeEffort || '-'}</td>
                                     <td className="px-1 text-center border-b border-slate-100 border-r border-slate-200 text-blue-700 font-medium">{formatWeeks(taskFeDuration)}</td>
-                                    <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={6} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} value={task.backendFunctionPoints} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { backendFunctionPoints: val })} disabled={isReadOnly} /></td>
+                                    <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={6} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} value={task.backendFunctionPoints} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { backendFunctionPoints: val })} disabled={isReadOnly || m.name.toLowerCase().includes('qa')} /></td>
                                     <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={7} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={task.backendVelocity} placeholder={m.backendVelocity} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { backendVelocity: val })} disabled={isReadOnly} /></td>
                                     <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={8} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={task.backendTeamSize} placeholder={task.assignments.length > 0 ? task.assignments.length : m.backendTeamSize} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { backendTeamSize: val })} disabled={isReadOnly} /></td>
                                     <td className="p-0 border-b border-slate-100"><ComplexitySelect value={taskBeComp} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { backendComplexity: val })} isReadOnly={isReadOnly} placeholder={m.backendComplexity} /></td>
