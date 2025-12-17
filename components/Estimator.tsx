@@ -328,54 +328,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
     return calcMap;
   }, [modules, holidaySet, allTasksMap, totalDevelopmentFP]);
 
-  const totals = useMemo(() => {
-    let totalPrepEffort = 0, totalFeEffort = 0, totalBeEffort = 0;
-    let totalPrepDuration = 0, totalFeDuration = 0, totalBeDuration = 0;
-    let totalFeFP = 0, totalBeFP = 0;
-    let projectMaxEstDate: Date | null = null;
-    let projectMaxPlanDate: Date | null = null;
-
-    modules.forEach(m => {
-        const calcs = moduleCalculations.get(m.id);
-        if (!calcs) return;
-
-        totalPrepEffort += calcs.modulePrepEffort;
-        totalFeEffort += calcs.moduleFeEffort;
-        totalBeEffort += calcs.moduleBeEffort;
-        totalPrepDuration += calcs.prepDuration;
-        totalFeDuration += calcs.feDuration;
-        totalBeDuration += calcs.beDuration;
-        totalFeFP += calcs.moduleFeFp;
-        totalBeFP += calcs.moduleBeFp;
-
-        if (calcs.estimatedDateStr) {
-            const estDate = new Date(calcs.estimatedDateStr.replace(/-/g, '/'));
-            if (!projectMaxEstDate || estDate > projectMaxEstDate) {
-                projectMaxEstDate = estDate;
-            }
-        }
-        if (calcs.plannerDateStr) {
-            const planDate = new Date(calcs.plannerDateStr.replace(/-/g, '/'));
-            if (!projectMaxPlanDate || planDate > projectMaxPlanDate) {
-                projectMaxPlanDate = planDate;
-            }
-        }
-    });
-    
-    let totalVarianceDays = 0;
-    if (projectMaxEstDate && projectMaxPlanDate) {
-        const estStr = formatDateForInput(projectMaxEstDate);
-        const planStr = formatDateForInput(projectMaxPlanDate);
-        if (estStr < planStr) {
-            totalVarianceDays = -(calculateWorkingDaysBetween(estStr, planStr, holidaySet) - 1);
-        } else if (estStr > planStr) {
-            totalVarianceDays = calculateWorkingDaysBetween(planStr, estStr, holidaySet) - 1;
-        }
-    }
-
-    return { totalPrepEffort, totalFeEffort, totalBeEffort, totalPrepDuration, totalFeDuration, totalBeDuration, totalFeFP, totalBeFP, projectMaxEstDate, projectMaxPlanDate, totalVarianceDays };
-  }, [modules, moduleCalculations, holidaySet]);
-
   const groupedTotals = useMemo(() => {
     const subtotals: Record<string, any> = {};
 
@@ -681,16 +633,13 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                     <tr key={`${type}-subtotal`} className="bg-slate-100 font-semibold text-[10px] border-t border-b-2 border-slate-200">
                                         <td colSpan={2} className="px-2 py-1.5 text-right text-slate-500 uppercase">{MODULE_TYPE_DISPLAY_NAMES[type as ModuleType]}<br/>Sub-total</td>
                                         <td className="text-center text-slate-700">{subtotal.refFP || '-'}</td>
-                                        <td colSpan={3} className="text-center text-slate-300">-</td>
-                                        <td className="text-center text-slate-700">{subtotal.prepEffort || '-'}</td>
+                                        <td colSpan={4} className="text-center text-slate-300">-</td>
                                         <td className="text-center text-amber-700 border-r border-slate-200">{formatWeeks(subtotal.prepDuration)}</td>
                                         <td className="text-center text-slate-700">{subtotal.feFP || '-'}</td>
-                                        <td colSpan={3} className="text-center text-slate-300">-</td>
-                                        <td className="text-center text-slate-700">{subtotal.feEffort || '-'}</td>
+                                        <td colSpan={4} className="text-center text-slate-300">-</td>
                                         <td className="text-center text-blue-700 border-r border-slate-200">{formatWeeks(subtotal.feDuration)}</td>
                                         <td className="text-center text-slate-700">{subtotal.beFP || '-'}</td>
-                                        <td colSpan={3} className="text-center text-slate-300">-</td>
-                                        <td className="text-center text-slate-700">{subtotal.beEffort || '-'}</td>
+                                        <td colSpan={4} className="text-center text-slate-300">-</td>
                                         <td className="text-center text-indigo-700 border-r border-slate-200">{formatWeeks(subtotal.beDuration)}</td>
                                         <td colSpan={1} className="text-center text-slate-400 border-r border-slate-200"></td>
                                         <td className="px-1 py-1 text-right">
@@ -715,25 +664,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     );
                 })}
             </tbody>
-            <tfoot className="bg-slate-100 font-semibold text-[10px] border-t-2 border-slate-300 sticky bottom-0 z-20 shadow-[0_-2px_4px_rgba(0,0,0,0.05)]">
-                 <tr className="bg-slate-200 text-slate-800 font-bold">
-                    <td colSpan={2} className="px-2 py-2 text-right uppercase">Grand Total</td>
-                    <td className="text-center" colSpan={4}></td>
-                    <td className="text-center">{totals.totalPrepEffort}</td>
-                    <td className="text-center text-amber-800 border-r border-slate-300">{formatWeeks(totals.totalPrepDuration)}</td>
-                    <td className="text-center">{totals.totalFeFP}</td>
-                    <td colSpan={3} className="text-center text-slate-400">-</td>
-                    <td className="text-center">{totals.totalFeEffort}</td>
-                    <td className="text-center text-blue-800 border-r border-slate-300">{formatWeeks(totals.totalFeDuration)}</td>
-                    <td className="text-center">{totals.totalBeFP}</td>
-                    <td colSpan={3} className="text-center text-slate-400">-</td>
-                    <td className="text-center">{totals.totalBeEffort}</td>
-                    <td className="text-center text-indigo-800 border-r border-slate-300">{formatWeeks(totals.totalBeDuration)}</td>
-                    <td className="text-center text-slate-400">-</td>
-                    <td className="px-1 py-1 text-right"><div className="flex flex-col gap-0.5 justify-center h-full"><div className="flex items-center justify-between gap-2 text-[9px] text-slate-500 border-b border-slate-300/50 pb-0.5"><span>Max Est:</span><span className="font-mono">{totals.projectMaxEstDate ? totals.projectMaxEstDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div><div className="flex items-center justify-between gap-2 text-[10px]"><span>Max Plan:</span><span className="font-mono">{totals.projectMaxPlanDate ? totals.projectMaxPlanDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div></div></td>
-                    <td className="px-1 text-center">{(() => { const days = totals.totalVarianceDays; let varianceClass = 'text-slate-500'; let varianceText = '-'; if (days !== 0) { const sign = days > 0 ? '+' : ''; varianceText = `${sign}${days}d`; if (days > 0) varianceClass = 'text-red-700'; else varianceClass = 'text-green-700'; } else if (totals.projectMaxEstDate && totals.projectMaxPlanDate) { varianceText = '0d'; varianceClass = 'text-green-700'; } return <span className={`text-xs font-mono ${varianceClass}`}>{varianceText}</span>; })()}</td>
-                </tr>
-            </tfoot>
         </table>
       </div>
       {contextMenu && (
