@@ -1391,7 +1391,7 @@ const App: React.FC = () => {
     }
   };
 
-  const updateModuleComplexity = async (projectId: string, moduleId: string, type: 'frontend' | 'backend', complexity: ComplexityLevel) => {
+  const updateModuleComplexity = async (projectId: string, moduleId: string, type: 'frontend' | 'backend' | 'prep', complexity: ComplexityLevel) => {
       if (isReadOnlyMode) return;
       setProjects(prev => prev.map(p => {
           if(p.id !== projectId) return p;
@@ -1399,16 +1399,23 @@ const App: React.FC = () => {
               ...p,
               modules: p.modules.map(m => {
                   if(m.id !== moduleId) return m;
-                  const updates = type === 'frontend' ? { frontendComplexity: complexity } : { backendComplexity: complexity };
-                  return { ...m, ...updates };
+                  if (type === 'frontend') return { ...m, frontendComplexity: complexity };
+                  if (type === 'backend') return { ...m, backendComplexity: complexity };
+                  if (type === 'prep') return { ...m, complexity: complexity };
+                  return m;
               })
           };
       }));
       
+      const dbFieldMap = {
+        frontend: 'frontend_complexity',
+        backend: 'backend_complexity',
+        prep: 'complexity',
+      };
+      const dbField = dbFieldMap[type];
+
       await callSupabase('UPDATE module complexity', { moduleId, type, complexity }, 
-          supabase.from('modules').update({ 
-              [type === 'frontend' ? 'frontend_complexity' : 'backend_complexity']: complexity 
-          }).eq('id', moduleId)
+          supabase.from('modules').update({ [dbField]: complexity }).eq('id', moduleId)
       );
   };
 
