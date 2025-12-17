@@ -54,10 +54,11 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
       const ai = new GoogleGenAI({ apiKey });
       
       // Define Tools
-      // FIX: The 'parameters' property was removed because it had an empty 'properties' object, which is invalid according to the Gemini API guidelines. A function with no parameters should not have the 'parameters' property defined.
       const listProjectsTool: FunctionDeclaration = {
         name: 'listProjects',
         description: 'Get a list of all projects with their IDs and module counts.',
+// FIX: Added empty parameters object to avoid validation errors
+        parameters: { type: Type.OBJECT, properties: {} },
       };
 
       const getProjectDetailsTool: FunctionDeclaration = {
@@ -103,9 +104,8 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
       };
 
       // Initialize Chat
-      // FIX: Model name updated to 'gemini-3-flash-preview' to align with the guidelines for basic text tasks.
       const chat = ai.chats.create({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.5-flash',
         config: {
           systemInstruction: `You are an expert Project Management AI Assistant for the OMS Resource Master system. 
           Your goal is to help the user manage their project plans, tasks, and resources.

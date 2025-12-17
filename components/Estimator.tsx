@@ -571,4 +571,65 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                 <tr key={task.id} className="bg-slate-50/50 hover:bg-slate-100/50">
                                     <td className="border-b border-slate-100"></td>
                                     <td className="pl-8 pr-2 py-1 text-xs text-slate-600 border-b border-slate-100 border-r border-slate-200">
-                                        <div className="flex items-center gap-2 relative
+                                        <div className="flex items-center gap-2 relative">
+                                            <div className="absolute -left-3 -top-2 w-2.5 h-[22px] border-b border-l border-slate-200 rounded-bl-md"></div>
+                                            <span className="truncate" title={task.name}>{task.name}</span>
+                                        </div>
+                                    </td>
+                                    {isDev ? <td colSpan={6} className="border-b border-slate-100 border-r border-slate-200"></td> : <>
+                                        <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={0} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} value={task.frontendFunctionPoints} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendFunctionPoints: val })} disabled={isReadOnly} /></td>
+                                        <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={1} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={task.frontendVelocity} placeholder={m.prepVelocity} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendVelocity: val })} disabled={isReadOnly} /></td>
+                                        <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={2} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={task.frontendTeamSize} placeholder={task.assignments.length > 0 ? task.assignments.length : m.prepTeamSize} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendTeamSize: val })} disabled={isReadOnly} /></td>
+                                        <td className="p-0 border-b border-slate-100"><ComplexitySelect value={taskPrepComp} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendComplexity: val })} isReadOnly={isReadOnly} placeholder={m.complexity} /></td>
+                                        <td className="px-1 text-center border-b border-slate-100 text-slate-400 font-mono">{taskPrepEffort || '-'}</td>
+                                        <td className="px-1 text-center border-b border-slate-100 border-r border-slate-200 text-amber-700 font-medium">{formatWeeks(taskPrepDuration)}</td>
+                                    </>}
+
+                                    {isDev ? <>
+                                    <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={3} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} value={task.frontendFunctionPoints} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendFunctionPoints: val })} disabled={isReadOnly || m.name.toLowerCase().includes('qa')} /></td>
+                                    <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={4} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={task.frontendVelocity} placeholder={m.frontendVelocity} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendVelocity: val })} disabled={isReadOnly} /></td>
+                                    <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={5} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={task.frontendTeamSize} placeholder={task.assignments.length > 0 ? task.assignments.length : m.frontendTeamSize} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendTeamSize: val })} disabled={isReadOnly} /></td>
+                                    <td className="p-0 border-b border-slate-100"><ComplexitySelect value={taskFeComp} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendComplexity: val })} isReadOnly={isReadOnly} placeholder={m.frontendComplexity} /></td>
+                                    <td className="px-1 text-center border-b border-slate-100 text-slate-400 font-mono">{taskFeEffort || '-'}</td>
+                                    <td className="px-1 text-center border-b border-slate-100 border-r border-slate-200 text-blue-700 font-medium">{formatWeeks(taskFeDuration)}</td>
+                                    <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={6} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} value={task.backendFunctionPoints} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { backendFunctionPoints: val })} disabled={isReadOnly || m.name.toLowerCase().includes('qa')} /></td>
+                                    <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={7} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={task.backendVelocity} placeholder={m.backendVelocity} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { backendVelocity: val })} disabled={isReadOnly} /></td>
+                                    <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={8} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={task.backendTeamSize} placeholder={task.assignments.length > 0 ? task.assignments.length : m.backendTeamSize} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { backendTeamSize: val })} disabled={isReadOnly} /></td>
+                                    <td className="p-0 border-b border-slate-100"><ComplexitySelect value={taskBeComp} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { backendComplexity: val })} isReadOnly={isReadOnly} placeholder={m.backendComplexity} /></td>
+                                    <td className="px-1 text-center border-b border-slate-100 text-slate-400 font-mono">{taskBeEffort || '-'}</td>
+                                    <td className="px-1 text-center border-b border-slate-100 border-r border-slate-200 text-indigo-700 font-medium">{formatWeeks(taskBeDuration)}</td>
+                                    </> : <td colSpan={12} className="border-b border-slate-100 border-r border-slate-200"></td>}
+
+                                    <td className="p-0 border-b border-slate-100 bg-white">
+                                        <input type="date" className="w-full h-full bg-transparent text-center text-xs border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 disabled:bg-slate-50/50" value={task.startDate || plannerTaskStartDate || ''} onChange={e => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { startDate: e.target.value || undefined })} disabled={isReadOnly} title={task.startDate ? "Manual Start Date" : "Planned Start Date (from Planner)"} />
+                                    </td>
+                                    <td className={`px-1 border-b border-slate-100 text-right align-middle ${taskCellBg}`}><div className="flex flex-col gap-0.5 justify-center h-full text-[9px]"><div className="flex items-center justify-between gap-1 text-slate-400"><span>Est:</span><span className="font-mono">{taskEstimatedEndDateStr ? new Date(taskEstimatedEndDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div><div className={`flex items-center justify-between gap-1 font-bold ${taskVarianceStatus === 'safe' ? 'text-green-700' : taskVarianceStatus === 'risk' ? 'text-red-700' : 'text-slate-600'}`}><span>Plan:</span><span className="font-mono">{taskPlannerDateStr ? new Date(taskPlannerDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div></div></td>
+                                    <td className={`px-1 border-b border-slate-100 text-center align-middle border-r border-slate-200 ${taskCellBg}`}><span className={`text-[10px] font-mono ${taskVarianceClass}`}>{taskVarianceText}</span></td>
+                                </tr>
+                            )})}
+                            {isLastOfType && <SubtotalRow />}
+                        </React.Fragment>
+                    );
+                })}
+            </tbody>
+        </table>
+      </div>
+      {contextMenu && (
+        <div style={{ top: contextMenu.y, left: contextMenu.x }} className="absolute z-50 bg-white shadow-xl rounded-md border border-slate-200 p-1 animate-in fade-in">
+          <button
+            onClick={() => {
+              if (window.confirm('Are you sure you want to delete this module?')) {
+                onDeleteModule(selectedProjectId, contextMenu.moduleId);
+              }
+              setContextMenu(null);
+            }}
+            className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"
+          >
+            <Trash2 size={12} /> Delete Module
+          </button>
+        </div>
+      )}
+      <div className="bg-slate-50 border-t border-slate-200 p-2 text-[10px] text-slate-400 text-center flex justify-between items-center px-4"><span>* FE/BE in parallel</span><div className="flex gap-4"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Saved Days (Negative)</span><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Delays (Positive)</span></div></div>
+    </div>
+  );
+};
