@@ -233,21 +233,12 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         let modulePrepEffort = 0;
 
         if (!isDev) {
-            if (moduleType === ModuleType.PostDevelopment) {
-                 if (!m.name.toLowerCase().includes('uat')) {
-                    modulePrepFp = totalDevelopmentFP;
-                }
-                const prepVel = m.prepVelocity || 10;
-                const prepComp = m.complexity || 'Medium';
-                modulePrepEffort = modulePrepFp > 0 ? Math.ceil((modulePrepFp / prepVel) * COMPLEXITY_MULTIPLIERS[prepComp]) : 0;
-            } else {
-                modulePrepFp = m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0);
-                 m.tasks.forEach(t => { 
-                    const taskVel = t.frontendVelocity ?? m.prepVelocity ?? 10; 
-                    const taskComp = t.frontendComplexity ?? m.complexity ?? 'Medium'; 
-                    modulePrepEffort += (t.frontendFunctionPoints ?? 0) > 0 ? Math.ceil(((t.frontendFunctionPoints ?? 0) / taskVel) * COMPLEXITY_MULTIPLIERS[taskComp]) : 0; 
-                });
-            }
+            modulePrepFp = m.tasks.reduce((s, t) => s + (t.frontendFunctionPoints || 0), 0);
+            m.tasks.forEach(t => { 
+                const taskVel = t.frontendVelocity ?? m.prepVelocity ?? 10; 
+                const taskComp = t.frontendComplexity ?? m.complexity ?? 'Medium'; 
+                modulePrepEffort += (t.frontendFunctionPoints ?? 0) > 0 ? Math.ceil(((t.frontendFunctionPoints ?? 0) / taskVel) * COMPLEXITY_MULTIPLIERS[taskComp]) : 0; 
+            });
         }
         
         // Effort & Duration Calculations
