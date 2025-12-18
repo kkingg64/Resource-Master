@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, Send, X, Bot, Sparkles, User, Loader2, ChevronDown, Trash2, Maximize2, Minimize2, Settings, Key } from 'lucide-react';
+import { MessageSquare, Send, X, Bot, Sparkles, User, Loader2, ChevronDown, Trash2, Maximize2, Minimize2, Settings, Key, CheckCircle, AlertCircle } from 'lucide-react';
 import { Project, Resource, Role } from '../types';
 
 interface AIAssistantProps {
@@ -40,6 +40,8 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [testMessage, setTestMessage] = useState('');
   
   // Persisted Manual Key
   const [manualKey, setManualKey] = useState(() => localStorage.getItem('oms_groq_key') || '');
@@ -66,14 +68,17 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
   const toggleOpen = () => setIsOpen(!isOpen);
 
   const handleSaveKey = (key: string) => {
-      setManualKey(key);
-      localStorage.setItem('oms_groq_key', key);
+      const trimmedKey = key.trim();
+      setManualKey(trimmedKey);
+      localStorage.setItem('oms_groq_key', trimmedKey);
+      setTestStatus('idle'); // Reset test status on save
+      setTestMessage('');
       setShowSettings(false);
   };
 
   const getApiKey = () => {
     // 1. Check Manual Key First (User Override)
-    if (manualKey) return manualKey;
+    if (manualKey) return manualKey.trim();
 
     // 2. Check standard Vite variables (prefixed with VITE_)
     if ((import.meta as any).env.VITE_GROQ_API_KEY) return (import.meta as any).env.VITE_GROQ_API_KEY;
@@ -90,6 +95,45 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
     }
     
     return null;
+  };
+
+  const testConnection = async () => {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+          setTestStatus('error');
+          setTestMessage('No API Key provided.');
+          return;
+      }
+
+      setTestStatus('testing');
+      setTestMessage('');
+
+      try {
+          // Simple test call
+          const response = await fetch('/api/chat', {
+              method: 'POST',
+              headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                  model: "llama-3.3-70b-versatile",
+                  messages: [{ role: 'user', content: 'Ping' }],
+                  max_tokens: 1
+              })
+          });
+
+          if (!response.ok) {
+              const errData = await response.json().catch(() => ({}));
+              throw new Error(errData.error?.message || response.statusText);
+          }
+
+          setTestStatus('success');
+          setTestMessage('Connection successful!');
+      } catch (e: any) {
+          setTestStatus('error');
+          setTestMessage(e.message || 'Connection failed');
+      }
   };
 
   const executeTools = async (toolCalls: GroqToolCall[]): Promise<GroqMessage[]> => {
@@ -273,8 +317,16 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
         });
 
         if (!response.ok) {
-          const err = await response.json().catch(() => ({ error: { message: response.statusText } }));
-          throw new Error(err.error?.message || `Groq API Error: ${response.status} ${response.statusText}`);
+          let errorMsg = `Groq API Error: ${response.status} ${response.statusText}`;
+          try {
+              const errData = await response.json();
+              if (errData.error && errData.error.message) {
+                  errorMsg = `Groq Error: ${errData.error.message}`;
+              }
+          } catch (e) {
+              // ignore json parse error
+          }
+          throw new Error(errorMsg);
         }
 
         const data = await response.json();
@@ -340,7 +392,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
                   <h3>API Key Configuration</h3>
               </div>
               <p className="text-xs text-slate-500">
-                  If the environment variable is not working, paste your Groq API Key here directly. It will be saved to your browser's local storage.
+                  If the environment variable is not working, paste your Groq API Key here directly.
               </p>
               <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-700 uppercase">Groq API Key</label>
@@ -352,7 +404,20 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
                       className="w-full p-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
               </div>
-              <div className="flex justify-end gap-2 mt-auto">
+              
+              <div className="flex items-center gap-2">
+                  <button 
+                    onClick={testConnection} 
+                    disabled={testStatus === 'testing' || !manualKey}
+                    className="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded font-medium disabled:opacity-50"
+                  >
+                      {testStatus === 'testing' ? <Loader2 size={14} className="animate-spin inline" /> : 'Test Connection'}
+                  </button>
+                  {testStatus === 'success' && <span className="text-xs text-green-600 flex items-center gap-1"><CheckCircle size={14}/> Connected</span>}
+                  {testStatus === 'error' && <span className="text-xs text-red-600 flex items-center gap-1"><AlertCircle size={14}/> {testMessage}</span>}
+              </div>
+
+              <div className="flex justify-end gap-2 mt-auto pt-4 border-t border-slate-100">
                   <button onClick={() => setShowSettings(false)} className="px-3 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded">Cancel</button>
                   <button onClick={() => handleSaveKey(manualKey)} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 font-medium">Save & Close</button>
               </div>
@@ -397,7 +462,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
                 <input 
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                placeholder={getApiKey() ? "Ask me to add tasks or check status..." : "Please set API Key first..."}
+                placeholder={getApiKey() ? "Ask me to add tasks..." : "Please set API Key first..."}
                 disabled={!getApiKey()}
                 className="flex-1 bg-slate-100 border-none rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-colors disabled:cursor-not-allowed disabled:bg-slate-50"
                 />

@@ -19,6 +19,7 @@ export default defineConfig(({ mode }) => {
         '/api/chat': {
           target: 'https://api.groq.com',
           changeOrigin: true,
+          secure: false, // Useful if the target has self-signed certs (unlikely for Groq but good for robustness)
           rewrite: (path) => path.replace(/^\/api\/chat/, '/openai/v1/chat/completions'),
         },
       },
