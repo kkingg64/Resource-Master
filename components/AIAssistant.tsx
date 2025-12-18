@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, Send, X, Bot, Sparkles, User, Loader2, ChevronDown, Trash2, Maximize2, Minimize2 } from 'lucide-react';
+import { MessageSquare, Send, X, Bot, Sparkles, User, Loader2, ChevronDown, Trash2, Maximize2, Minimize2, Settings, Key } from 'lucide-react';
 import { Project, Resource, Role } from '../types';
 
 interface AIAssistantProps {
@@ -36,9 +36,14 @@ interface GroqMessage {
 
 export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, onAddTask, onAssignResource }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Persisted Manual Key
+  const [manualKey, setManualKey] = useState(() => localStorage.getItem('oms_groq_key') || '');
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const projectsRef = useRef(projects);
@@ -60,13 +65,21 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
 
   const toggleOpen = () => setIsOpen(!isOpen);
 
+  const handleSaveKey = (key: string) => {
+      setManualKey(key);
+      localStorage.setItem('oms_groq_key', key);
+      setShowSettings(false);
+  };
+
   const getApiKey = () => {
-    // 1. Check standard Vite variables (prefixed with VITE_)
+    // 1. Check Manual Key First (User Override)
+    if (manualKey) return manualKey;
+
+    // 2. Check standard Vite variables (prefixed with VITE_)
     if ((import.meta as any).env.VITE_GROQ_API_KEY) return (import.meta as any).env.VITE_GROQ_API_KEY;
     if ((import.meta as any).env.VITE_API_KEY) return (import.meta as any).env.VITE_API_KEY;
 
-    // 2. Check injected process.env variables (from vite.config.ts define)
-    // We use a try-catch and specific checks to ensure safe replacement by the bundler
+    // 3. Check injected process.env variables (from vite.config.ts define)
     try {
       // @ts-ignore
       if (typeof process !== 'undefined' && process.env?.GROQ_API_KEY) return process.env.GROQ_API_KEY;
@@ -161,7 +174,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
 
     try {
       const apiKey = getApiKey();
-      if (!apiKey) throw new Error("API Key not found. Please set VITE_GROQ_API_KEY or API_KEY in your environment.");
+      if (!apiKey) throw new Error("API Key not found. Please click the Settings (Gear icon) to set your Groq API Key.");
 
       // Add user message to LLM history
       conversationHistory.current.push({ role: 'user', content: userMsg.text });
@@ -260,7 +273,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
 
         if (!response.ok) {
           const err = await response.json();
-          throw new Error(err.error?.message || 'Groq API Error');
+          throw new Error(err.error?.message || `Groq API Error: ${response.statusText}`);
         }
 
         const data = await response.json();
@@ -307,61 +320,96 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
 
   return (
     <div className="fixed bottom-20 right-4 w-96 h-[500px] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 animate-in fade-in slide-in-from-bottom-5 overflow-hidden font-sans">
-      <div className="bg-indigo-600 p-4 flex items-center justify-between text-white">
+      <div className="bg-indigo-600 p-4 flex items-center justify-between text-white shadow-md z-10">
         <div className="flex items-center gap-2 font-semibold">
           <Bot size={20} />
           <span>AI Assistant (Groq)</span>
         </div>
         <div className="flex gap-2">
+            <button onClick={() => setShowSettings(!showSettings)} className="hover:bg-indigo-500 p-1 rounded transition-colors" title="API Key Settings"><Settings size={18} /></button>
             <button onClick={() => setMessages([])} className="hover:bg-indigo-500 p-1 rounded transition-colors" title="Clear Chat"><Trash2 size={18} /></button>
             <button onClick={toggleOpen} className="hover:bg-indigo-500 p-1 rounded transition-colors"><X size={18} /></button>
         </div>
       </div>
       
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
-        {messages.length === 0 && (
-            <div className="text-center text-slate-400 mt-10 text-sm">
-                <Sparkles className="w-10 h-10 mx-auto mb-2 text-indigo-300" />
-                <p>Hi! I can help you plan resources.</p>
-                <p>Try "Add a backend task to Project X"</p>
-            </div>
-        )}
-        {messages.map(msg => (
-          <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${msg.role === 'user' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-600'}`}>
-              {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
-            </div>
-            <div className={`p-3 rounded-2xl text-sm max-w-[80%] ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none shadow-sm'}`}>
-              {msg.text}
-            </div>
+      {showSettings ? (
+          <div className="flex-1 p-6 bg-slate-50 flex flex-col gap-4">
+              <div className="flex items-center gap-2 text-slate-800 font-bold border-b border-slate-200 pb-2">
+                  <Key size={18} className="text-indigo-600" />
+                  <h3>API Key Configuration</h3>
+              </div>
+              <p className="text-xs text-slate-500">
+                  If the environment variable is not working, paste your Groq API Key here directly. It will be saved to your browser's local storage.
+              </p>
+              <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 uppercase">Groq API Key</label>
+                  <input 
+                      type="password" 
+                      value={manualKey}
+                      onChange={(e) => setManualKey(e.target.value)}
+                      placeholder="gsk_..."
+                      className="w-full p-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+              </div>
+              <div className="flex justify-end gap-2 mt-auto">
+                  <button onClick={() => setShowSettings(false)} className="px-3 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded">Cancel</button>
+                  <button onClick={() => handleSaveKey(manualKey)} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 font-medium">Save & Close</button>
+              </div>
           </div>
-        ))}
-        {isLoading && (
-            <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0 text-slate-600"><Bot size={16} /></div>
-                <div className="bg-white border border-slate-200 p-3 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-2 text-slate-500 text-xs">
-                    <Loader2 size={14} className="animate-spin" /> Thinking...
+      ) : (
+          <>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+                {messages.length === 0 && (
+                    <div className="text-center text-slate-400 mt-10 text-sm">
+                        <Sparkles className="w-10 h-10 mx-auto mb-2 text-indigo-300" />
+                        <p>Hi! I can help you plan resources.</p>
+                        <p>Try "Add a backend task to Project X"</p>
+                        {!getApiKey() && (
+                            <p className="mt-4 text-xs text-red-400 bg-red-50 p-2 rounded border border-red-100">
+                                API Key missing. Click the <Settings size={12} className="inline"/> icon above to set it.
+                            </p>
+                        )}
+                    </div>
+                )}
+                {messages.map(msg => (
+                <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${msg.role === 'user' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-600'}`}>
+                    {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
+                    </div>
+                    <div className={`p-3 rounded-2xl text-sm max-w-[80%] ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none shadow-sm'}`}>
+                    {msg.text}
+                    </div>
                 </div>
+                ))}
+                {isLoading && (
+                    <div className="flex gap-3">
+                        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0 text-slate-600"><Bot size={16} /></div>
+                        <div className="bg-white border border-slate-200 p-3 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-2 text-slate-500 text-xs">
+                            <Loader2 size={14} className="animate-spin" /> Thinking...
+                        </div>
+                    </div>
+                )}
+                <div ref={messagesEndRef} />
             </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
 
-      <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-200 flex gap-2">
-        <input 
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          placeholder="Ask me to add tasks or check status..."
-          className="flex-1 bg-slate-100 border-none rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-colors"
-        />
-        <button 
-          type="submit" 
-          disabled={!input.trim() || isLoading}
-          className="bg-indigo-600 text-white p-2 rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <Send size={18} />
-        </button>
-      </form>
+            <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-200 flex gap-2">
+                <input 
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                placeholder={getApiKey() ? "Ask me to add tasks or check status..." : "Please set API Key first..."}
+                disabled={!getApiKey()}
+                className="flex-1 bg-slate-100 border-none rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-colors disabled:cursor-not-allowed disabled:bg-slate-50"
+                />
+                <button 
+                type="submit" 
+                disabled={!input.trim() || isLoading || !getApiKey()}
+                className="bg-indigo-600 text-white p-2 rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                <Send size={18} />
+                </button>
+            </form>
+          </>
+      )}
     </div>
   );
 };
