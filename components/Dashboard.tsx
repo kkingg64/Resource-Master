@@ -171,7 +171,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                     if (a.resourceName && a.resourceName !== 'Unassigned') {
                         a.allocations.forEach(alloc => {
                             if (!usage[a.resourceName!]) usage[a.resourceName!] = {};
-                            if (!usage[a.resourceName!][alloc.weekId]) usage[a.resourceName!][alloc.weekId] = { total: 0, modules: new Set() };
+                            if (!usage[a.resourceName!][alloc.weekId]) usage[a.resourceName!][alloc.weekId] = { total: 0, modules: new Set<string>() };
                             
                             usage[a.resourceName!][alloc.weekId].total += alloc.count;
                             usage[a.resourceName!][alloc.weekId].modules.add(`${p.name} • ${m.name}`);
@@ -185,7 +185,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     const result: Record<string, { weekId: string, total: number, modules: string[] }[]> = {};
     
     Object.entries(usage).forEach(([res, weeks]) => {
-        Object.entries(weeks).forEach(([weekId, data]) => {
+        Object.entries(weeks).forEach(([weekId, data]: [string, { total: number, modules: Set<string> }]) => {
             // Conflict if allocated more than 5 days OR works on multiple modules
             if (data.modules.size > 1 || data.total > 5) {
                 if (!result[res]) result[res] = [];
@@ -227,7 +227,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                             if (!dailyGroups[date]) return;
                             const dayMap = dailyGroups[date];
                             if (!dayMap.has(t.id)) {
-                                dayMap.set(t.id, { task: t.name, module: m.name, resources: new Set() });
+                                dayMap.set(t.id, { task: t.name, module: m.name, resources: new Set<string>() });
                             }
                             dayMap.get(t.id)!.resources.add(a.resourceName!);
                         };
