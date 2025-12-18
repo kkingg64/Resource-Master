@@ -1,10 +1,9 @@
 
-
 import React, { useMemo } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation, Resource, Holiday } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
-import { getTimeline, DEFAULT_START, DEFAULT_END, calculateWorkingDaysBetween, formatDateForInput, getWeekIdFromDate, getWeekdaysForWeekId } from '../constants';
-import { AlertCircle, CheckCircle2, Clock, Users, Briefcase, ChevronRight, AlertTriangle, AlertOctagon, CalendarDays, Activity, CalendarOff } from 'lucide-react';
+import { getTimeline, DEFAULT_START, DEFAULT_END, calculateWorkingDaysBetween, formatDateForInput, getWeekIdFromDate, getWeekdaysForWeekId, calculateEndDate } from '../constants';
+import { AlertCircle, CheckCircle2, Clock, Users, Briefcase, ChevronRight, AlertTriangle, AlertOctagon, CalendarDays, Activity, CalendarOff, ArrowRight } from 'lucide-react';
 
 interface DashboardProps {
   projects: Project[];
@@ -162,7 +161,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
   }, [projects, GLOBAL_TIMELINE_DATA]);
 
   // 5. Conflict Detection (Grouped by Resource)
-  const conflictsByResource = useMemo(() => {
+  const conflictsByResource = useMemo((): Record<string, { weekId: string, total: number, modules: string[] }[]> => {
     const usage: Record<string, Record<string, { total: number, modules: Set<string> }>> = {};
     
     projects.forEach(p => {
@@ -248,7 +247,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
 
     const activityByDay: Record<string, { task: string, module: string, resources: string[] }[]> = {};
     weekDates.forEach(d => {
-        activityByDay[d] = Array.from(dailyGroups[d].values()).map(item => ({
+        activityByDay[d] = Array.from(dailyGroups[d].values()).map((item: { task: string, module: string, resources: Set<string> }) => ({
             task: item.task,
             module: item.module,
             resources: Array.from(item.resources).sort()
@@ -286,8 +285,72 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     return onLeave;
   }, [resources, holidays]);
 
+  // 8. Upcoming Tasks Logic (Next 4 Months)
+  const upcomingTasks = useMemo(() => {
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    const todayStr = formatDateForInput(todayDate);
+    
+    const fourMonthsLater = new Date();
+    fourMonthsLater.setMonth(fourMonthsLater.getMonth() + 4);
+    const fourMonthsLaterStr = formatDateForInput(fourMonthsLater);
+
+    // Build efficient holiday map for end date calculation
+    const resourceHolidaysMap = new Map<string, Set<string>>();
+    const defaultHolidays = new Set(holidays.filter(h => h.country === 'HK').map(h => h.date));
+    resourceHolidaysMap.set('Unassigned', defaultHolidays);
+    resources.forEach(res => {
+      const regional = holidays.filter(h => h.country === (res.holiday_region || 'HK'));
+      const individual = res.individual_holidays || [];
+      resourceHolidaysMap.set(res.name, new Set([...regional, ...individual].map(h => h.date)));
+    });
+
+    const tasks: any[] = [];
+
+    projects.forEach(p => {
+        p.modules.forEach(m => {
+            m.tasks.forEach(t => {
+                t.assignments.forEach(a => {
+                    if (a.startDate && a.duration && a.duration > 0) {
+                        const start = a.startDate;
+                        
+                        const resourceName = a.resourceName || 'Unassigned';
+                        const holidaySet = resourceHolidaysMap.get(resourceName) || defaultHolidays;
+                        const end = calculateEndDate(start, a.duration, holidaySet);
+
+                        // Logic: 
+                        // 1. Starts between today and 4 months
+                        // 2. OR is currently active (Started before today, Ends after today)
+                        // 3. AND Ends before 4 months (optional, but good for "active" view)
+                        
+                        const isStartingSoon = start >= todayStr && start <= fourMonthsLaterStr;
+                        const isActive = start < todayStr && end >= todayStr;
+
+                        if (isStartingSoon || isActive) {
+                            tasks.push({
+                                id: a.id,
+                                project: p.name,
+                                module: m.name,
+                                task: t.name,
+                                resource: a.resourceName || 'Unassigned',
+                                start,
+                                end,
+                                progress: a.progress || 0,
+                                status: isActive ? 'Active' : 'Upcoming',
+                                startObj: new Date(start) // for sorting
+                            });
+                        }
+                    }
+                });
+            });
+        });
+    });
+
+    return tasks.sort((a, b) => a.startObj.getTime() - b.startObj.getTime());
+  }, [projects, resources, holidays]);
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 h-full overflow-y-auto custom-scrollbar p-1">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-12">
       
       {/* Top Cards Row */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -411,9 +474,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                 <h3 className="font-bold text-slate-800">Project Timeline Status</h3>
                 <span className="text-xs text-slate-400">Based on Task Dates</span>
             </div>
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-auto max-h-80 custom-scrollbar">
                 <table className="w-full text-sm text-left">
-                    <thead className="bg-slate-50 text-slate-500 font-medium">
+                    <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10">
                         <tr>
                             <th className="px-6 py-3">Project</th>
                             <th className="px-6 py-3 w-1/3">Timeline</th>
@@ -584,6 +647,80 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* NEW: Upcoming Tasks Section */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <ArrowRight size={18} className="text-indigo-600" />
+                Upcoming Task Timeline (Next 4 Months)
+            </h3>
+            <span className="text-xs text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded">Sorted by Start Date</span>
+        </div>
+        <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+                    <tr>
+                        <th className="px-6 py-3 w-1/4">Task</th>
+                        <th className="px-6 py-3 w-1/5">Context</th>
+                        <th className="px-6 py-3 w-32">Resource</th>
+                        <th className="px-6 py-3 w-24">Status</th>
+                        <th className="px-6 py-3 w-48">Schedule</th>
+                        <th className="px-6 py-3">Progress</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                    {upcomingTasks.length === 0 ? (
+                        <tr>
+                            <td colSpan={6} className="p-8 text-center text-slate-400">
+                                No tasks starting or active in the next 4 months.
+                            </td>
+                        </tr>
+                    ) : (
+                        upcomingTasks.map((t) => (
+                            <tr key={`${t.id}`} className="hover:bg-slate-50 group">
+                                <td className="px-6 py-3 font-medium text-slate-700">
+                                    {t.task}
+                                </td>
+                                <td className="px-6 py-3">
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-semibold text-slate-600">{t.module}</span>
+                                        <span className="text-[10px] text-slate-400">{t.project}</span>
+                                    </div>
+                                </td>
+                                <td className="px-6 py-3">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${t.resource === 'Unassigned' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>
+                                        {t.resource}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-3">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${t.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-600'}`}>
+                                        {t.status}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-3 font-mono text-xs text-slate-500">
+                                    <div className="flex items-center gap-1">
+                                        <span>{new Date(t.start).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>
+                                        <ArrowRight size={10} className="text-slate-300" />
+                                        <span>{new Date(t.end).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>
+                                    </div>
+                                </td>
+                                <td className="px-6 py-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden w-24">
+                                            <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${t.progress}%` }}></div>
+                                        </div>
+                                        <span className="text-xs font-bold text-slate-600 w-8 text-right">{t.progress}%</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))
+                    )}
+                </tbody>
+            </table>
+        </div>
+      </div>
+
     </div>
   );
 };
