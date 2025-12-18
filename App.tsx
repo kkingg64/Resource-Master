@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay, getTaskBaseName } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType, ProjectRole, ProjectMember } from './types';
@@ -328,17 +327,6 @@ const ShareModal: React.FC<{ onClose: () => void, projectId: string, session: an
       </div>
     </div>
   );
-};
-
-// Helper function for shared FP logic
-const getTaskBaseName = (name: string): string => {
-  const prefixes = ["Design & Build-", "QA-", "UAT-"];
-  for (const prefix of prefixes) {
-    if (name.startsWith(prefix)) {
-      return name.substring(prefix.length).trim();
-    }
-  }
-  return name.trim();
 };
 
 const App: React.FC = () => {
@@ -1312,7 +1300,7 @@ const App: React.FC = () => {
         supabase.from('projects').insert({ name, user_id: session.user.id }).select().single()
     );
     if(data && !error) {
-        setProjects(prev => [...prev, { id: data.id, name: data.name, modules: [], currentUserRole: 'owner' }]);
+        setProjects(prev => [...prev, { id: data.id, name: data.name, modules: [] }]);
     }
   };
   
@@ -1406,7 +1394,7 @@ const App: React.FC = () => {
   };
   
   const deleteProject = async (projectId: string) => {
-      if (isReadOnlyMode || !isOwner) return; // Only owner can delete
+      if (isReadOnlyMode) return;
       if(!window.confirm("Delete project?")) return;
       setProjects(prev => prev.filter(p => p.id !== projectId));
       await callSupabase('DELETE project', { projectId }, supabase.from('projects').delete().eq('id', projectId));
@@ -1675,7 +1663,7 @@ const App: React.FC = () => {
       <div className="flex h-screen items-center justify-center bg-slate-100">
         <div className="bg-white p-8 rounded-xl shadow-lg border border-slate-200 max-w-md w-full">
             <h1 className="text-2xl font-bold text-slate-800 mb-6 text-center">Resource Planner Login</h1>
-            <Auth supabaseClient={supabase} appearance={{ theme: ThemeSupa }} providers={['google']} />
+            <Auth supabaseClient={supabase} appearance={{ theme: ThemeSupa }} providers={[]} />
         </div>
       </div>
     );
@@ -1723,7 +1711,7 @@ const App: React.FC = () => {
           </nav>
           
           <div className="p-2 border-t border-slate-800">
-             <button onClick={() => setShowShareModal(true)} disabled={isReadOnlyMode} className={`w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 hover:text-white text-slate-400 mb-1 ${isReadOnlyMode ? 'opacity-50 cursor-not-allowed' : ''}`} title={isReadOnlyMode ? 'Only owners can manage access' : 'Share'}>
+             <button onClick={() => setShowShareModal(true)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 hover:text-white text-slate-400 mb-1" title="Share">
                 <Share2 size={18} /> {!isSidebarCollapsed && <span className="text-sm">Share</span>}
              </button>
              <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 hover:text-white text-slate-400 mb-1" title={isSidebarCollapsed ? "Expand" : "Collapse"}>
@@ -1737,24 +1725,11 @@ const App: React.FC = () => {
 
        {/* Main Content */}
        <main className="flex-1 flex flex-col min-w-0 h-full bg-white relative overflow-y-auto custom-scrollbar">
-          {/* Project Selector - Placed here or handled inside Dashboard/Planner */}
-          {projects.length > 1 && activeTab !== 'settings' && (
-              <div className="absolute top-4 right-4 z-10">
-                  <select 
-                    className="text-xs border-slate-300 rounded focus:ring-indigo-500 focus:border-indigo-500 bg-white border py-1 pl-2 pr-6 shadow-sm" 
-                    value={selectedProjectId} 
-                    onChange={(e) => setSelectedProjectId(e.target.value)}
-                  >
-                      {projects.map(p => (<option key={p.id} value={p.id}>{p.name} {p.currentUserRole !== 'owner' ? `(${p.currentUserRole})` : ''}</option>))}
-                  </select>
-              </div>
-          )}
-
           <div className="flex-1 p-4 relative">
-            {activeTab === 'dashboard' && <Dashboard projects={projects.filter(p => p.id === selectedProjectId)} resources={resources} holidays={holidays} />}
+            {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
             
             {activeTab === 'planner' && <PlannerGrid 
-              projects={projects.filter(p => p.id === selectedProjectId)} 
+              projects={projects} 
               holidays={holidays}
               resources={resources}
               timelineStart={timelineStart}
@@ -1789,11 +1764,10 @@ const App: React.FC = () => {
               saveStatus={saveStatus}
               isRefreshing={isRefreshing}
               isReadOnly={isReadOnlyMode}
-              isOwner={isOwner}
             />}
             
             {activeTab === 'estimator' && <Estimator 
-              projects={projects.filter(p => p.id === selectedProjectId)} 
+              projects={projects} 
               holidays={holidays} 
               onUpdateModuleEstimates={updateModuleEstimates}
               onUpdateTaskEstimates={updateTaskEstimates}
@@ -1802,6 +1776,7 @@ const App: React.FC = () => {
               onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
               onUpdateModuleStartTask={updateModuleStartTask}
               onReorderModules={reorderModules}
+              // FIX: Add missing onDeleteModule prop
               onDeleteModule={deleteModule}
               isReadOnly={isReadOnlyMode}
             />}
@@ -1838,7 +1813,7 @@ const App: React.FC = () => {
        {/* Modals & Overlays */}
        {isAIEnabled && <AIAssistant projects={projects} resources={resources} onAddTask={addTask} onAssignResource={updateAssignmentResourceName} />}
        {isDebugLogEnabled && <DebugLog entries={logEntries} setEntries={setLogEntries} />}
-       {showShareModal && <ShareModal onClose={() => setShowShareModal(false)} projectId={selectedProjectId} session={session} />}
+       {showShareModal && <ShareModal onClose={() => setShowShareModal(false)} />}
        {showHistory && <VersionHistory onClose={() => setShowHistory(false)} onRestore={restoreVersion} onSaveCurrent={saveCurrentVersion} />}
     </div>
   );
