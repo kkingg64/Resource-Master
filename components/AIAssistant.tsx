@@ -61,8 +61,22 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
   const toggleOpen = () => setIsOpen(!isOpen);
 
   const getApiKey = () => {
-    // Support specific GROQ key or fallback to generic API_KEY
-    return (import.meta as any).env.VITE_GROQ_API_KEY || (process as any).env.GROQ_API_KEY || (process as any).env.API_KEY;
+    // 1. Check standard Vite variables (prefixed with VITE_)
+    if ((import.meta as any).env.VITE_GROQ_API_KEY) return (import.meta as any).env.VITE_GROQ_API_KEY;
+    if ((import.meta as any).env.VITE_API_KEY) return (import.meta as any).env.VITE_API_KEY;
+
+    // 2. Check injected process.env variables (from vite.config.ts define)
+    // We use a try-catch and specific checks to ensure safe replacement by the bundler
+    try {
+      // @ts-ignore
+      if (typeof process !== 'undefined' && process.env?.GROQ_API_KEY) return process.env.GROQ_API_KEY;
+      // @ts-ignore
+      if (typeof process !== 'undefined' && process.env?.API_KEY) return process.env.API_KEY;
+    } catch (e) {
+      // Fallback for safety
+    }
+    
+    return null;
   };
 
   const executeTools = async (toolCalls: GroqToolCall[]): Promise<GroqMessage[]> => {
@@ -147,7 +161,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
 
     try {
       const apiKey = getApiKey();
-      if (!apiKey) throw new Error("API Key not found. Please set VITE_GROQ_API_KEY or API_KEY.");
+      if (!apiKey) throw new Error("API Key not found. Please set VITE_GROQ_API_KEY or API_KEY in your environment.");
 
       // Add user message to LLM history
       conversationHistory.current.push({ role: 'user', content: userMsg.text });
