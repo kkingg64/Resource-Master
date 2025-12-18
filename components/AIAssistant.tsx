@@ -1,5 +1,5 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI, Type, FunctionDeclaration, GenerateContentResponse } from "@google/genai";
 import { MessageSquare, Send, X, Bot, Sparkles, User, Loader2, ChevronDown, Trash2, Maximize2, Minimize2 } from 'lucide-react';
 import { Project, Resource, Role } from '../types';
 
@@ -16,14 +16,36 @@ interface Message {
   text: string;
 }
 
+// Groq/OpenAI Compatible Types
+interface GroqToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+interface GroqMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content?: string | null;
+  tool_calls?: GroqToolCall[];
+  tool_call_id?: string;
+  name?: string;
+}
+
 export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, onAddTask, onAssignResource }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
   const projectsRef = useRef(projects);
   const resourcesRef = useRef(resources);
+  
+  // We maintain a separate history for the LLM context to handle tool calls correctly without cluttering the UI
+  const conversationHistory = useRef<GroqMessage[]>([]);
 
   // Keep refs updated for tool usage
   useEffect(() => {
@@ -38,6 +60,82 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
 
   const toggleOpen = () => setIsOpen(!isOpen);
 
+  const getApiKey = () => {
+    // Support specific GROQ key or fallback to generic API_KEY
+    return (import.meta as any).env.VITE_GROQ_API_KEY || (process as any).env.GROQ_API_KEY || (process as any).env.API_KEY;
+  };
+
+  const executeTools = async (toolCalls: GroqToolCall[]): Promise<GroqMessage[]> => {
+    const results: GroqMessage[] = [];
+
+    for (const call of toolCalls) {
+      const functionName = call.function.name;
+      let functionArgs: any = {};
+      
+      try {
+        functionArgs = JSON.parse(call.function.arguments);
+      } catch (e) {
+        console.error("Failed to parse tool arguments", e);
+      }
+
+      let result: any = { error: 'Unknown function' };
+
+      try {
+        if (functionName === 'listProjects') {
+          result = projectsRef.current.map(p => ({ id: p.id, name: p.name, moduleCount: p.modules.length }));
+        } else if (functionName === 'getProjectDetails') {
+          const { projectId } = functionArgs;
+          const project = projectsRef.current.find(p => p.id === projectId);
+          if (project) {
+            result = {
+              name: project.name,
+              modules: project.modules.map(m => ({
+                id: m.id,
+                name: m.name,
+                tasks: m.tasks.map(t => ({ 
+                  id: t.id, 
+                  name: t.name, 
+                  assignments: t.assignments.map(a => ({ id: a.id, resource: a.resourceName })) 
+                }))
+              }))
+            };
+          } else {
+            result = { error: 'Project not found' };
+          }
+        } else if (functionName === 'addTask') {
+          const { projectId, moduleId, taskName, role } = functionArgs;
+          const newTaskId = crypto.randomUUID();
+          const roleEnum = Object.values(Role).includes(role as Role) ? role as Role : Role.DEV;
+          onAddTask(projectId, moduleId, newTaskId, taskName, roleEnum);
+          result = { success: true, taskId: newTaskId, message: `Task '${taskName}' added.` };
+        } else if (functionName === 'assignResource') {
+          const { projectId, moduleId, taskId, resourceName } = functionArgs;
+          const project = projectsRef.current.find(p => p.id === projectId);
+          const module = project?.modules.find(m => m.id === moduleId);
+          const task = module?.tasks.find(t => t.id === taskId);
+
+          if (task && task.assignments.length > 0) {
+            const assignmentId = task.assignments[0].id;
+            onAssignResource(projectId, moduleId, taskId, assignmentId, resourceName);
+            result = { success: true, message: `Assigned ${resourceName} to task.` };
+          } else {
+            result = { error: 'Task or assignment slot not found. Create a task first.' };
+          }
+        }
+      } catch (e: any) {
+        result = { error: e.message };
+      }
+
+      results.push({
+        role: 'tool',
+        tool_call_id: call.id,
+        content: JSON.stringify(result)
+      });
+    }
+
+    return results;
+  };
+
   const handleSendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -48,66 +146,15 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
     setIsLoading(true);
 
     try {
-      const apiKey = process.env.API_KEY;
-      if (!apiKey) throw new Error("API Key not found");
+      const apiKey = getApiKey();
+      if (!apiKey) throw new Error("API Key not found. Please set VITE_GROQ_API_KEY or API_KEY.");
 
-      const ai = new GoogleGenAI({ apiKey });
-      
-      // Define Tools
-      const listProjectsTool: FunctionDeclaration = {
-        name: 'listProjects',
-        description: 'Get a list of all projects with their IDs and module counts.',
-// FIX: Added empty parameters object to avoid validation errors
-        parameters: { type: Type.OBJECT, properties: {} },
-      };
+      // Add user message to LLM history
+      conversationHistory.current.push({ role: 'user', content: userMsg.text });
 
-      const getProjectDetailsTool: FunctionDeclaration = {
-        name: 'getProjectDetails',
-        description: 'Get detailed structure (modules and tasks) of a specific project.',
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            projectId: { type: Type.STRING, description: 'The ID of the project' }
-          },
-          required: ['projectId']
-        }
-      };
-
-      const addTaskTool: FunctionDeclaration = {
-        name: 'addTask',
-        description: 'Add a new task to a specific module in a project.',
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            projectId: { type: Type.STRING, description: 'The ID of the project' },
-            moduleId: { type: Type.STRING, description: 'The ID of the module' },
-            taskName: { type: Type.STRING, description: 'Name of the task' },
-            role: { type: Type.STRING, description: 'Primary role needed (e.g., DEV, BA, QA)' }
-          },
-          required: ['projectId', 'moduleId', 'taskName']
-        }
-      };
-
-      const assignResourceTool: FunctionDeclaration = {
-        name: 'assignResource',
-        description: 'Assign a resource to a task assignment.',
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            projectId: { type: Type.STRING, description: 'The ID of the project' },
-            moduleId: { type: Type.STRING, description: 'The ID of the module' },
-            taskId: { type: Type.STRING, description: 'The ID of the task' },
-            resourceName: { type: Type.STRING, description: 'Name of the resource to assign' }
-          },
-          required: ['projectId', 'moduleId', 'taskId', 'resourceName']
-        }
-      };
-
-      // Initialize Chat
-      const chat = ai.chats.create({
-        model: 'gemini-2.5-flash',
-        config: {
-          systemInstruction: `You are an expert Project Management AI Assistant for the OMS Resource Master system. 
+      const systemMessage: GroqMessage = {
+        role: 'system',
+        content: `You are an expert Project Management AI Assistant for the OMS Resource Master system. 
           Your goal is to help the user manage their project plans, tasks, and resources.
           
           Current Date: ${new Date().toLocaleDateString()}
@@ -116,97 +163,112 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
           - Be concise and helpful.
           - Use tools to query project structure or perform actions.
           - When adding tasks, default to 'Dev Team' role if not specified.
-          - If a user asks about "allocation" or "timeline", explain that you can add tasks/assignments but they should view the visual grid for timeline adjustments.
-          `,
-          tools: [{ functionDeclarations: [listProjectsTool, getProjectDetailsTool, addTaskTool, assignResourceTool] }]
+          - If a user asks about "allocation" or "timeline", explain that you can add tasks/assignments but they should view the visual grid for timeline adjustments.`
+      };
+
+      const toolsDefinition = [
+        {
+          type: "function",
+          function: {
+            name: "listProjects",
+            description: "Get a list of all projects with their IDs and module counts.",
+            parameters: { type: "object", properties: {}, required: [] },
+          },
         },
-        history: messages.map(m => ({
-            role: m.role,
-            parts: [{ text: m.text }]
-        }))
-      });
+        {
+          type: "function",
+          function: {
+            name: "getProjectDetails",
+            description: "Get detailed structure (modules and tasks) of a specific project.",
+            parameters: {
+              type: "object",
+              properties: {
+                projectId: { type: "string", description: "The ID of the project" }
+              },
+              required: ["projectId"]
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
+            name: "addTask",
+            description: "Add a new task to a specific module in a project.",
+            parameters: {
+              type: "object",
+              properties: {
+                projectId: { type: "string", description: "The ID of the project" },
+                moduleId: { type: "string", description: "The ID of the module" },
+                taskName: { type: "string", description: "Name of the task" },
+                role: { type: "string", description: "Primary role needed (e.g., DEV, BA, QA)" }
+              },
+              required: ["projectId", "moduleId", "taskName"]
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
+            name: "assignResource",
+            description: "Assign a resource to a task assignment.",
+            parameters: {
+              type: "object",
+              properties: {
+                projectId: { type: "string", description: "The ID of the project" },
+                moduleId: { type: "string", description: "The ID of the module" },
+                taskId: { type: "string", description: "The ID of the task" },
+                resourceName: { type: "string", description: "Name of the resource to assign" }
+              },
+              required: ["projectId", "moduleId", "taskId", "resourceName"]
+            },
+          },
+        },
+      ];
 
-      let responseStream = await chat.sendMessageStream({ message: userMsg.text });
-      
-      let text = '';
-      let functionCalls: any[] = [];
-      for await (const chunk of responseStream) {
-        text += chunk.text;
-        if (chunk.functionCalls) {
-          functionCalls.push(...chunk.functionCalls);
+      // Loop to handle potential multiple tool calls (max 5 turns to prevent infinite loops)
+      let turnCount = 0;
+      let finalContent = '';
+
+      while (turnCount < 5) {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages: [systemMessage, ...conversationHistory.current],
+            tools: toolsDefinition,
+            tool_choice: "auto"
+          })
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error?.message || 'Groq API Error');
+        }
+
+        const data = await response.json();
+        const choice = data.choices[0];
+        const message = choice.message;
+
+        // Append assistant message to history
+        conversationHistory.current.push(message);
+
+        if (message.tool_calls && message.tool_calls.length > 0) {
+          // Execute tools and loop back
+          const toolResults = await executeTools(message.tool_calls);
+          conversationHistory.current.push(...toolResults);
+          turnCount++;
+        } else {
+          // Final response
+          finalContent = message.content;
+          break;
         }
       }
 
-      // Handle Function Calls Loop
-      if (functionCalls.length > 0) {
-        const functionResponses = [];
-        
-        for (const call of functionCalls) {
-          let result: any = { error: 'Unknown function' };
-          
-          try {
-            if (call.name === 'listProjects') {
-                result = projectsRef.current.map(p => ({ id: p.id, name: p.name, moduleCount: p.modules.length }));
-            } else if (call.name === 'getProjectDetails') {
-                const { projectId } = call.args as any;
-                const project = projectsRef.current.find(p => p.id === projectId);
-                if (project) {
-                    result = {
-                        name: project.name,
-                        modules: project.modules.map(m => ({
-                            id: m.id,
-                            name: m.name,
-                            tasks: m.tasks.map(t => ({ id: t.id, name: t.name, assignments: t.assignments.map(a => ({ id: a.id, resource: a.resourceName })) }))
-                        }))
-                    };
-                } else {
-                    result = { error: 'Project not found' };
-                }
-            } else if (call.name === 'addTask') {
-                const { projectId, moduleId, taskName, role } = call.args as any;
-                const newTaskId = crypto.randomUUID();
-                // Map string role to enum if possible, default to DEV
-                const roleEnum = Object.values(Role).includes(role as Role) ? role as Role : Role.DEV;
-                onAddTask(projectId, moduleId, newTaskId, taskName, roleEnum);
-                result = { success: true, taskId: newTaskId, message: `Task '${taskName}' added.` };
-            } else if (call.name === 'assignResource') {
-                 const { projectId, moduleId, taskId, resourceName } = call.args as any;
-                 // Find the first assignment of the task to assign (simplification for chat)
-                 const project = projectsRef.current.find(p => p.id === projectId);
-                 const module = project?.modules.find(m => m.id === moduleId);
-                 const task = module?.tasks.find(t => t.id === taskId);
-                 
-                 if (task && task.assignments.length > 0) {
-                     const assignmentId = task.assignments[0].id; // Assign to first slot
-                     onAssignResource(projectId, moduleId, taskId, assignmentId, resourceName);
-                     result = { success: true, message: `Assigned ${resourceName} to task.` };
-                 } else {
-                     result = { error: 'Task or assignment slot not found. Create a task first.' };
-                 }
-            }
-          } catch (e: any) {
-              result = { error: e.message };
-          }
-
-          functionResponses.push({
-            functionResponse: {
-                name: call.name,
-                response: { result: result } 
-            }
-          });
-        }
-
-        // Send function results back to model
-// FIX: Use sendMessageStream for streaming and handle the response correctly.
-        responseStream = await chat.sendMessageStream({ message: functionResponses });
-        text = '';
-        for await (const chunk of responseStream) {
-          text += chunk.text;
-        }
-      }
-
-      const modelText = text || "I processed that request.";
-      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: modelText }]);
+      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: finalContent || "Done." }]);
 
     } catch (error: any) {
       console.error("AI Error:", error);
@@ -234,9 +296,10 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
       <div className="bg-indigo-600 p-4 flex items-center justify-between text-white">
         <div className="flex items-center gap-2 font-semibold">
           <Bot size={20} />
-          <span>AI Assistant</span>
+          <span>AI Assistant (Groq)</span>
         </div>
         <div className="flex gap-2">
+            <button onClick={() => setMessages([])} className="hover:bg-indigo-500 p-1 rounded transition-colors" title="Clear Chat"><Trash2 size={18} /></button>
             <button onClick={toggleOpen} className="hover:bg-indigo-500 p-1 rounded transition-colors"><X size={18} /></button>
         </div>
       </div>
