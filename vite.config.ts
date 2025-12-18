@@ -14,6 +14,15 @@ export default defineConfig(({ mode }) => {
       'process.env.API_KEY': JSON.stringify(env.API_KEY),
       'process.env.GROQ_API_KEY': JSON.stringify(env.GROQ_API_KEY),
     },
+    server: {
+      proxy: {
+        '/api/chat': {
+          target: 'https://api.groq.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/chat/, '/openai/v1/chat/completions'),
+        },
+      },
+    },
     optimizeDeps: {
       include: ['@google/genai'],
     },

@@ -257,7 +257,8 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
       let finalContent = '';
 
       while (turnCount < 5) {
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        // Use local proxy path instead of direct URL to avoid CORS
+        const response = await fetch('/api/chat', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
@@ -272,8 +273,8 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({ projects, resources, o
         });
 
         if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error?.message || `Groq API Error: ${response.statusText}`);
+          const err = await response.json().catch(() => ({ error: { message: response.statusText } }));
+          throw new Error(err.error?.message || `Groq API Error: ${response.status} ${response.statusText}`);
         }
 
         const data = await response.json();
