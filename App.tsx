@@ -1480,7 +1480,7 @@ const App: React.FC = () => {
           };
         }
         return null;
-      }).filter(Boolean);
+      }).filter((p): p is NonNullable<typeof p> => p !== null);
 
       if (modulePayloads.length > 0) {
         await callSupabase('UPDATE module aggregated FP (batch)', { count: modulePayloads.length },
@@ -1583,15 +1583,6 @@ const App: React.FC = () => {
     );
   }
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 text-slate-500 gap-2">
-        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-        <span>Loading plan...</span>
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-screen w-full bg-slate-100 overflow-hidden text-slate-900 font-sans">
        {/* Sidebar */}
@@ -1639,88 +1630,95 @@ const App: React.FC = () => {
 
        {/* Main Content */}
        <main className="flex-1 flex flex-col min-w-0 h-full bg-white relative overflow-hidden">
-          <div className="flex-1 p-4 flex flex-col relative min-h-0">
-            {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
-            
-            {activeTab === 'planner' && <PlannerGrid 
-              projects={projects} 
-              holidays={holidays}
-              resources={resources}
-              timelineStart={timelineStart}
-              timelineEnd={timelineEnd}
-              onExtendTimeline={handleExtendTimeline}
-              onUpdateAllocation={updateAllocation}
-              onUpdateAssignmentResourceName={updateAssignmentResourceName}
-              onUpdateAssignmentDependency={updateAssignmentDependency}
-              onAddTask={addTask}
-              onAddAssignment={addAssignment}
-              onCopyAssignment={onCopyAssignment}
-              onReorderModules={reorderModules}
-              onReorderTasks={reorderTasks}
-              onMoveTask={moveTask}
-              onUpdateModuleType={updateModuleType}
-              onReorderAssignments={reorderAssignments}
-              onShiftTask={onShiftTask}
-              onUpdateAssignmentSchedule={updateAssignmentSchedule}
-              onUpdateAssignmentProgress={updateAssignmentProgress}
-              onAddProject={addProject}
-              onAddModule={addModule}
-              onUpdateProjectName={updateProjectName}
-              onUpdateModuleName={updateModuleName}
-              onUpdateTaskName={updateTaskName}
-              onDeleteProject={deleteProject}
-              onDeleteModule={deleteModule}
-              onDeleteTask={deleteTask}
-              onDeleteAssignment={deleteAssignment}
-              onImportPlan={(p, h) => { setProjects(p); setHolidays(h); calculateTimelineBounds(p, resources, h); }}
-              onShowHistory={() => setShowHistory(true)}
-              onRefresh={() => fetchData(true)}
-              saveStatus={saveStatus}
-              isRefreshing={isRefreshing}
-              isReadOnly={isReadOnlyMode}
-            />}
-            
-            {activeTab === 'estimator' && <Estimator 
-              projects={projects} 
-              holidays={holidays} 
-              onUpdateModuleEstimates={updateModuleEstimates}
-              onUpdateTaskEstimates={updateTaskEstimates}
-              onUpdateModuleComplexity={updateModuleComplexity}
-              onUpdateModuleStartDate={updateModuleStartDate}
-              onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
-              onUpdateModuleStartTask={updateModuleStartTask}
-              onReorderModules={reorderModules}
-              onDeleteModule={deleteModule}
-              isReadOnly={isReadOnlyMode}
-            />}
-            
-            {activeTab === 'resources' && <Resources 
-              resources={resources} 
-              onAddResource={addResource} 
-              onDeleteResource={deleteResource}
-              onUpdateResourceCategory={updateResourceCategory}
-              onUpdateResourceRegion={updateResourceRegion}
-              onUpdateResourceType={updateResourceType}
-              onUpdateResourceName={updateResourceName}
-              onAddIndividualHoliday={addIndividualHolidays}
-              onDeleteIndividualHoliday={deleteIndividualHoliday}
-              isReadOnly={isReadOnlyMode}
-            />}
-            
-            {activeTab === 'settings' && <Settings 
-              isDebugLogEnabled={isDebugLogEnabled}
-              setIsDebugLogEnabled={setIsDebugLogEnabled}
-              isAIEnabled={isAIEnabled}
-              setIsAIEnabled={setIsAIEnabled}
-            />}
-            
-            {activeTab === 'holidays' && <AdminSettings 
-              holidays={holidays}
-              onAddHolidays={addHoliday}
-              onDeleteHoliday={deleteHoliday}
-              onDeleteHolidaysByCountry={deleteHolidaysByCountry}
-            />}
-          </div>
+          {loading ? (
+            <div className="flex-1 flex items-center justify-center text-slate-500 gap-2">
+              <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+              <span>Loading plan...</span>
+            </div>
+          ) : (
+            <div className="flex-1 p-4 flex flex-col relative min-h-0">
+              {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
+              
+              {activeTab === 'planner' && <PlannerGrid 
+                projects={projects} 
+                holidays={holidays}
+                resources={resources}
+                timelineStart={timelineStart}
+                timelineEnd={timelineEnd}
+                onExtendTimeline={handleExtendTimeline}
+                onUpdateAllocation={updateAllocation}
+                onUpdateAssignmentResourceName={updateAssignmentResourceName}
+                onUpdateAssignmentDependency={updateAssignmentDependency}
+                onAddTask={addTask}
+                onAddAssignment={addAssignment}
+                onCopyAssignment={onCopyAssignment}
+                onReorderModules={reorderModules}
+                onReorderTasks={reorderTasks}
+                onMoveTask={moveTask}
+                onUpdateModuleType={updateModuleType}
+                onReorderAssignments={reorderAssignments}
+                onShiftTask={onShiftTask}
+                onUpdateAssignmentSchedule={updateAssignmentSchedule}
+                onUpdateAssignmentProgress={updateAssignmentProgress}
+                onAddProject={addProject}
+                onAddModule={addModule}
+                onUpdateProjectName={updateProjectName}
+                onUpdateModuleName={updateModuleName}
+                onUpdateTaskName={updateTaskName}
+                onDeleteProject={deleteProject}
+                onDeleteModule={deleteModule}
+                onDeleteTask={deleteTask}
+                onDeleteAssignment={deleteAssignment}
+                onImportPlan={(p, h) => { setProjects(p); setHolidays(h); calculateTimelineBounds(p, resources, h); }}
+                onShowHistory={() => setShowHistory(true)}
+                onRefresh={() => fetchData(true)}
+                saveStatus={saveStatus}
+                isRefreshing={isRefreshing}
+                isReadOnly={isReadOnlyMode}
+              />}
+              
+              {activeTab === 'estimator' && <Estimator 
+                projects={projects} 
+                holidays={holidays} 
+                onUpdateModuleEstimates={updateModuleEstimates}
+                onUpdateTaskEstimates={updateTaskEstimates}
+                onUpdateModuleComplexity={updateModuleComplexity}
+                onUpdateModuleStartDate={updateModuleStartDate}
+                onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
+                onUpdateModuleStartTask={updateModuleStartTask}
+                onReorderModules={reorderModules}
+                onDeleteModule={deleteModule}
+                isReadOnly={isReadOnlyMode}
+              />}
+              
+              {activeTab === 'resources' && <Resources 
+                resources={resources} 
+                onAddResource={addResource} 
+                onDeleteResource={deleteResource}
+                onUpdateResourceCategory={updateResourceCategory}
+                onUpdateResourceRegion={updateResourceRegion}
+                onUpdateResourceType={updateResourceType}
+                onUpdateResourceName={updateResourceName}
+                onAddIndividualHoliday={addIndividualHolidays}
+                onDeleteIndividualHoliday={deleteIndividualHoliday}
+                isReadOnly={isReadOnlyMode}
+              />}
+              
+              {activeTab === 'settings' && <Settings 
+                isDebugLogEnabled={isDebugLogEnabled}
+                setIsDebugLogEnabled={setIsDebugLogEnabled}
+                isAIEnabled={isAIEnabled}
+                setIsAIEnabled={setIsAIEnabled}
+              />}
+              
+              {activeTab === 'holidays' && <AdminSettings 
+                holidays={holidays}
+                onAddHolidays={addHoliday}
+                onDeleteHoliday={deleteHoliday}
+                onDeleteHolidaysByCountry={deleteHolidaysByCountry}
+              />}
+            </div>
+          )}
        </main>
 
        {/* Modals & Overlays */}
