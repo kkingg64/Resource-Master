@@ -62,8 +62,99 @@ export const GOV_HOLIDAYS_DB: Record<string, Omit<Holiday, 'id'>[]> = {
     { date: '2027-12-25', name: 'Christmas Day', country: 'HK' },
     { date: '2027-12-27', name: 'Boxing Day (substitute day)', country: 'HK' },
   ],
-  // ... (Other countries omitted for brevity but would be included here normally) ...
-  'CN': [], 'MY': [], 'SG': [], 'US': [], 'UK': [], 'CE': [], 'LK': [] // Preserving keys for TS
+  'CN': [
+    // 2024
+    { date: '2024-12-30', name: 'New Year\'s Day Holiday', country: 'CN' },
+    { date: '2024-12-31', name: 'New Year\'s Day Holiday', country: 'CN' },
+    // 2025
+    { date: '2025-01-01', name: 'New Year\'s Day', country: 'CN' },
+    { date: '2025-01-28', name: 'Spring Festival Holiday', country: 'CN' },
+    { date: '2025-01-29', name: 'Spring Festival', country: 'CN' },
+    { date: '2025-01-30', name: 'Spring Festival', country: 'CN' },
+    { date: '2025-01-31', name: 'Spring Festival', country: 'CN' },
+    { date: '2025-02-01', name: 'Spring Festival Holiday', country: 'CN' },
+    { date: '2025-02-02', name: 'Spring Festival Holiday', country: 'CN' },
+    { date: '2025-02-03', name: 'Spring Festival Holiday', country: 'CN' },
+    { date: '2025-04-04', name: 'Qingming Festival', country: 'CN' },
+    { date: '2025-05-01', name: 'Labour Day', country: 'CN' },
+    { date: '2025-05-02', name: 'Labour Day Holiday', country: 'CN' },
+    { date: '2025-05-03', name: 'Labour Day Holiday', country: 'CN' },
+    { date: '2025-05-31', name: 'Dragon Boat Festival', country: 'CN' },
+    { date: '2025-10-01', name: 'National Day', country: 'CN' },
+    { date: '2025-10-02', name: 'National Day Holiday', country: 'CN' },
+    { date: '2025-10-03', name: 'National Day Holiday', country: 'CN' },
+    { date: '2025-10-04', name: 'National Day Holiday', country: 'CN' },
+    { date: '2025-10-05', name: 'National Day Holiday', country: 'CN' },
+    { date: '2025-10-06', name: 'Mid-Autumn Festival', country: 'CN' },
+    { date: '2025-10-07', name: 'National Day Holiday', country: 'CN' },
+  ],
+  'MY': [
+    // 2025 (Federal)
+    { date: '2025-01-01', name: 'New Year\'s Day', country: 'MY' },
+    { date: '2025-01-22', name: 'Thaipusam', country: 'MY' },
+    { date: '2025-01-29', name: 'Chinese New Year', country: 'MY' },
+    { date: '2025-01-30', name: 'Chinese New Year (2nd day)', country: 'MY' },
+    { date: '2025-03-21', name: 'Nuzul Al-Quran', country: 'MY' },
+    { date: '2025-03-31', name: 'Hari Raya Aidilfitri', country: 'MY' },
+    { date: '2025-04-01', name: 'Hari Raya Aidilfitri (2nd day)', country: 'MY' },
+    { date: '2025-05-01', name: 'Labour Day', country: 'MY' },
+    { date: '2025-05-12', name: 'Wesak Day', country: 'MY' },
+    { date: '2025-06-02', name: 'King\'s Birthday', country: 'MY' },
+    { date: '2025-06-07', name: 'Hari Raya Haji', country: 'MY' },
+    { date: '2025-06-28', name: 'Awal Muharram', country: 'MY' },
+    { date: '2025-08-31', name: 'National Day', country: 'MY' },
+    { date: '2025-09-05', name: 'Prophet Muhammad\'s Birthday', country: 'MY' },
+    { date: '2025-09-16', name: 'Malaysia Day', country: 'MY' },
+    { date: '2025-10-20', name: 'Deepavali', country: 'MY' },
+    { date: '2025-12-25', name: 'Christmas Day', country: 'MY' },
+  ],
+  'SG': [
+    // 2024
+    { date: '2024-12-25', name: 'Christmas Day', country: 'SG' },
+    // 2025
+    { date: '2025-01-01', name: 'New Year\'s Day', country: 'SG' },
+    { date: '2025-01-29', name: 'Chinese New Year', country: 'SG' },
+    { date: '2025-01-30', name: 'Chinese New Year (2nd day)', country: 'SG' },
+    { date: '2025-03-31', name: 'Hari Raya Puasa', country: 'SG' },
+    { date: '2025-04-18', name: 'Good Friday', country: 'SG' },
+    { date: '2025-05-01', name: 'Labour Day', country: 'SG' },
+    { date: '2025-05-12', name: 'Vesak Day', country: 'SG' },
+    { date: '2025-06-07', name: 'Hari Raya Haji', country: 'SG' },
+    { date: '2025-08-11', name: 'National Day (in lieu)', country: 'SG' },
+    { date: '2025-10-20', name: 'Deepavali', country: 'SG' },
+    { date: '2025-12-25', name: 'Christmas Day', country: 'SG' },
+  ],
+  'US': [
+    // 2024
+    { date: '2024-12-25', name: 'Christmas Day', country: 'US' },
+    // 2025
+    { date: '2025-01-01', name: 'New Year\'s Day', country: 'US' },
+    { date: '2025-01-20', name: 'Martin Luther King, Jr. Day', country: 'US' },
+    { date: '2025-02-17', name: 'Washington\'s Birthday', country: 'US' },
+    { date: '2025-05-26', name: 'Memorial Day', country: 'US' },
+    { date: '2025-06-19', name: 'Juneteenth National Independence Day', country: 'US' },
+    { date: '2025-07-04', name: 'Independence Day', country: 'US' },
+    { date: '2025-09-01', name: 'Labor Day', country: 'US' },
+    { date: '2025-10-13', name: 'Columbus Day', country: 'US' },
+    { date: '2025-11-11', name: 'Veterans Day', country: 'US' },
+    { date: '2025-11-27', name: 'Thanksgiving Day', country: 'US' },
+    { date: '2025-12-25', name: 'Christmas Day', country: 'US' },
+  ],
+  'UK': [
+    // 2024 (England/Wales)
+    { date: '2024-12-25', name: 'Christmas Day', country: 'UK' },
+    { date: '2024-12-26', name: 'Boxing Day', country: 'UK' },
+    // 2025 (England/Wales)
+    { date: '2025-01-01', name: 'New Year\'s Day', country: 'UK' },
+    { date: '2025-04-18', name: 'Good Friday', country: 'UK' },
+    { date: '2025-04-21', name: 'Easter Monday', country: 'UK' },
+    { date: '2025-05-05', name: 'Early May bank holiday', country: 'UK' },
+    { date: '2025-05-26', name: 'Spring bank holiday', country: 'UK' },
+    { date: '2025-08-25', name: 'Summer bank holiday', country: 'UK' },
+    { date: '2025-12-25', name: 'Christmas Day', country: 'UK' },
+    { date: '2025-12-26', name: 'Boxing Day', country: 'UK' },
+  ],
+  'CE': [], 'LK': [] // Preserving keys for TS
 };
 
 // --- Date Utilities for Timeline Generation ---

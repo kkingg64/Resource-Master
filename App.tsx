@@ -1636,7 +1636,7 @@ const App: React.FC = () => {
               <span>Loading plan...</span>
             </div>
           ) : (
-            <div className="flex-1 p-4 flex flex-col relative min-h-0">
+            <div className="flex-1 p-4 flex flex-col relative min-h-0 overflow-y-auto custom-scrollbar">
               {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
               
               {activeTab === 'planner' && <PlannerGrid 
