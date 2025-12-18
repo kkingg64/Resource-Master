@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
+import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay, getTaskBaseName } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
@@ -243,17 +243,6 @@ const ShareModal: React.FC<{ onClose: () => void, session: any }> = ({ onClose, 
       </div>
     </div>
   );
-};
-
-// Helper function for shared FP logic
-const getTaskBaseName = (name: string): string => {
-  const prefixes = ["Design & Build-", "QA-", "UAT-"];
-  for (const prefix of prefixes) {
-    if (name.startsWith(prefix)) {
-      return name.substring(prefix.length).trim();
-    }
-  }
-  return name.trim();
 };
 
 const App: React.FC = () => {

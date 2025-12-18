@@ -376,3 +376,14 @@ export const calculateWorkingDaysBetween = (startDateStr: string, endDateStr: st
   }
   return workingDays;
 };
+
+// Helper function for shared FP logic
+export const getTaskBaseName = (name: string): string => {
+  const prefixes = ["Design & Build-", "QA-", "UAT-"];
+  for (const prefix of prefixes) {
+    if (name.startsWith(prefix)) {
+      return name.substring(prefix.length).trim();
+    }
+  }
+  return name.trim();
+};

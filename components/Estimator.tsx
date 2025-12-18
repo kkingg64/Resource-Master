@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, ProjectModule, ComplexityLevel, Holiday, Role, ProjectTask, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { Calculator, GripVertical, ChevronRight, ChevronDown, Calendar as CalendarIcon, Link2, AlertCircle, CheckCircle2, Layers, Gem, ShieldCheck, Dot, Rocket, Server, Trash2 } from 'lucide-react';
-import { calculateEndDate, formatDateForInput, calculateWorkingDaysBetween } from '../constants';
+import { calculateEndDate, formatDateForInput, calculateWorkingDaysBetween, getTaskBaseName } from '../constants';
 
 interface EstimatorProps {
   projects: Project[];
@@ -175,6 +175,26 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
     }
     return map;
   }, [selectedProject]);
+  
+  const designAndBuildFpMap = useMemo(() => {
+    const map = new Map<string, { feFp?: number; beFp?: number }>();
+    if (!selectedProject) return map;
+
+    const designModule = selectedProject.modules.find(m => m.name.toLowerCase().includes('design & build'));
+    if (designModule) {
+      designModule.tasks.forEach(task => {
+        const baseName = getTaskBaseName(task.name);
+        if (baseName) {
+          map.set(baseName, { 
+            feFp: task.frontendFunctionPoints, 
+            beFp: task.backendFunctionPoints 
+          });
+        }
+      });
+    }
+    return map;
+  }, [selectedProject]);
+
 
   const getTaskEarliestStartDate = (task: ProjectTask): string | null => {
     let minDate: string | null = null;
@@ -549,9 +569,22 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                 <td className={`px-1 border-b border-slate-100 text-center align-middle border-r border-slate-200 ${cellBgClass}`}><span className={`text-[10px] font-mono ${varianceClass}`}>{varianceText}</span></td>
                             </tr>
                             {isExpanded && m.tasks.map((task, taskIndex) => {
-                                 const taskFeVel = task.frontendVelocity ?? m.frontendVelocity ?? 5; const taskFeTeam = task.frontendTeamSize ?? (task.assignments.length > 0 ? task.assignments.length : m.frontendTeamSize) ?? 2; const taskFeComp = task.frontendComplexity ?? m.frontendComplexity ?? 'Medium'; const taskFeEffort = (task.frontendFunctionPoints ?? 0) > 0 ? Math.ceil(((task.frontendFunctionPoints ?? 0) / taskFeVel) * COMPLEXITY_MULTIPLIERS[taskFeComp]) : 0; 
+                                 const isQaTask = m.name.toLowerCase().includes('qa');
+                                 let displayFeFp = task.frontendFunctionPoints;
+                                 let displayBeFp = task.backendFunctionPoints;
+                                 
+                                 if (isQaTask) {
+                                     const baseName = getTaskBaseName(task.name);
+                                     const linkedFps = designAndBuildFpMap.get(baseName);
+                                     if (linkedFps) {
+                                         displayFeFp = linkedFps.feFp;
+                                         displayBeFp = linkedFps.beFp;
+                                     }
+                                 }
+                                
+                                 const taskFeVel = task.frontendVelocity ?? m.frontendVelocity ?? 5; const taskFeTeam = task.frontendTeamSize ?? (task.assignments.length > 0 ? task.assignments.length : m.frontendTeamSize) ?? 2; const taskFeComp = task.frontendComplexity ?? m.frontendComplexity ?? 'Medium'; const taskFeEffort = (displayFeFp ?? 0) > 0 ? Math.ceil(((displayFeFp ?? 0) / taskFeVel) * COMPLEXITY_MULTIPLIERS[taskFeComp]) : 0; 
                                  const taskFeDuration = (taskFeEffort > 0 && taskFeTeam > 0) ? Math.ceil(taskFeEffort / taskFeTeam) : 0;
-                                 const taskBeVel = task.backendVelocity ?? m.backendVelocity ?? 5; const taskBeTeam = task.backendTeamSize ?? (task.assignments.length > 0 ? task.assignments.length : m.backendTeamSize) ?? 2; const taskBeComp = task.backendComplexity ?? m.backendComplexity ?? 'Medium'; const taskBeEffort = (task.backendFunctionPoints ?? 0) > 0 ? Math.ceil(((task.backendFunctionPoints ?? 0) / taskBeVel) * COMPLEXITY_MULTIPLIERS[taskBeComp]) : 0; 
+                                 const taskBeVel = task.backendVelocity ?? m.backendVelocity ?? 5; const taskBeTeam = task.backendTeamSize ?? (task.assignments.length > 0 ? task.assignments.length : m.backendTeamSize) ?? 2; const taskBeComp = task.backendComplexity ?? m.backendComplexity ?? 'Medium'; const taskBeEffort = (displayBeFp ?? 0) > 0 ? Math.ceil(((displayBeFp ?? 0) / taskBeVel) * COMPLEXITY_MULTIPLIERS[taskBeComp]) : 0; 
                                  const taskBeDuration = (taskBeEffort > 0 && taskBeTeam > 0) ? Math.ceil(taskBeEffort / taskBeTeam) : 0;
                                  
                                  const taskPrepVel = task.frontendVelocity ?? m.prepVelocity ?? 10; const taskPrepTeam = task.frontendTeamSize ?? (task.assignments.length > 0 ? task.assignments.length : m.prepTeamSize) ?? 2; const taskPrepComp = task.frontendComplexity ?? m.complexity ?? 'Medium'; const taskPrepEffort = (task.frontendFunctionPoints ?? 0) > 0 ? Math.ceil(((task.frontendFunctionPoints ?? 0) / taskPrepVel) * COMPLEXITY_MULTIPLIERS[taskPrepComp]) : 0; 
@@ -586,13 +619,13 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                     </>}
 
                                     {isDev ? <>
-                                    <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={3} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} value={task.frontendFunctionPoints} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendFunctionPoints: val })} disabled={isReadOnly || m.name.toLowerCase().includes('qa')} /></td>
+                                    <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={3} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} value={displayFeFp} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendFunctionPoints: val })} disabled={isReadOnly || isQaTask} /></td>
                                     <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={4} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={task.frontendVelocity} placeholder={m.frontendVelocity} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendVelocity: val })} disabled={isReadOnly} /></td>
                                     <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={5} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={task.frontendTeamSize} placeholder={task.assignments.length > 0 ? task.assignments.length : m.frontendTeamSize} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendTeamSize: val })} disabled={isReadOnly} /></td>
                                     <td className="p-0 border-b border-slate-100"><ComplexitySelect value={taskFeComp} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { frontendComplexity: val })} isReadOnly={isReadOnly} placeholder={m.frontendComplexity} /></td>
                                     <td className="px-1 text-center border-b border-slate-100 text-slate-400 font-mono">{taskFeEffort || '-'}</td>
                                     <td className="px-1 text-center border-b border-slate-100 border-r border-slate-200 text-blue-700 font-medium">{formatWeeks(taskFeDuration)}</td>
-                                    <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={6} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} value={task.backendFunctionPoints} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { backendFunctionPoints: val })} disabled={isReadOnly || m.name.toLowerCase().includes('qa')} /></td>
+                                    <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={6} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-600`} value={displayBeFp} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { backendFunctionPoints: val })} disabled={isReadOnly || isQaTask} /></td>
                                     <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={7} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={task.backendVelocity} placeholder={m.backendVelocity} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { backendVelocity: val })} disabled={isReadOnly} /></td>
                                     <td className="p-0 border-b border-slate-100"><EstimatorNumberInput rowIndex={index * 1000 + taskIndex + 1} colIndex={8} onNavigate={handleNavigate} className={`${baseInputClass} text-slate-500`} min={1} value={task.backendTeamSize} placeholder={task.assignments.length > 0 ? task.assignments.length : m.backendTeamSize} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { backendTeamSize: val })} disabled={isReadOnly} /></td>
                                     <td className="p-0 border-b border-slate-100"><ComplexitySelect value={taskBeComp} onChange={val => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { backendComplexity: val })} isReadOnly={isReadOnly} placeholder={m.backendComplexity} /></td>
