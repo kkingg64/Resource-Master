@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay, getTaskBaseName } from './constants';
-import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType } from './types';
+import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType, ProjectRole, ProjectMember } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
 import { Estimator } from './components/Estimator';
@@ -10,7 +11,7 @@ import { VersionHistory } from './components/VersionHistory';
 import { DebugLog } from './components/DebugLog';
 import { AdminSettings } from './components/AdminSettings';
 import { AIAssistant } from './components/AIAssistant';
-import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X, Mail } from 'lucide-react';
+import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X, Mail, Plus, Trash2, UserPlus } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
@@ -21,7 +22,9 @@ const structureProjectsData = (
   modules: any[],
   tasks: any[],
   assignments: any[],
-  allocations: any[]
+  allocations: any[],
+  currentUserId: string,
+  members: any[] = []
 ): Project[] => {
   const allocationsByAssignment = new Map<string, any[]>();
   allocations.forEach(a => {
@@ -116,11 +119,26 @@ const structureProjectsData = (
     });
   });
 
-  return projects.map(p => ({
-    id: p.id,
-    name: p.name,
-    modules: (modulesByProject.get(p.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
-  })).sort((a,b) => a.name.localeCompare(b.name));
+  return projects.map(p => {
+    // Determine Role
+    let role: ProjectRole = 'viewer';
+    if (p.user_id === currentUserId) {
+        role = 'owner';
+    } else {
+        const membership = members.find(m => m.project_id === p.id && (m.user_id === currentUserId || m.user_email === currentUserId)); // Fallback to ID check if emails not joined
+        if (membership) {
+            role = membership.role;
+        }
+    }
+
+    return {
+        id: p.id,
+        name: p.name,
+        modules: (modulesByProject.get(p.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+        currentUserRole: role,
+        ownerEmail: p.owner_email // Assuming backend joins owner profile or stores email
+    };
+  }).sort((a,b) => a.name.localeCompare(b.name));
 };
 
 const deepClone = <T,>(obj: T): T => JSON.parse(JSON.stringify(obj));
@@ -147,10 +165,61 @@ const shiftWeekIdByAmount = (weekId: string, amount: number): string => {
     return `${newPoint.year}-${String(newPoint.week).padStart(2, '0')}`;
 };
 
-const ShareModal: React.FC<{ onClose: () => void, session: any }> = ({ onClose, session }) => {
+const ShareModal: React.FC<{ onClose: () => void, projectId: string, session: any }> = ({ onClose, projectId, session }) => {
+  const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [newEmail, setNewEmail] = useState('');
+  const [newRole, setNewRole] = useState<ProjectRole>('viewer');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAdding, setIsAdding] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [email, setEmail] = useState('');
-  const shareUrl = `${window.location.origin}${window.location.pathname}?share=${session.user.id}`;
+  const shareUrl = `${window.location.origin}${window.location.pathname}?share=${session.user.id}`; // Keep old link for backward compat
+
+  useEffect(() => {
+      fetchMembers();
+  }, [projectId]);
+
+  const fetchMembers = async () => {
+      setIsLoading(true);
+      const { data, error } = await supabase.from('project_members').select('*').eq('project_id', projectId);
+      if (!error && data) {
+          setMembers(data);
+      }
+      setIsLoading(false);
+  };
+
+  const addMember = async () => {
+      if (!newEmail.trim()) return;
+      setIsAdding(true);
+      
+      const { error } = await supabase.from('project_members').insert({
+          project_id: projectId,
+          user_email: newEmail.trim(),
+          role: newRole,
+          // user_id is typically linked via a trigger or manually if you know the ID, 
+          // for simplicity we assume the system maps email to user_id later or uses email for lookup
+      });
+
+      if (error) {
+          alert('Failed to add member: ' + error.message);
+      } else {
+          setNewEmail('');
+          fetchMembers();
+      }
+      setIsAdding(false);
+  };
+
+  const updateMemberRole = async (memberId: string, role: ProjectRole) => {
+      const { error } = await supabase.from('project_members').update({ role }).eq('id', memberId);
+      if (error) alert('Failed to update role');
+      else fetchMembers();
+  };
+
+  const removeMember = async (memberId: string) => {
+      if (!confirm("Remove this member?")) return;
+      const { error } = await supabase.from('project_members').delete().eq('id', memberId);
+      if (error) alert('Failed to remove member');
+      else fetchMembers();
+  };
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(shareUrl);
@@ -158,91 +227,118 @@ const ShareModal: React.FC<{ onClose: () => void, session: any }> = ({ onClose, 
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleShareViaEmail = () => {
-    if (!email.trim()) return;
-    
-    const subject = encodeURIComponent("Project Plan for OMS Resource Master");
-    const body = encodeURIComponent(
-      `Hi,\n\nPlease find the read-only project plan here:\n${shareUrl}\n\nThanks!`
-    );
-    
-    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
-  };
-
   return (
     <div className="fixed inset-0 bg-black/30 z-[100] flex items-center justify-center animate-in fade-in duration-200">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <Share2 className="w-5 h-5 text-indigo-600" /> Share Project Plan
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
+          <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+            <Users className="w-5 h-5 text-indigo-600" /> Manage Access
           </h3>
-          <button onClick={onClose} className="p-1 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+          <button onClick={onClose} className="p-1.5 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
             <X size={20} />
           </button>
         </div>
 
-        <div>
-          <label className="text-sm font-medium text-slate-700">Copy Link</label>
-          <p className="text-xs text-slate-500 mb-2">
-            Share this unique link with your team members. It will give them <strong>Read-Only</strong> access to your project plan.
-          </p>
-          <div className="flex items-center gap-2">
-            <input 
-              type="text" 
-              readOnly 
-              value={shareUrl} 
-              className="flex-1 bg-slate-50 border border-slate-300 text-slate-600 text-sm rounded-lg p-2.5 focus:ring-indigo-500 focus:border-indigo-500 block w-full"
-            />
-            <button 
-              onClick={copyToClipboard}
-              className={`p-2.5 rounded-lg border flex items-center justify-center transition-all ${copied ? 'bg-green-50 border-green-200 text-green-600' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'}`}
-              title="Copy to clipboard"
-            >
-              {copied ? <Check size={18} /> : <Copy size={18} />}
-            </button>
-          </div>
-        </div>
-        
-        <div className="relative flex py-5 items-center">
-          <div className="flex-grow border-t border-slate-200"></div>
-          <span className="flex-shrink mx-4 text-slate-400 text-xs font-semibold">OR</span>
-          <div className="flex-grow border-t border-slate-200"></div>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium text-slate-700">Invite via Email</label>
-          <p className="text-xs text-slate-500 mb-2">Draft an email with the link to send to a teammate.</p>
-          <div className="flex items-center gap-2">
-            <input 
-              type="email" 
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="teammate@example.com"
-              className="flex-1 bg-slate-50 border border-slate-300 text-slate-600 text-sm rounded-lg p-2.5 focus:ring-indigo-500 focus:border-indigo-500 block w-full"
-            />
-            <button 
-              onClick={handleShareViaEmail}
-              className="p-2.5 rounded-lg border flex items-center justify-center bg-slate-800 text-white hover:bg-slate-700 transition-colors disabled:opacity-50"
-              title="Open Email Client"
-              disabled={!email.trim()}
-            >
-              <Mail size={18} />
-            </button>
-          </div>
+        {/* Invite Section */}
+        <div className="mb-6">
+            <label className="text-sm font-semibold text-slate-700 mb-2 block">Invite Teammate</label>
+            <div className="flex gap-2">
+                <input 
+                    type="email" 
+                    value={newEmail} 
+                    onChange={e => setNewEmail(e.target.value)} 
+                    placeholder="teammate@company.com" 
+                    className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+                <select 
+                    value={newRole} 
+                    onChange={e => setNewRole(e.target.value as ProjectRole)} 
+                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                    <option value="viewer">Viewer</option>
+                    <option value="editor">Editor</option>
+                </select>
+                <button 
+                    onClick={addMember} 
+                    disabled={isAdding || !newEmail}
+                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+                >
+                    {isAdding ? '...' : <><UserPlus size={16}/> Invite</>}
+                </button>
+            </div>
         </div>
 
-        <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800 mt-6">
-           <strong>Note:</strong> Team members will need to be logged into the application to view the shared plan.
+        {/* List Section */}
+        <div>
+            <h4 className="text-sm font-semibold text-slate-700 mb-3">People with access</h4>
+            <div className="space-y-3 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                {/* Owner (You) */}
+                <div className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg transition-colors">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs">
+                            {session.user.email?.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-slate-900">{session.user.email} <span className="text-slate-400 font-normal">(You)</span></p>
+                            <p className="text-xs text-slate-500">Owner</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Other Members */}
+                {isLoading ? <div className="text-center py-4 text-slate-400 text-sm">Loading members...</div> : members.map(member => (
+                    <div key={member.id} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg transition-colors group">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs">
+                                {member.user_email.substring(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-slate-900">{member.user_email}</p>
+                                <p className="text-xs text-slate-500 capitalize">{member.role}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <select 
+                                value={member.role} 
+                                onChange={e => updateMemberRole(member.id, e.target.value as ProjectRole)}
+                                className="text-xs border-none bg-transparent font-medium text-slate-600 cursor-pointer focus:ring-0 hover:text-indigo-600"
+                            >
+                                <option value="viewer">Viewer</option>
+                                <option value="editor">Editor</option>
+                            </select>
+                            <button onClick={() => removeMember(member.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all">
+                                <X size={16} />
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
         
-        <div className="mt-6 flex justify-end">
-          <button onClick={onClose} className="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-700 transition-colors">
-            Done
-          </button>
+        {/* Footer Link */}
+        <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+             <div className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer hover:text-indigo-600" onClick={copyToClipboard}>
+                <div className="p-1.5 bg-slate-100 rounded-full"><Share2 size={14}/></div>
+                <span>{copied ? 'Link Copied!' : 'Copy Read-Only Link'}</span>
+             </div>
+             <button onClick={onClose} className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors">
+                Done
+             </button>
         </div>
       </div>
     </div>
   );
+};
+
+// Helper function for shared FP logic
+const getTaskBaseName = (name: string): string => {
+  const prefixes = ["Design & Build-", "QA-", "UAT-"];
+  for (const prefix of prefixes) {
+    if (name.startsWith(prefix)) {
+      return name.substring(prefix.length).trim();
+    }
+  }
+  return name.trim();
 };
 
 const App: React.FC = () => {
@@ -257,19 +353,17 @@ const App: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
   
-  // Read Only Mode & Sharing Logic
-  const [isReadOnlyMode, setIsReadOnlyMode] = useState(false);
-  const [sharedUserId, setSharedUserId] = useState<string | null>(null);
+  // Selection
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const shareId = params.get('share');
-    if (shareId) {
-        setIsReadOnlyMode(true);
-        setSharedUserId(shareId);
-    }
-  }, []);
+  // Permissions Logic
+  // currentProjectRole is derived from the selected project in the list
+  const currentProject = projects.find(p => p.id === selectedProjectId);
+  const currentRole: ProjectRole = currentProject?.currentUserRole || 'owner'; // Default to owner if new/undefined to avoid lockouts during creation
   
+  const isReadOnlyMode = currentRole === 'viewer';
+  const isOwner = currentRole === 'owner';
+
   const [timelineStart, setTimelineStart] = useState<WeekPoint>(DEFAULT_START);
   const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
   
@@ -344,7 +438,7 @@ const App: React.FC = () => {
     if (session) {
       fetchData(false);
     }
-  }, [session, sharedUserId]); // Re-fetch if sharedUserId changes
+  }, [session]);
 
   const calculateTimelineBounds = (currentProjects: Project[], currentResources: Resource[], currentHolidays: Holiday[]) => {
     if (currentProjects.length === 0) {
@@ -431,88 +525,103 @@ const App: React.FC = () => {
     } else {
       setLoading(true);
     }
+
+    // 1. Fetch Owned Projects
+    const { data: ownedProjects, error: ownedError } = await supabase.from('projects').select('*').eq('user_id', session.user.id);
+    if (ownedError) console.error("Error fetching owned projects", ownedError);
+
+    // 2. Fetch Shared Projects (Safe fail if table doesn't exist yet)
+    let sharedProjects: any[] = [];
+    let memberships: any[] = [];
+    try {
+        const { data: memberData } = await supabase.from('project_members').select('*, projects(*)').eq('user_email', session.user.email);
+        if (memberData) {
+            memberships = memberData;
+            sharedProjects = memberData.map((m: any) => m.projects).filter(Boolean);
+        }
+    } catch (e) {
+        console.warn("Shared projects fetch failed (table might be missing)", e);
+    }
+
+    // Combine
+    let allProjectsRaw = [...(ownedProjects || []), ...sharedProjects];
     
-    let projectsData, modulesData, tasksData, assignmentsData, allocationsData, resourcesData, holidaysData;
+    // Deduplicate (just in case)
+    const uniqueProjects = Array.from(new Map(allProjectsRaw.map(p => [p.id, p])).values());
 
-    if (sharedUserId) {
-      // --- NEW LOGIC FOR SHARED VIEW ---
-      const { data: sharedData, error: rpcError } = await supabase.rpc('get_shared_plan_data', { user_id_to_fetch: sharedUserId });
+    if (uniqueProjects.length === 0) {
+      const { data: newProject, error: newProjectError } = await callSupabase(
+        'CREATE default project', { name: 'My First Project' },
+        supabase.from('projects').insert({ name: 'My First Project', user_id: session!.user.id }).select().single()
+      );
+      if (newProject && !newProjectError) { uniqueProjects.push(newProject); }
+    }
+    
+    // Update selected ID if empty or invalid
+    if (uniqueProjects.length > 0 && (!selectedProjectId || !uniqueProjects.find(p => p.id === selectedProjectId))) {
+        setSelectedProjectId(uniqueProjects[0].id);
+    }
 
-      if (rpcError) {
-          console.error("Error fetching shared plan", rpcError);
-          alert("Could not load the shared plan. The link may be invalid, or the database function may not be set up correctly.");
-          setLoading(false);
-          setIsRefreshing(false);
-          return;
-      }
+    const projectIds = uniqueProjects.map(p => p.id);
+    let modulesData = [], tasksData = [], assignmentsData = [], allocationsData = [];
+
+    if (projectIds.length > 0) {
+      const { data: modules, error: modulesError } = await supabase.from('modules').select('*').in('project_id', projectIds);
+      if (modulesError) console.error(modulesError); else modulesData = modules;
       
-      projectsData = sharedData.projects || [];
-      modulesData = sharedData.modules || [];
-      tasksData = sharedData.tasks || [];
-      assignmentsData = sharedData.assignments || [];
-      allocationsData = sharedData.allocations || [];
-      resourcesData = sharedData.resources || [];
-      holidaysData = sharedData.holidays || [];
+      const moduleIds = modulesData.map(m => m.id);
+      if (moduleIds.length > 0) {
+        const { data: tasks, error: tasksError } = await supabase.from('tasks').select('*').in('module_id', moduleIds);
+        if (tasksError) console.error(tasksError); else tasksData = tasks;
 
-    } else {
-      // --- EXISTING LOGIC FOR USER'S OWN DATA ---
-      const userIdToFetch = session.user.id;
-      const { data: pData, error: pError } = await supabase.from('projects').select('*').eq('user_id', userIdToFetch);
-      if (pError) { console.error("Error fetching projects", pError); setLoading(false); return; }
-      projectsData = pData;
-
-      if (projectsData && projectsData.length === 0) {
-        const { data: newProject, error: newProjectError } = await callSupabase( 'CREATE default project', { name: 'My First Project' }, supabase.from('projects').insert({ name: 'My First Project', user_id: session!.user.id }).select().single() );
-        if (newProject && !newProjectError) { projectsData = [newProject]; }
-      }
-      
-      const projectIds = projectsData.map(p => p.id);
-      modulesData = [], tasksData = [], assignmentsData = [], allocationsData = [];
-
-      if (projectIds.length > 0) {
-        const { data: modules, error: modulesError } = await supabase.from('modules').select('*').in('project_id', projectIds);
-        if (modulesError) console.error(modulesError); else modulesData = modules;
-        
-        const moduleIds = modulesData.map(m => m.id);
-        if (moduleIds.length > 0) {
-          const { data: tasks, error: tasksError } = await supabase.from('tasks').select('*').in('module_id', moduleIds);
-          if (tasksError) console.error(tasksError); else tasksData = tasks;
-
-          const taskIds = tasksData.map(t => t.id);
-          if (taskIds.length > 0) {
-            const { data: assignments, error: assignmentsError } = await supabase.from('task_assignments').select('*').in('task_id', taskIds);
-            if (assignmentsError) console.error(assignmentsError); else assignmentsData = assignments;
-            
-            const assignmentIds = assignmentsData.map(a => a.id);
-            if (assignmentIds.length > 0) {
-              const { data: allocations, error: allocationsError } = await supabase.from('resource_allocations').select('*').in('assignment_id', assignmentIds);
-              if (allocationsError) console.error(allocationsError); else allocationsData = allocations;
-            }
+        const taskIds = tasksData.map(t => t.id);
+        if (taskIds.length > 0) {
+          const { data: assignments, error: assignmentsError } = await supabase.from('task_assignments').select('*').in('task_id', taskIds);
+          if (assignmentsError) console.error(assignmentsError); else assignmentsData = assignments;
+          
+          const assignmentIds = assignmentsData.map(a => a.id);
+          if (assignmentIds.length > 0) {
+            const { data: allocations, error: allocationsError } = await supabase.from('resource_allocations').select('*').in('assignment_id', assignmentIds);
+            if (allocationsError) console.error(allocationsError); else allocationsData = allocations;
           }
         }
       }
-      
-      const { data: resData, error: resError } = await supabase.from('resources').select('*, individual_holidays(*)').eq('user_id', userIdToFetch).order('name');
-      if (resError) console.error(resError);
-      resourcesData = resData || [];
-
-      const { data: holData, error: holError } = await supabase.from('holidays').select('*').eq('user_id', userIdToFetch);
-      if (holError) console.error(holError);
-      holidaysData = holData || [];
     }
     
-    const structuredProjects = structureProjectsData(projectsData, modulesData, tasksData, assignmentsData, allocationsData);
+    // Fetch resources (Only owned for now, shared logic needs complexity for shared resources)
+    const { data: resourcesData, error: resourcesError } = await supabase
+      .from('resources')
+      .select('*, individual_holidays(*)')
+      .eq('user_id', session.user.id)
+      .order('name');
     
-    setHolidays(holidaysData);
-    // Ensure individual_holidays is always an array, even if null from DB
-    setResources(resourcesData.map((r: any) => ({...r, individual_holidays: r.individual_holidays || []})));
+    if (resourcesError) console.error(resourcesError);
+    const freshResources = resourcesData || [];
+
+    const { data: holidaysData, error: holidaysError } = await supabase
+      .from('holidays')
+      .select('*')
+      .eq('user_id', session.user.id);
+      
+    if (holidaysError) console.error(holidaysError);
+    const freshHolidays = holidaysData || [];
+    
+    const structuredProjects = structureProjectsData(uniqueProjects, modulesData, tasksData, assignmentsData, allocationsData, session.user.id, memberships);
+    
+    // Set state after all data is fetched and processed
+    setHolidays(freshHolidays);
+    setResources(freshResources);
     setProjects(structuredProjects);
     
-    calculateTimelineBounds(structuredProjects, resourcesData, holidaysData);
+    // Calculate timeline bounds using the fresh data
+    calculateTimelineBounds(structuredProjects, freshResources, freshHolidays);
 
     if (isRefresh) setIsRefreshing(false);
     else setLoading(false);
   };
+
+  // ... (Keep existing update functions: propagateScheduleChanges, updateAssignmentSchedule, etc.)
+  // ... Ensure they check `isReadOnlyMode` at the start.
 
   const propagateScheduleChanges = async (currentProjects: Project[], startAssignmentId: string) => {
     // ... propagateScheduleChanges implementation ...
@@ -1203,7 +1312,7 @@ const App: React.FC = () => {
         supabase.from('projects').insert({ name, user_id: session.user.id }).select().single()
     );
     if(data && !error) {
-        setProjects(prev => [...prev, { id: data.id, name: data.name, modules: [] }]);
+        setProjects(prev => [...prev, { id: data.id, name: data.name, modules: [], currentUserRole: 'owner' }]);
     }
   };
   
@@ -1297,7 +1406,7 @@ const App: React.FC = () => {
   };
   
   const deleteProject = async (projectId: string) => {
-      if (isReadOnlyMode) return;
+      if (isReadOnlyMode || !isOwner) return; // Only owner can delete
       if(!window.confirm("Delete project?")) return;
       setProjects(prev => prev.filter(p => p.id !== projectId));
       await callSupabase('DELETE project', { projectId }, supabase.from('projects').delete().eq('id', projectId));
@@ -1572,6 +1681,15 @@ const App: React.FC = () => {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50 text-slate-500 gap-2">
+        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+        <span>Loading plan...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen w-full bg-slate-100 overflow-hidden text-slate-900 font-sans">
        {/* Sidebar */}
@@ -1605,7 +1723,7 @@ const App: React.FC = () => {
           </nav>
           
           <div className="p-2 border-t border-slate-800">
-             <button onClick={() => setShowShareModal(true)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 hover:text-white text-slate-400 mb-1" title="Share">
+             <button onClick={() => setShowShareModal(true)} disabled={isReadOnlyMode} className={`w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 hover:text-white text-slate-400 mb-1 ${isReadOnlyMode ? 'opacity-50 cursor-not-allowed' : ''}`} title={isReadOnlyMode ? 'Only owners can manage access' : 'Share'}>
                 <Share2 size={18} /> {!isSidebarCollapsed && <span className="text-sm">Share</span>}
              </button>
              <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 hover:text-white text-slate-400 mb-1" title={isSidebarCollapsed ? "Expand" : "Collapse"}>
@@ -1618,102 +1736,109 @@ const App: React.FC = () => {
        </aside>
 
        {/* Main Content */}
-       <main className="flex-1 flex flex-col min-w-0 h-full bg-white relative overflow-hidden">
-          {loading ? (
-            <div className="flex-1 flex items-center justify-center text-slate-500 gap-2">
-              <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-              <span>Loading plan...</span>
-            </div>
-          ) : (
-            <div className="flex-1 p-4 flex flex-col relative min-h-0 overflow-y-auto custom-scrollbar">
-              {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
-              
-              {activeTab === 'planner' && <PlannerGrid 
-                projects={projects} 
-                holidays={holidays}
-                resources={resources}
-                timelineStart={timelineStart}
-                timelineEnd={timelineEnd}
-                onExtendTimeline={handleExtendTimeline}
-                onUpdateAllocation={updateAllocation}
-                onUpdateAssignmentResourceName={updateAssignmentResourceName}
-                onUpdateAssignmentDependency={updateAssignmentDependency}
-                onAddTask={addTask}
-                onAddAssignment={addAssignment}
-                onCopyAssignment={onCopyAssignment}
-                onReorderModules={reorderModules}
-                onReorderTasks={reorderTasks}
-                onMoveTask={moveTask}
-                onUpdateModuleType={updateModuleType}
-                onReorderAssignments={reorderAssignments}
-                onShiftTask={onShiftTask}
-                onUpdateAssignmentSchedule={updateAssignmentSchedule}
-                onUpdateAssignmentProgress={updateAssignmentProgress}
-                onAddProject={addProject}
-                onAddModule={addModule}
-                onUpdateProjectName={updateProjectName}
-                onUpdateModuleName={updateModuleName}
-                onUpdateTaskName={updateTaskName}
-                onDeleteProject={deleteProject}
-                onDeleteModule={deleteModule}
-                onDeleteTask={deleteTask}
-                onDeleteAssignment={deleteAssignment}
-                onImportPlan={(p, h) => { setProjects(p); setHolidays(h); calculateTimelineBounds(p, resources, h); }}
-                onShowHistory={() => setShowHistory(true)}
-                onRefresh={() => fetchData(true)}
-                saveStatus={saveStatus}
-                isRefreshing={isRefreshing}
-                isReadOnly={isReadOnlyMode}
-              />}
-              
-              {activeTab === 'estimator' && <Estimator 
-                projects={projects} 
-                holidays={holidays} 
-                onUpdateModuleEstimates={updateModuleEstimates}
-                onUpdateTaskEstimates={updateTaskEstimates}
-                onUpdateModuleComplexity={updateModuleComplexity}
-                onUpdateModuleStartDate={updateModuleStartDate}
-                onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
-                onUpdateModuleStartTask={updateModuleStartTask}
-                onReorderModules={reorderModules}
-                onDeleteModule={deleteModule}
-                isReadOnly={isReadOnlyMode}
-              />}
-              
-              {activeTab === 'resources' && <Resources 
-                resources={resources} 
-                onAddResource={addResource} 
-                onDeleteResource={deleteResource}
-                onUpdateResourceCategory={updateResourceCategory}
-                onUpdateResourceRegion={updateResourceRegion}
-                onUpdateResourceType={updateResourceType}
-                onUpdateResourceName={updateResourceName}
-                onAddIndividualHoliday={addIndividualHolidays}
-                onDeleteIndividualHoliday={deleteIndividualHoliday}
-                isReadOnly={isReadOnlyMode}
-              />}
-              
-              {activeTab === 'settings' && <Settings 
-                isDebugLogEnabled={isDebugLogEnabled}
-                setIsDebugLogEnabled={setIsDebugLogEnabled}
-                isAIEnabled={isAIEnabled}
-                setIsAIEnabled={setIsAIEnabled}
-              />}
-              
-              {activeTab === 'holidays' && <AdminSettings 
-                holidays={holidays}
-                onAddHolidays={addHoliday}
-                onDeleteHoliday={deleteHoliday}
-                onDeleteHolidaysByCountry={deleteHolidaysByCountry}
-              />}
-            </div>
+       <main className="flex-1 flex flex-col min-w-0 h-full bg-white relative overflow-y-auto custom-scrollbar">
+          {/* Project Selector - Placed here or handled inside Dashboard/Planner */}
+          {projects.length > 1 && activeTab !== 'settings' && (
+              <div className="absolute top-4 right-4 z-10">
+                  <select 
+                    className="text-xs border-slate-300 rounded focus:ring-indigo-500 focus:border-indigo-500 bg-white border py-1 pl-2 pr-6 shadow-sm" 
+                    value={selectedProjectId} 
+                    onChange={(e) => setSelectedProjectId(e.target.value)}
+                  >
+                      {projects.map(p => (<option key={p.id} value={p.id}>{p.name} {p.currentUserRole !== 'owner' ? `(${p.currentUserRole})` : ''}</option>))}
+                  </select>
+              </div>
           )}
+
+          <div className="flex-1 p-4 relative">
+            {activeTab === 'dashboard' && <Dashboard projects={projects.filter(p => p.id === selectedProjectId)} resources={resources} holidays={holidays} />}
+            
+            {activeTab === 'planner' && <PlannerGrid 
+              projects={projects.filter(p => p.id === selectedProjectId)} 
+              holidays={holidays}
+              resources={resources}
+              timelineStart={timelineStart}
+              timelineEnd={timelineEnd}
+              onExtendTimeline={handleExtendTimeline}
+              onUpdateAllocation={updateAllocation}
+              onUpdateAssignmentResourceName={updateAssignmentResourceName}
+              onUpdateAssignmentDependency={updateAssignmentDependency}
+              onAddTask={addTask}
+              onAddAssignment={addAssignment}
+              onCopyAssignment={onCopyAssignment}
+              onReorderModules={reorderModules}
+              onReorderTasks={reorderTasks}
+              onMoveTask={moveTask}
+              onUpdateModuleType={updateModuleType}
+              onReorderAssignments={reorderAssignments}
+              onShiftTask={onShiftTask}
+              onUpdateAssignmentSchedule={updateAssignmentSchedule}
+              onUpdateAssignmentProgress={updateAssignmentProgress}
+              onAddProject={addProject}
+              onAddModule={addModule}
+              onUpdateProjectName={updateProjectName}
+              onUpdateModuleName={updateModuleName}
+              onUpdateTaskName={updateTaskName}
+              onDeleteProject={deleteProject}
+              onDeleteModule={deleteModule}
+              onDeleteTask={deleteTask}
+              onDeleteAssignment={deleteAssignment}
+              onImportPlan={(p, h) => { setProjects(p); setHolidays(h); calculateTimelineBounds(p, resources, h); }}
+              onShowHistory={() => setShowHistory(true)}
+              onRefresh={() => fetchData(true)}
+              saveStatus={saveStatus}
+              isRefreshing={isRefreshing}
+              isReadOnly={isReadOnlyMode}
+              isOwner={isOwner}
+            />}
+            
+            {activeTab === 'estimator' && <Estimator 
+              projects={projects.filter(p => p.id === selectedProjectId)} 
+              holidays={holidays} 
+              onUpdateModuleEstimates={updateModuleEstimates}
+              onUpdateTaskEstimates={updateTaskEstimates}
+              onUpdateModuleComplexity={updateModuleComplexity}
+              onUpdateModuleStartDate={updateModuleStartDate}
+              onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
+              onUpdateModuleStartTask={updateModuleStartTask}
+              onReorderModules={reorderModules}
+              onDeleteModule={deleteModule}
+              isReadOnly={isReadOnlyMode}
+            />}
+            
+            {activeTab === 'resources' && <Resources 
+              resources={resources} 
+              onAddResource={addResource} 
+              onDeleteResource={deleteResource}
+              onUpdateResourceCategory={updateResourceCategory}
+              onUpdateResourceRegion={updateResourceRegion}
+              onUpdateResourceType={updateResourceType}
+              onUpdateResourceName={updateResourceName}
+              onAddIndividualHoliday={addIndividualHolidays}
+              onDeleteIndividualHoliday={deleteIndividualHoliday}
+              isReadOnly={isReadOnlyMode}
+            />}
+            
+            {activeTab === 'settings' && <Settings 
+              isDebugLogEnabled={isDebugLogEnabled}
+              setIsDebugLogEnabled={setIsDebugLogEnabled}
+              isAIEnabled={isAIEnabled}
+              setIsAIEnabled={setIsAIEnabled}
+            />}
+            
+            {activeTab === 'holidays' && <AdminSettings 
+              holidays={holidays}
+              onAddHolidays={addHoliday}
+              onDeleteHoliday={deleteHoliday}
+              onDeleteHolidaysByCountry={deleteHolidaysByCountry}
+            />}
+          </div>
        </main>
 
        {/* Modals & Overlays */}
        {isAIEnabled && <AIAssistant projects={projects} resources={resources} onAddTask={addTask} onAssignResource={updateAssignmentResourceName} />}
        {isDebugLogEnabled && <DebugLog entries={logEntries} setEntries={setLogEntries} />}
-       {showShareModal && <ShareModal onClose={() => setShowShareModal(false)} session={session} />}
+       {showShareModal && <ShareModal onClose={() => setShowShareModal(false)} projectId={selectedProjectId} session={session} />}
        {showHistory && <VersionHistory onClose={() => setShowHistory(false)} onRestore={restoreVersion} onSaveCurrent={saveCurrentVersion} />}
     </div>
   );

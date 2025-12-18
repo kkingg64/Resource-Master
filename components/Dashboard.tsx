@@ -162,7 +162,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
 
   // 5. Conflict Detection (Grouped by Resource)
   const conflictsByResource = useMemo((): Record<string, { weekId: string, total: number, modules: string[] }[]> => {
-    const usage: Record<string, Record<string, { total: number, modules: Set<string> }>> = {};
+    type UsageData = { total: number, modules: Set<string> };
+    const usage: Record<string, Record<string, UsageData>> = {};
     
     projects.forEach(p => {
         p.modules.forEach(m => {
@@ -185,14 +186,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     const result: Record<string, { weekId: string, total: number, modules: string[] }[]> = {};
     
     Object.entries(usage).forEach(([res, weeks]) => {
-        Object.entries(weeks).forEach(([weekId, data]: [string, { total: number, modules: Set<string> }]) => {
+        Object.entries(weeks).forEach(([weekId, data]) => {
+            const d = data as UsageData;
             // Conflict if allocated more than 5 days OR works on multiple modules
-            if (data.modules.size > 1 || data.total > 5) {
+            if (d.modules.size > 1 || d.total > 5) {
                 if (!result[res]) result[res] = [];
                 result[res].push({
                     weekId,
-                    total: data.total,
-                    modules: Array.from(data.modules)
+                    total: d.total,
+                    modules: Array.from(d.modules)
                 });
             }
         });
@@ -211,7 +213,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     const weekDates = getWeekdaysForWeekId(currentWeekId);
     
     // Structure: Date -> TaskID -> { task, module, resources Set }
-    const dailyGroups: Record<string, Map<string, { task: string, module: string, resources: Set<string> }>> = {};
+    type DailyGroupItem = { task: string, module: string, resources: Set<string> };
+    const dailyGroups: Record<string, Map<string, DailyGroupItem>> = {};
     
     weekDates.forEach(d => dailyGroups[d] = new Map());
 
@@ -247,7 +250,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
 
     const activityByDay: Record<string, { task: string, module: string, resources: string[] }[]> = {};
     weekDates.forEach(d => {
-        activityByDay[d] = Array.from(dailyGroups[d].values()).map((item: { task: string, module: string, resources: Set<string> }) => ({
+        const values = Array.from(dailyGroups[d].values()) as DailyGroupItem[];
+        activityByDay[d] = values.map((item) => ({
             task: item.task,
             module: item.module,
             resources: Array.from(item.resources).sort()
@@ -285,15 +289,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     return onLeave;
   }, [resources, holidays]);
 
-  // 8. Upcoming Tasks Logic (Next 4 Months)
+  // 8. Upcoming Tasks Logic (Next 2 Weeks)
   const upcomingTasks = useMemo(() => {
     const todayDate = new Date();
     todayDate.setHours(0, 0, 0, 0);
     const todayStr = formatDateForInput(todayDate);
     
-    const fourMonthsLater = new Date();
-    fourMonthsLater.setMonth(fourMonthsLater.getMonth() + 4);
-    const fourMonthsLaterStr = formatDateForInput(fourMonthsLater);
+    const twoWeeksLater = new Date();
+    twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
+    const twoWeeksLaterStr = formatDateForInput(twoWeeksLater);
 
     // Build efficient holiday map for end date calculation
     const resourceHolidaysMap = new Map<string, Set<string>>();
@@ -319,11 +323,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                         const end = calculateEndDate(start, a.duration, holidaySet);
 
                         // Logic: 
-                        // 1. Starts between today and 4 months
+                        // 1. Starts between today and 2 weeks
                         // 2. OR is currently active (Started before today, Ends after today)
-                        // 3. AND Ends before 4 months (optional, but good for "active" view)
                         
-                        const isStartingSoon = start >= todayStr && start <= fourMonthsLaterStr;
+                        const isStartingSoon = start >= todayStr && start <= twoWeeksLaterStr;
                         const isActive = start < todayStr && end >= todayStr;
 
                         if (isStartingSoon || isActive) {
@@ -653,7 +656,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
             <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 <ArrowRight size={18} className="text-indigo-600" />
-                Upcoming Task Timeline (Next 4 Months)
+                Upcoming Task Timeline (Next 2 Weeks)
             </h3>
             <span className="text-xs text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded">Sorted by Start Date</span>
         </div>
@@ -673,7 +676,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                     {upcomingTasks.length === 0 ? (
                         <tr>
                             <td colSpan={6} className="p-8 text-center text-slate-400">
-                                No tasks starting or active in the next 4 months.
+                                No tasks starting or active in the next 2 weeks.
                             </td>
                         </tr>
                     ) : (

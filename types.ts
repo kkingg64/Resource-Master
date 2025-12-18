@@ -1,5 +1,4 @@
 
-
 export enum Role {
   CNF = 'CNF',
   BRAND_SOLUTIONS = 'Brand Solutions',
@@ -35,6 +34,8 @@ export const MODULE_TYPE_DISPLAY_NAMES: Record<ModuleType, string> = {
   [ModuleType.MVP]: 'MVP',
   [ModuleType.Production]: 'Production',
 };
+
+export type ProjectRole = 'owner' | 'editor' | 'viewer';
 
 export interface ResourceAllocation {
   weekId: string; // Format YYYY-WW
@@ -114,6 +115,8 @@ export interface Project {
   id: string;
   name: string;
   modules: ProjectModule[];
+  currentUserRole?: ProjectRole; // Role of the current user in this project
+  ownerEmail?: string;
 }
 
 export interface WeeklySummary {
@@ -175,4 +178,11 @@ export interface Resource {
   holiday_region?: string;
   individual_holidays?: IndividualHoliday[];
   type: 'Internal' | 'External';
+}
+
+export interface ProjectMember {
+  id: string;
+  project_id: string;
+  user_email: string;
+  role: ProjectRole;
 }
