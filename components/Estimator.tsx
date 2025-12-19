@@ -148,11 +148,13 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
     return () => window.removeEventListener('click', handleClick);
   }, []);
 
-  const holidaySet = useMemo(() => new Set(
+  const holidayMap = useMemo(() => {
+    const map = new Map<string, number>();
     holidays
         .filter(h => h.country === 'HK')
-        .map(h => h.date)
-  ), [holidays]);
+        .forEach(h => map.set(h.date, h.duration || 1.0));
+    return map;
+  }, [holidays]);
   
   useEffect(() => {
     let currentProject = projects.find(p => p.id === selectedProjectId);
@@ -212,7 +214,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
       let maxEndDate: Date | null = null;
       task.assignments.forEach(a => {
           if (a.startDate && a.duration) {
-              const endDateStr = calculateEndDate(a.startDate, a.duration, holidaySet);
+              const endDateStr = calculateEndDate(a.startDate, a.duration, holidayMap);
               const endDate = new Date(endDateStr.replace(/-/g, '/'));
               if (!maxEndDate || endDate > maxEndDate) {
                   maxEndDate = endDate;
@@ -303,7 +305,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         let estimatedDateStr: string | null = null;
         if (hasEffort && baseStartDate) { 
             if (totalDuration > 0) { 
-                estimatedDateStr = calculateEndDate(baseStartDate, totalDuration, holidaySet); 
+                estimatedDateStr = calculateEndDate(baseStartDate, totalDuration, holidayMap); 
             } else if (baseStartDate) { 
                 estimatedDateStr = formatDateForInput(new Date(baseStartDate.replace(/-/g, '/'))); 
             } 
@@ -317,14 +319,14 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         if (estimatedDateStr && plannerDateStr) { 
             if (estimatedDateStr <= plannerDateStr) { 
                 varianceStatus = 'safe'; 
-                let diff = calculateWorkingDaysBetween(estimatedDateStr, plannerDateStr, holidaySet) - 1; 
+                let diff = calculateWorkingDaysBetween(estimatedDateStr, plannerDateStr, holidayMap) - 1; 
                 if(estimatedDateStr === plannerDateStr) diff = 0; 
                 const savedDays = -diff; 
                 varianceText = `${savedDays}d`; 
                 varianceClass = 'text-green-600 font-bold'; 
             } else { 
                 varianceStatus = 'risk'; 
-                const diff = calculateWorkingDaysBetween(plannerDateStr, estimatedDateStr, holidaySet) - 1; 
+                const diff = calculateWorkingDaysBetween(plannerDateStr, estimatedDateStr, holidayMap) - 1; 
                 varianceText = `+${diff}d`; 
                 varianceClass = 'text-red-600 font-bold'; 
             } 
@@ -343,7 +345,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         });
     });
     return calcMap;
-  }, [modules, holidaySet, allTasksMap, totalDevelopmentFP]);
+  }, [modules, holidayMap, allTasksMap, totalDevelopmentFP]);
 
   const groupedTotalsMap = useMemo(() => {
     const subtotals: Record<string, any> = {};
@@ -522,7 +524,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         let subtotalVarianceClass = 'text-slate-400';
                         if (subtotalMaxEstDate && subtotalMaxPlanDate) {
                             const estStr = formatDateForInput(subtotalMaxEstDate); const planStr = formatDateForInput(subtotalMaxPlanDate);
-                            if (estStr <= planStr) { let diff = calculateWorkingDaysBetween(estStr, planStr, holidaySet) - 1; if(estStr === planStr) diff = 0; subtotalVarianceText = `${-diff}d`; subtotalVarianceClass = 'text-green-600 font-bold'; } else { const diff = calculateWorkingDaysBetween(planStr, estStr, holidaySet) - 1; subtotalVarianceText = `+${diff}d`; subtotalVarianceClass = 'text-red-600 font-bold'; }
+                            if (estStr <= planStr) { let diff = calculateWorkingDaysBetween(estStr, planStr, holidayMap) - 1; if(estStr === planStr) diff = 0; subtotalVarianceText = `${-diff}d`; subtotalVarianceClass = 'text-green-600 font-bold'; } else { const diff = calculateWorkingDaysBetween(planStr, estStr, holidayMap) - 1; subtotalVarianceText = `+${diff}d`; subtotalVarianceClass = 'text-red-600 font-bold'; }
                         }
 
                         return (
@@ -595,10 +597,10 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                  const effectiveTaskStartDate = task.startDate || plannerTaskStartDate;
                                  const taskPlannedEndDate = getTaskLatestEndDate(task);
                                  let taskEstimatedEndDateStr: string | null = null;
-                                 if (effectiveTaskStartDate && taskTotalDuration > 0) { taskEstimatedEndDateStr = calculateEndDate(effectiveTaskStartDate, taskTotalDuration, holidaySet); } else if (effectiveTaskStartDate) { taskEstimatedEndDateStr = effectiveTaskStartDate; }
+                                 if (effectiveTaskStartDate && taskTotalDuration > 0) { taskEstimatedEndDateStr = calculateEndDate(effectiveTaskStartDate, taskTotalDuration, holidayMap); } else if (effectiveTaskStartDate) { taskEstimatedEndDateStr = effectiveTaskStartDate; }
                                  const taskPlannerDateStr = taskPlannedEndDate ? formatDateForInput(taskPlannedEndDate) : null;
                                  let taskVarianceStatus: 'safe' | 'risk' | 'unknown' = 'unknown'; let taskVarianceText = '-'; let taskVarianceClass = 'text-slate-400';
-                                 if (taskEstimatedEndDateStr && taskPlannerDateStr) { if (taskEstimatedEndDateStr <= taskPlannerDateStr) { taskVarianceStatus = 'safe'; let diff = calculateWorkingDaysBetween(taskEstimatedEndDateStr, taskPlannerDateStr, holidaySet) - 1; if(taskEstimatedEndDateStr === taskPlannerDateStr) diff = 0; taskVarianceText = `${-diff}d`; taskVarianceClass = 'text-green-600 font-bold'; } else { taskVarianceStatus = 'risk'; const diff = calculateWorkingDaysBetween(taskPlannerDateStr, taskEstimatedEndDateStr, holidaySet) - 1; taskVarianceText = `+${diff}d`; taskVarianceClass = 'text-red-600 font-bold'; } }
+                                 if (taskEstimatedEndDateStr && taskPlannerDateStr) { if (taskEstimatedEndDateStr <= taskPlannerDateStr) { taskVarianceStatus = 'safe'; let diff = calculateWorkingDaysBetween(taskEstimatedEndDateStr, taskPlannerDateStr, holidayMap) - 1; if(taskEstimatedEndDateStr === taskPlannerDateStr) diff = 0; taskVarianceText = `${-diff}d`; taskVarianceClass = 'text-green-600 font-bold'; } else { taskVarianceStatus = 'risk'; const diff = calculateWorkingDaysBetween(taskPlannerDateStr, taskEstimatedEndDateStr, holidayMap) - 1; taskVarianceText = `+${diff}d`; taskVarianceClass = 'text-red-600 font-bold'; } }
                                  const taskCellBg = taskVarianceStatus === 'risk' ? 'bg-red-50/30' : taskVarianceStatus === 'safe' ? 'bg-green-50/30' : '';
                                 return (
                                 <tr key={task.id} className="bg-slate-50/50 hover:bg-slate-100/50">
