@@ -188,7 +188,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     Object.entries(usage).forEach(([res, weeks]) => {
         Object.entries(weeks).forEach(([weekId, data]) => {
             // Explicitly cast to internal UsageData type to avoid unknown error
-            const d = data as { total: number, modules: Set<string> };
+            const d = data as UsageData;
             // Conflict if allocated more than 5 days OR works on multiple modules
             if (d.modules.size > 1 || d.total > 5) {
                 if (!result[res]) result[res] = [];
@@ -290,7 +290,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     return onLeave;
   }, [resources, holidays]);
 
-  // 8. Upcoming Tasks Logic (Next 2 Weeks) - Grouped by Task ID
+  // 8. Upcoming Tasks Logic (Next 2 Weeks) - Grouped by Task ID (No Resources)
   const upcomingTasks = useMemo(() => {
     const todayDate = new Date();
     todayDate.setHours(0, 0, 0, 0);

@@ -979,10 +979,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const currentColumnIndex = timeline.findIndex(c => isCurrentColumn(c));
   const stickyLeftOffset = sidebarWidth + startColWidth + durationColWidth + dependencyColWidth;
 
-  const assignmentRenderInfo = useMemo((): { 
+  const assignmentRenderInfo = useMemo<{ 
       map: Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>; 
       totalHeight: number 
-  } => {
+  }>(() => {
     const map = new Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>();
     let rowIndex = 0;
     const HEADER_HEIGHT = (showYearRow ? 32 : 0) + (showMonthRow ? 32 : 0) + 32;
