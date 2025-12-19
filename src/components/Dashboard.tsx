@@ -290,7 +290,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     return onLeave;
   }, [resources, holidays]);
 
-  // 8. Upcoming Tasks Logic (Next 2 Weeks) - Grouped by Task ID (No Resources)
+  // 8. Upcoming Tasks Logic (Next 2 Weeks) - Grouped by Task ID
   const upcomingTasks = useMemo(() => {
     const todayDate = new Date();
     todayDate.setHours(0, 0, 0, 0);

@@ -979,7 +979,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const currentColumnIndex = timeline.findIndex(c => isCurrentColumn(c));
   const stickyLeftOffset = sidebarWidth + startColWidth + durationColWidth + dependencyColWidth;
 
-  const assignmentRenderInfo = useMemo(() => {
+  const assignmentRenderInfo = useMemo((): { 
+      map: Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>; 
+      totalHeight: number 
+  } => {
     const map = new Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>();
     let rowIndex = 0;
     const HEADER_HEIGHT = (showYearRow ? 32 : 0) + (showMonthRow ? 32 : 0) + 32;
@@ -1118,7 +1121,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={(e) => handleResizeStart('dependency', dependencyColWidth, e)}></div>
                   </div>
 
-                  {Object.values(yearHeaders).map((group, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+                  {Object.values(yearHeaders).map((group: { label: string; colspan: number }, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                 </div>
                 {showMonthRow && (
                   <div className="flex bg-slate-100 border-b border-slate-200 sticky top-8 z-40 h-8 items-center">
@@ -1126,7 +1129,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
-                    {Object.values(monthHeaders).map((group, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-600 border-r border-slate-200 uppercase h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+                    {Object.values(monthHeaders).map((group: { label: string; colspan: number }, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-600 border-r border-slate-200 uppercase h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                   </div>
                 )}
                 <div className={`flex bg-slate-50 border-b border-slate-200 sticky z-40 shadow-sm h-8 items-center ${showMonthRow ? 'top-16' : 'top-8'}`}>
