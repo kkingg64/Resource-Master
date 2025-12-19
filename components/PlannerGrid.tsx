@@ -165,16 +165,17 @@ interface GridNumberInputProps {
   rowIndex: number;
   colIndex: number;
   width: number;
-  holidayDuration: number; // 0 = no holiday, 1.0 = full, 0.5 = half
+  isHoliday: boolean;
   isCurrent: boolean;
   holidayName?: string | any;
   disabled?: boolean;
 }
 
-const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNavigate, rowIndex, colIndex, width, holidayDuration, isCurrent, holidayName, disabled }) => {
+const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNavigate, rowIndex, colIndex, width, isHoliday, isCurrent, holidayName, disabled }) => {
   const [localValue, setLocalValue] = useState(value === 0 ? '' : String(value));
   const [isEditing, setIsEditing] = useState(false);
 
+  // Sync with prop value only when not editing to allow free typing
   useEffect(() => {
       if (!isEditing) {
           setLocalValue(value === 0 ? '' : String(value));
@@ -201,57 +202,44 @@ const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNa
       }
   };
 
-  // Visual styling based on holiday duration
-  let bgClass = '';
-  let isDisabledCell = disabled;
-
-  if (holidayDuration === 1.0) {
-      bgClass = 'bg-[repeating-linear-gradient(45deg,theme(colors.red.50),theme(colors.red.50)_5px,theme(colors.red.100)_5px,theme(colors.red.100)_10px)]';
-      isDisabledCell = true;
-  } else if (holidayDuration === 0.5) {
-      bgClass = 'bg-gradient-to-b from-red-50 to-white'; 
-  } else if (isCurrent) {
-      bgClass = 'bg-amber-100 ring-1 ring-inset ring-amber-300';
-  }
-
   return (
       <div 
-          className={`flex-shrink-0 border-r border-slate-100 relative ${bgClass}`} 
+          className={`flex-shrink-0 border-r border-slate-100 relative ${isHoliday ? 'bg-[repeating-linear-gradient(45deg,theme(colors.red.50),theme(colors.red.50)_5px,theme(colors.red.100)_5px,theme(colors.red.100)_10px)]' : isCurrent ? 'bg-amber-100 ring-1 ring-inset ring-amber-300' : ''}`} 
           style={{ width: `${width}px` }}
           title={typeof holidayName === 'string' ? holidayName : holidayName?.name}
       >
-          {holidayDuration === 1.0 ? (
-              <div className="flex items-center justify-center h-full text-[10px] font-bold text-red-700 select-none cursor-default">
-                {(holidayName && typeof holidayName !== 'string' && holidayName.country) || 'H'}
+          {isHoliday && holidayName ? (
+              <div className="flex items-center justify-center h-full text-[10px] font-bold text-red-700 select-none">
+                {'country' in (holidayName as any) ? (holidayName as any).country : 'AL'}
+              </div>
+          ) : disabled ? (
+              <div className="w-full h-full flex items-center justify-center text-[10px] text-slate-500 font-medium">
+                {localValue}
               </div>
           ) : (
-              <>
-                {holidayDuration > 0 && (
-                    <div className="absolute top-0 right-0 text-[8px] text-red-400 font-bold px-0.5 pointer-events-none select-none">½</div>
-                )}
-                <input 
-                    type="text"
-                    data-r={rowIndex}
-                    data-c={colIndex}
-                    data-grid="planner"
-                    className={`w-full h-full text-center text-[10px] focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors
-                        ${(localValue && localValue !== '0') ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50/50'}
-                    `}
-                    value={localValue}
-                    placeholder={holidayDuration > 0 ? "½" : "-"}
-                    onChange={handleChange}
-                    onBlur={commit}
-                    onFocus={(e) => { setIsEditing(true); e.target.select(); }}
-                    onKeyDown={handleKeyDown}
-                    disabled={isDisabledCell}
-                />
-              </>
+              <input 
+                  type="text"
+                  data-r={rowIndex}
+                  data-c={colIndex}
+                  data-grid="planner"
+                  className={`w-full h-full text-center text-[10px] focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors
+                      ${(localValue && localValue !== '0') ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50/50'}
+                  `}
+                  value={localValue}
+                  placeholder="-"
+                  onChange={handleChange}
+                  onBlur={commit}
+                  onFocus={(e) => { setIsEditing(true); e.target.select(); }}
+                  onKeyDown={handleKeyDown}
+                  disabled={disabled}
+              />
           )}
       </div>
   );
 };
 
-// ... ROLE_STYLES ...
+
+// Explicit Color Map to prevent Tailwind purging
 const ROLE_STYLES: Record<string, { border: string, bg: string, bar: string, fill: string }> = {
   [Role.DEV]: { border: 'border-l-blue-500', bg: 'bg-blue-50', bar: 'bg-blue-200', fill: 'bg-blue-600' },
   [Role.BRAND_SOLUTIONS]: { border: 'border-l-orange-500', bg: 'bg-orange-50', bar: 'bg-orange-200', fill: 'bg-orange-600' },
@@ -268,7 +256,6 @@ const ROLE_STYLES: Record<string, { border: string, bg: string, bar: string, fil
 
 const getRoleStyle = (role: Role) => ROLE_STYLES[role] || ROLE_STYLES['default'];
 
-// ... MODULE_TYPE_STYLES ...
 const MODULE_TYPE_STYLES = {
   [ModuleType.Development]: {
     icon: Layers,
@@ -327,8 +314,8 @@ const MODULE_TYPE_STYLES = {
   },
 };
 
+
 export const PlannerGrid: React.FC<PlannerGridProps> = ({ 
-  // ... props destructuring ...
   projects, 
   holidays,
   resources,
@@ -366,20 +353,41 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   isReadOnly = false,
   isOwner = true,
 }) => {
-  // ... state ...
+  // --- Persistent State Initialization ---
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>(() => {
-    try { const saved = localStorage.getItem('oms_collapsed_projects'); return saved ? JSON.parse(saved) : {}; } catch { return {}; }
-  });
-  const [collapsedModules, setCollapsedModules] = useState<Record<string, boolean>>(() => {
-    try { const saved = localStorage.getItem('oms_collapsed_modules'); return saved ? JSON.parse(saved) : {}; } catch { return {}; }
-  });
-  const [collapsedTasks, setCollapsedTasks] = useState<Record<string, boolean>>(() => {
-    try { const saved = localStorage.getItem('oms_collapsed_tasks'); return saved ? JSON.parse(saved) : {}; } catch { return {}; }
+    try {
+        const saved = localStorage.getItem('oms_collapsed_projects');
+        return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
   });
 
-  useEffect(() => { localStorage.setItem('oms_collapsed_projects', JSON.stringify(collapsedProjects)); }, [collapsedProjects]);
-  useEffect(() => { localStorage.setItem('oms_collapsed_modules', JSON.stringify(collapsedModules)); }, [collapsedModules]);
-  useEffect(() => { localStorage.setItem('oms_collapsed_tasks', JSON.stringify(collapsedTasks)); }, [collapsedTasks]);
+  const [collapsedModules, setCollapsedModules] = useState<Record<string, boolean>>(() => {
+    try {
+        const saved = localStorage.getItem('oms_collapsed_modules');
+        return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+  });
+
+  const [collapsedTasks, setCollapsedTasks] = useState<Record<string, boolean>>(() => {
+    try {
+        const saved = localStorage.getItem('oms_collapsed_tasks');
+        return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+  });
+
+  // --- Persistence Effects ---
+  useEffect(() => {
+    localStorage.setItem('oms_collapsed_projects', JSON.stringify(collapsedProjects));
+  }, [collapsedProjects]);
+
+  useEffect(() => {
+    localStorage.setItem('oms_collapsed_modules', JSON.stringify(collapsedModules));
+  }, [collapsedModules]);
+
+  useEffect(() => {
+    localStorage.setItem('oms_collapsed_tasks', JSON.stringify(collapsedTasks));
+  }, [collapsedTasks]);
+
 
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [displayMode, setDisplayMode] = useState<'allocation' | 'gantt'>('allocation');
@@ -400,68 +408,81 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [isDetailsFrozen, setIsDetailsFrozen] = useState(true);
   
   const [showToggleMenu, setShowToggleMenu] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: 'project' | 'module' | 'task' | 'assignment'; projectId: string; moduleId?: string; taskId?: string; assignmentId?: string; } | null>(null);
+
+  const [contextMenu, setContextMenu] = useState<{ 
+    x: number; 
+    y: number; 
+    type: 'project' | 'module' | 'task' | 'assignment';
+    projectId: string; 
+    moduleId?: string; 
+    taskId?: string; 
+    assignmentId?: string; 
+  } | null>(null);
+
   const [datePickerState, setDatePickerState] = useState<{ assignmentId: string | null }>({ assignmentId: null });
   
-  const colWidth = viewMode === 'month' ? colWidthBase * 2 : colWidthBase;
-  const stickyStyle = { width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth };
-  
-  const startColLeft = sidebarWidth;
-  const durationColLeft = sidebarWidth + startColWidth;
-  const dependencyColLeft = sidebarWidth + startColWidth + durationColWidth;
-  const stickyLeftOffset = sidebarWidth + startColWidth + durationColWidth + dependencyColWidth;
-
-  const showYearRow = viewMode === 'day' || viewMode === 'week' || viewMode === 'month';
-  const showMonthRow = viewMode === 'day' || viewMode === 'week';
-
   const importInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const toggleButtonRef = useRef<HTMLButtonElement>(null);
   const datePickerContainerRef = useRef<HTMLDivElement>(null);
+
+  // --- Performance: Ghost Resize Refs ---
   const resizeGhostRef = useRef<HTMLDivElement>(null);
   const isResizing = useRef(false);
   const resizeData = useRef({ col: '', startX: 0, startWidth: 0 });
 
-  const projectHolidayMap = useMemo(() => {
-    const map = new Map<string, number>();
-    holidays.filter(h => h.country === 'HK').forEach(h => {
-        // Fix: Use type assertion as duration might not be in type definition but available in data
-        map.set(h.date, (h as any).duration || 1.0);
-    });
-    return map;
-  }, [holidays]);
+  // Use a consistent project-level holiday calendar (HK) for duration calculations.
+  const projectHolidaySet = useMemo(() => new Set(
+    holidays.filter(h => h.country === 'HK').map(h => h.date)
+  ), [holidays]);
 
-  // ... useEffects for sidebar width, editing focus, context menu close ...
+  // Auto-fit sidebar width based on longest text
   useEffect(() => {
     if (userHasResizedSidebar) return;
     if (!projects || projects.length === 0) return;
+
     const calculateOptimalWidth = () => {
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
-        if (!context) return 350;
+        if (!context) return 350; // Fallback
+
+        // Font settings matching UI (Inter, text-xs/12px)
         context.font = 'bold 12px Inter, ui-sans-serif, system-ui, sans-serif'; 
-        let maxPixelWidth = 200;
+
+        let maxPixelWidth = 200; // Minimum start width
+
         projects.forEach(p => {
+            // Project row padding: ~60px (icons, gap, chevron)
             const pWidth = context.measureText(p.name).width + 60; 
             if (pWidth > maxPixelWidth) maxPixelWidth = pWidth;
+
             p.modules.forEach(m => {
+                // Module row padding: ~80px (indent, icons, gap)
                 const mWidth = context.measureText(m.name).width + 80; 
                 if (mWidth > maxPixelWidth) maxPixelWidth = mWidth;
+
                 m.tasks.forEach(t => {
+                    // Task row padding: ~100px (indent, icons, gap)
                     const tWidth = context.measureText(t.name).width + 100; 
                     if (tWidth > maxPixelWidth) maxPixelWidth = tWidth;
                 });
             });
         });
+        
+        // Add a small breathing room
         maxPixelWidth += 20;
+
+        // Clamp values
         return Math.min(Math.max(250, maxPixelWidth), 600);
     };
+
     setSidebarWidth(calculateOptimalWidth());
   }, [projects, userHasResizedSidebar]);
 
   useEffect(() => {
     if (editingId && editInputRef.current) {
       editInputRef.current.focus();
+      // Only select content if it's a text input or the duration number input
       if (editInputRef.current.type === 'text' || editInputRef.current.type === 'number') {
         editInputRef.current.select();
       }
@@ -469,23 +490,33 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   }, [editingId]);
 
   useEffect(() => {
-    const handleClick = () => { setContextMenu(null); setShowToggleMenu(false); };
+    const handleClick = () => {
+        setContextMenu(null);
+        setShowToggleMenu(false);
+    };
     window.addEventListener('click', handleClick);
     return () => window.removeEventListener('click', handleClick);
   }, []);
 
   useEffect(() => {
     if (!datePickerState.assignmentId) return;
+
     const handleClickOutside = (event: MouseEvent) => {
         if (datePickerContainerRef.current && !datePickerContainerRef.current.contains(event.target as Node)) {
              setDatePickerState({ assignmentId: null });
         }
     };
-    setTimeout(() => document.addEventListener('mousedown', handleClickOutside), 0);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    
+    // Use timeout to avoid closing immediately on the same click that opened it
+    setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside);
+    }, 0);
+
+    return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, [datePickerState.assignmentId]);
 
-  // ... Handlers (toggleProject, handleResize, etc.) ...
   const toggleProject = (id: string) => setCollapsedProjects(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleModule = (id: string) => setCollapsedModules(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleTask = (id: string) => setCollapsedTasks(prev => ({ ...prev, [id]: !prev[id] }));
@@ -504,10 +535,18 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     setCollapsedTasks(newCollapsedState);
   };
   
+  // --- Optimized Resize Handlers (Ghost Resize) ---
   const handleResizeStart = (col: string, currentWidth: number, e: React.MouseEvent) => {
-    e.preventDefault(); e.stopPropagation(); isResizing.current = true;
+    e.preventDefault();
+    e.stopPropagation();
+    isResizing.current = true;
     resizeData.current = { col, startX: e.clientX, startWidth: currentWidth };
-    if (resizeGhostRef.current) { resizeGhostRef.current.style.display = 'block'; resizeGhostRef.current.style.left = `${e.clientX}px`; }
+    
+    if (resizeGhostRef.current) {
+        resizeGhostRef.current.style.display = 'block';
+        resizeGhostRef.current.style.left = `${e.clientX}px`;
+    }
+    
     document.body.style.cursor = 'col-resize';
     window.addEventListener('mousemove', handleResizeMove);
     window.addEventListener('mouseup', handleResizeEnd);
@@ -515,19 +554,27 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const handleResizeMove = (e: MouseEvent) => {
       if (!isResizing.current) return;
-      if (resizeGhostRef.current) { resizeGhostRef.current.style.left = `${e.clientX}px`; }
+      if (resizeGhostRef.current) {
+          resizeGhostRef.current.style.left = `${e.clientX}px`;
+      }
   };
 
   const handleResizeEnd = (e: MouseEvent) => {
       if (!isResizing.current) return;
       isResizing.current = false;
+      
       const delta = e.clientX - resizeData.current.startX;
       const newWidth = resizeData.current.startWidth + delta;
       const col = resizeData.current.col;
-      if (col === 'sidebar') { setSidebarWidth(Math.max(200, Math.min(600, newWidth))); setUserHasResizedSidebar(true); }
+
+      if (col === 'sidebar') {
+          setSidebarWidth(Math.max(200, Math.min(600, newWidth)));
+          setUserHasResizedSidebar(true);
+      }
       if (col === 'start') setStartColWidth(Math.max(80, Math.min(200, newWidth)));
       if (col === 'duration') setDurationColWidth(Math.max(40, Math.min(150, newWidth)));
       if (col === 'dependency') setDependencyColWidth(Math.max(40, Math.min(400, newWidth)));
+
       if (resizeGhostRef.current) resizeGhostRef.current.style.display = 'none';
       document.body.style.cursor = 'default';
       window.removeEventListener('mousemove', handleResizeMove);
@@ -535,30 +582,27 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
 
   const resourceHolidaysMap = useMemo(() => {
-    const map = new Map<string, { holidays: (Omit<Holiday, 'id'> | IndividualHoliday)[], durationMap: Map<string, number> }>();
+    const map = new Map<string, { holidays: (Omit<Holiday, 'id'> | IndividualHoliday)[], dateSet: Set<string> }>();
+    
     const availableRegions = Array.from(new Set(holidays.map(h => h.country)));
     const defaultRegion = availableRegions.includes('HK') ? 'HK' : availableRegions[0];
     const defaultHolidays = defaultRegion ? holidays.filter(h => h.country === defaultRegion) : [];
     
-    const buildDurationMap = (hols: any[]) => {
-        const dMap = new Map<string, number>();
-        // Fix: Use type assertion as duration might not be in type definition but available in data
-        hols.forEach(h => dMap.set(h.date, (h as any).duration || 1.0));
-        return dMap;
-    };
-
     map.set('Unassigned', {
         holidays: defaultHolidays,
-        durationMap: buildDurationMap(defaultHolidays)
+        dateSet: new Set(defaultHolidays.map(h => h.date))
     });
 
     resources.forEach(resource => {
-        const regional = resource.holiday_region ? holidays.filter(h => h.country === resource.holiday_region) : [];
+        const regional = resource.holiday_region 
+            ? holidays.filter(h => h.country === resource.holiday_region)
+            : [];
+            
         const individual = resource.individual_holidays || [];
         const allHolidays = [...regional, ...individual];
         map.set(resource.name, {
             holidays: allHolidays,
-            durationMap: buildDurationMap(allHolidays)
+            dateSet: new Set(allHolidays.map(h => h.date))
         });
     });
     return map;
@@ -586,7 +630,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         const groupLabel = `📦 ${m.name}  (Project: ${p.name})`;
         m.tasks.forEach(t => {
           t.assignments.forEach(a => {
-            flatList.push({ id: a.id, name: `${t.name} • ${a.resourceName || 'Unassigned'}`, parentAssignmentId: a.parentAssignmentId, groupLabel });
+            flatList.push({
+              id: a.id,
+              name: `${t.name} • ${a.resourceName || 'Unassigned'}`,
+              parentAssignmentId: a.parentAssignmentId,
+              groupLabel
+            });
           });
         });
       });
@@ -606,23 +655,45 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     return false;
   };
 
+
   const startEditing = (id: string, initialValue: string, e?: React.MouseEvent) => {
     if (isReadOnly) return;
-    if (e) { e.stopPropagation(); e.preventDefault(); }
-    setEditingId(id); setEditValue(initialValue);
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    setEditingId(id);
+    setEditValue(initialValue);
   };
 
   const saveEdit = () => {
     if (!editingId || isReadOnly) return;
     const [type, ...parts] = editingId.split('::');
-    if (type === 'project') { const [projectId] = parts; onUpdateProjectName(projectId, editValue); } 
-    else if (type === 'module') { const [projectId, moduleId] = parts; onUpdateModuleName(projectId, moduleId, editValue); } 
-    else if (type === 'task') { const [projectId, moduleId, taskId] = parts; onUpdateTaskName(projectId, moduleId, taskId, editValue); } 
-    else if (type === 'resource') { const [_, projectId, moduleId, taskId, assignmentId] = parts; onUpdateAssignmentResourceName(projectId, moduleId, taskId, assignmentId, editValue); } 
+
+    if (type === 'project') {
+      const [projectId] = parts;
+      onUpdateProjectName(projectId, editValue);
+    } else if (type === 'module') {
+      const [projectId, moduleId] = parts;
+      onUpdateModuleName(projectId, moduleId, editValue);
+    } else if (type === 'task') {
+      const [projectId, moduleId, taskId] = parts;
+      onUpdateTaskName(projectId, moduleId, taskId, editValue);
+    } else if (type === 'resource') {
+      const [_, projectId, moduleId, taskId, assignmentId] = parts;
+      onUpdateAssignmentResourceName(projectId, moduleId, taskId, assignmentId, editValue);
+    } 
+
     setEditingId(null);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter') { saveEdit(); } else if (e.key === 'Escape') { setEditingId(null); } };
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      saveEdit();
+    } else if (e.key === 'Escape') {
+      setEditingId(null);
+    }
+  };
 
   const handleExportExcel = () => {
     const planData: any[] = [];
@@ -680,6 +751,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
 
   const timeline = useMemo(() => getTimeline(viewMode, timelineStart, timelineEnd), [viewMode, timelineStart, timelineEnd]);
+
   const today = new Date();
   const currentWeekId = getWeekIdFromDate(today);
 
@@ -689,7 +761,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                col.date.getMonth() === today.getMonth() && 
                col.date.getFullYear() === today.getFullYear();
     }
-    if (viewMode === 'week') { return col.id === currentWeekId; }
+    if (viewMode === 'week') {
+        return col.id === currentWeekId;
+    }
     return false;
   };
 
@@ -711,6 +785,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }, {} as Record<string, { label: string, colspan: number }>);
   }, [timeline]);
 
+  const getRoleColorClass = (role: Role) => {
+    const style = getRoleStyle(role);
+    return style.border;
+  };
+
   const getRawCellValue = (assignment: TaskAssignment, col: TimelineColumn): number => {
     const resourceName = assignment.resourceName || 'Unassigned';
     const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned');
@@ -718,18 +797,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     if (viewMode === 'day') {
         if (!col.date) return 0;
         const dateStr = formatDateForInput(col.date);
-        const holidayDuration = resourceHolidayData?.durationMap.get(dateStr) || 0;
-        
-        const alloc = assignment.allocations.find(a => a.weekId === col.parentWeekId);
-        if (!alloc) return 0;
-        if (alloc.days && alloc.days[dateStr] !== undefined) {
-            return alloc.days[dateStr];
-        }
-        if (alloc.count > 0 && Object.keys(alloc.days || {}).length === 0) {
-            const weekdaysInWeek = 5; 
-            return alloc.count / weekdaysInWeek;
-        }
-        return 0;
+        if (resourceHolidayData?.dateSet.has(dateStr)) return 0;
     }
 
     if (viewMode === 'week') {
@@ -741,6 +809,22 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       return assignment.allocations
         .filter(a => col.weekIds!.includes(a.weekId))
         .reduce((sum, a) => sum + a.count, 0);
+    }
+    if (viewMode === 'day') {
+      if (!col.parentWeekId || !col.date) return 0;
+      
+      const alloc = assignment.allocations.find(a => a.weekId === col.parentWeekId);
+      if (!alloc) return 0;
+
+      const dateStr = formatDateForInput(col.date);
+      if (alloc.days && alloc.days[dateStr] !== undefined) {
+          return alloc.days[dateStr];
+      }
+      if (alloc.count > 0 && Object.keys(alloc.days || {}).length === 0) {
+          const weekdaysInWeek = 5; // simplified
+          return alloc.count / weekdaysInWeek;
+      }
+      return 0;
     }
     return 0;
   };
@@ -774,30 +858,127 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }
   };
 
+  // --- Grid Navigation Logic ---
   const handleNavigate = (direction: string, currentRow: number, currentCol: number) => {
-    let targetRow = currentRow; let targetCol = currentCol;
-    if (direction === 'ArrowUp') targetRow--; if (direction === 'ArrowDown') targetRow++; if (direction === 'ArrowLeft') targetCol--; if (direction === 'ArrowRight') targetCol++;
+    let targetRow = currentRow;
+    let targetCol = currentCol;
+
+    if (direction === 'ArrowUp') targetRow--;
+    if (direction === 'ArrowDown') targetRow++;
+    if (direction === 'ArrowLeft') targetCol--;
+    if (direction === 'ArrowRight') targetCol++;
+
     const selector = `input[data-grid="planner"][data-r="${targetRow}"][data-c="${targetCol}"]`;
     const el = document.querySelector(selector) as HTMLInputElement;
-    if (el) { el.focus(); el.select(); }
+    if (el) {
+        el.focus();
+        el.select();
+    }
   };
 
   const handleModuleDragStart = (e: React.DragEvent, index: number) => { if (isReadOnly) return; e.dataTransfer.setData("text/plain", index.toString()); e.dataTransfer.effectAllowed = "move"; setDraggedModuleIndex(index); };
   const handleModuleDragOver = (e: React.DragEvent) => { if (isReadOnly) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
-  const handleModuleDrop = (e: React.DragEvent, projectId: string, targetModuleId: string, targetModuleIndex: number) => { if (isReadOnly) return; e.preventDefault(); setDraggedModuleIndex(null); if (e.dataTransfer.types.includes("text/plain")) { const startIndexStr = e.dataTransfer.getData("text/plain"); if (startIndexStr) { const startIndex = parseInt(startIndexStr, 10); if (!isNaN(startIndex) && startIndex !== targetModuleIndex) { onReorderModules(projectId, startIndex, targetModuleIndex); } } } if (e.dataTransfer.types.includes("application/json")) { try { const data = JSON.parse(e.dataTransfer.getData("application/json")); if (data.type === 'task' && data.projectId === projectId && data.moduleId !== targetModuleId) { const targetModule = projects.find(p => p.id === projectId)?.modules.find(m => m.id === targetModuleId); if (targetModule) { onMoveTask(projectId, data.moduleId, targetModuleId, data.index, targetModule.tasks.length); } } } catch (err) { console.error("Error dropping task on module", err); } } };
+  
+  const handleModuleDrop = (e: React.DragEvent, projectId: string, targetModuleId: string, targetModuleIndex: number) => {
+    if (isReadOnly) return;
+    e.preventDefault();
+    setDraggedModuleIndex(null);
+
+    // Handle module reordering
+    if (e.dataTransfer.types.includes("text/plain")) {
+        const startIndexStr = e.dataTransfer.getData("text/plain");
+        if (startIndexStr) {
+            const startIndex = parseInt(startIndexStr, 10);
+            if (!isNaN(startIndex) && startIndex !== targetModuleIndex) {
+                onReorderModules(projectId, startIndex, targetModuleIndex);
+            }
+        }
+    }
+    
+    // Handle dropping a task onto a module
+    if (e.dataTransfer.types.includes("application/json")) {
+        try {
+            const data = JSON.parse(e.dataTransfer.getData("application/json"));
+            if (data.type === 'task' && data.projectId === projectId && data.moduleId !== targetModuleId) {
+                const targetModule = projects.find(p => p.id === projectId)?.modules.find(m => m.id === targetModuleId);
+                if (targetModule) {
+                    onMoveTask(projectId, data.moduleId, targetModuleId, data.index, targetModule.tasks.length);
+                }
+            }
+        } catch (err) {
+            console.error("Error dropping task on module", err);
+        }
+    }
+  };
+
   const handleTaskDragStart = (e: React.DragEvent, projectId: string, moduleId: string, taskIndex: number) => { if (isReadOnly) return; e.dataTransfer.setData("application/json", JSON.stringify({ type: 'task', projectId, moduleId, index: taskIndex })); e.dataTransfer.effectAllowed = "move"; setDraggedTask({ moduleId, index: taskIndex }); };
   const handleTaskDragOver = (e: React.DragEvent) => { if (isReadOnly) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
-  const handleTaskDrop = (e: React.DragEvent, targetProjectId: string, targetModuleId: string, targetTaskIndex: number) => { if (isReadOnly) return; e.preventDefault(); setDraggedTask(null); try { const data = JSON.parse(e.dataTransfer.getData("application/json")); if (data.type === 'task' && data.projectId === targetProjectId) { if (data.moduleId === targetModuleId) { if (data.index !== targetTaskIndex) { onReorderTasks(targetProjectId, data.moduleId, data.index, targetTaskIndex); } } else { onMoveTask(targetProjectId, data.moduleId, targetModuleId, data.index, targetTaskIndex); } } } catch (err) { console.error("Error dropping task", err); } };
+  
+  const handleTaskDrop = (e: React.DragEvent, targetProjectId: string, targetModuleId: string, targetTaskIndex: number) => { 
+      if (isReadOnly) return; 
+      e.preventDefault(); 
+      setDraggedTask(null); 
+      try { 
+          const data = JSON.parse(e.dataTransfer.getData("application/json")); 
+          if (data.type === 'task' && data.projectId === targetProjectId) {
+              if (data.moduleId === targetModuleId) {
+                  // Reorder within the same module
+                  if (data.index !== targetTaskIndex) {
+                      onReorderTasks(targetProjectId, data.moduleId, data.index, targetTaskIndex); 
+                  }
+              } else {
+                  // Move to a different module
+                  onMoveTask(targetProjectId, data.moduleId, targetModuleId, data.index, targetTaskIndex);
+              }
+          }
+      } catch (err) { 
+          console.error("Error dropping task", err); 
+      } 
+  };
+  
   const handleAssignmentDragStart = (e: React.DragEvent, taskId: string, assignmentIndex: number) => { if (isReadOnly) return; e.dataTransfer.setData("application/json", JSON.stringify({ type: 'assignment', taskId, index: assignmentIndex })); e.dataTransfer.effectAllowed = "move"; setDraggedAssignment({ taskId, index: assignmentIndex }); };
   const handleAssignmentDragOver = (e: React.DragEvent) => { if (isReadOnly) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
   const handleAssignmentDrop = (e: React.DragEvent, projectId: string, moduleId: string, targetTaskId: string, targetAssignmentIndex: number) => { if (isReadOnly) return; e.preventDefault(); setDraggedAssignment(null); try { const data = JSON.parse(e.dataTransfer.getData("application/json")); if (data.type === 'assignment' && data.taskId === targetTaskId && data.index !== targetAssignmentIndex) { onReorderAssignments(projectId, moduleId, data.taskId, data.index, targetAssignmentIndex); } } catch (err) { console.error("Error dropping assignment", err); } };
-  
-  const handleAddTaskClick = (projectId: string, moduleId: string) => { if (isReadOnly) return; const newTaskId = crypto.randomUUID(); if (collapsedModules[moduleId]) { toggleModule(moduleId); } onAddTask(projectId, moduleId, newTaskId, "New Task", Role.EA); startEditing(`task::${projectId}::${moduleId}::${newTaskId}`, "New Task"); };
-  const handleAssignmentStartDateChange = (assignment: TaskAssignment, newDateStr: string) => { if (isReadOnly || !newDateStr) return; onUpdateAssignmentSchedule(assignment.id, newDateStr, assignment.duration || 1); };
-  const saveDuration = (assignment: TaskAssignment) => { if (editingId !== `duration::${assignment.id}` || isReadOnly) return; let startDate = assignment.startDate; if (!startDate && assignment.startWeekId) { const d = getDateFromWeek(parseInt(assignment.startWeekId.split('-')[0]), parseInt(assignment.startWeekId.split('-')[1])); startDate = formatDateForInput(d); } if (!startDate) { setEditingId(null); return; } const newDuration = parseInt(editValue, 10); if (!isNaN(newDuration) && newDuration > 0 && newDuration !== assignment.duration) { onUpdateAssignmentSchedule(assignment.id, startDate, newDuration); } setEditingId(null); };
 
+  const handleAddTaskClick = (projectId: string, moduleId: string) => {
+    if (isReadOnly) return;
+    const newTaskId = crypto.randomUUID();
+    if (collapsedModules[moduleId]) { toggleModule(moduleId); }
+    onAddTask(projectId, moduleId, newTaskId, "New Task", Role.EA);
+    startEditing(`task::${projectId}::${moduleId}::${newTaskId}`, "New Task");
+  };
+
+  const handleAssignmentStartDateChange = (assignment: TaskAssignment, newDateStr: string) => {
+     if (isReadOnly || !newDateStr) return;
+     onUpdateAssignmentSchedule(assignment.id, newDateStr, assignment.duration || 1);
+  };
+
+  const saveDuration = (assignment: TaskAssignment) => {
+    if (editingId !== `duration::${assignment.id}` || isReadOnly) return;
+    let startDate = assignment.startDate;
+    if (!startDate && assignment.startWeekId) { const d = getDateFromWeek(parseInt(assignment.startWeekId.split('-')[0]), parseInt(assignment.startWeekId.split('-')[1])); startDate = formatDateForInput(d); }
+    if (!startDate) { setEditingId(null); return; }
+    const newDuration = parseInt(editValue, 10);
+    if (!isNaN(newDuration) && newDuration > 0 && newDuration !== assignment.duration) { onUpdateAssignmentSchedule(assignment.id, startDate, newDuration); }
+    setEditingId(null);
+  };
+
+  const colWidth = viewMode === 'month' ? colWidthBase * 2 : colWidthBase;
+  const stickyStyle = { width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth };
+  
+  const startColLeft = sidebarWidth;
+  const durationColLeft = sidebarWidth + startColWidth;
+  const dependencyColLeft = sidebarWidth + startColWidth + durationColWidth;
+
+  const showYearRow = viewMode === 'day' || viewMode === 'week' || viewMode === 'month';
+  const showMonthRow = viewMode === 'day' || viewMode === 'week';
+
+  // --- Grid Row Tracking ---
   let gridRowIndex = 0;
+
+  // --- Calculate Current Column for Overlay ---
   const currentColumnIndex = timeline.findIndex(c => isCurrentColumn(c));
+  const stickyLeftOffset = sidebarWidth + startColWidth + durationColWidth + dependencyColWidth;
 
   const assignmentRenderInfo = useMemo(() => {
     const map = new Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>();
@@ -806,22 +987,19 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     const ROW_HEIGHT = 33;
 
     projects.forEach(project => {
-        rowIndex++; 
+        rowIndex++; // Project header
         if (!collapsedProjects[project.id]) {
             project.modules.forEach(module => {
-                rowIndex++; 
+                rowIndex++; // Module header
                 if (!collapsedModules[module.id]) {
                     module.tasks.forEach(task => {
-                        rowIndex++; 
+                        rowIndex++; // Task header
                         if (!collapsedTasks[task.id]) {
                             task.assignments.forEach(assignment => {
                                 if (assignment.startDate && assignment.duration) {
                                     const resourceName = assignment.resourceName || 'Unassigned';
-                                    const holidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned');
-                                    const holidayMap = holidayData?.durationMap || new Map();
-                                    // Fix: Convert Map keys to Set for calculateEndDate
-                                    const holidaySet = new Set(holidayMap.keys());
-                                    const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, holidaySet);
+                                    const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>();
+                                    const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, assignmentHolidays);
                                     
                                     map.set(assignment.id, {
                                         rowIndex,
@@ -830,7 +1008,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                         endDate: endDateStr,
                                     });
                                 }
-                                rowIndex++; 
+                                rowIndex++; // Assignment row
                             });
                         }
                     });
@@ -839,12 +1017,18 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         }
     });
     return { map, totalHeight: HEADER_HEIGHT + rowIndex * ROW_HEIGHT };
-  }, [projects, collapsedProjects, collapsedModules, collapsedTasks, holidays, resources, showMonthRow, showYearRow, resourceHolidaysMap]);
+  }, [projects, collapsedProjects, collapsedModules, collapsedTasks, holidays, resources, showMonthRow, showYearRow]);
 
   return (
     <>
       <div className="flex flex-col h-full bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden relative">
-        <div ref={resizeGhostRef} className="fixed top-0 bottom-0 w-0.5 bg-indigo-500 z-[100] hidden pointer-events-none border-l border-dashed border-indigo-200" style={{ display: 'none' }}></div>
+        {/* Ghost Resize Line */}
+        <div 
+            ref={resizeGhostRef} 
+            className="fixed top-0 bottom-0 w-0.5 bg-indigo-500 z-[100] hidden pointer-events-none border-l border-dashed border-indigo-200"
+            style={{ display: 'none' }}
+        ></div>
+
         <div className="px-4 py-3 border-b border-slate-200 flex justify-between items-center bg-slate-50">
           <div className="flex items-center gap-4">
              <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-500" /><span className="text-sm font-semibold text-slate-700">Timeline</span></div>
@@ -875,7 +1059,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             </div>
           </div>
           <div className="flex gap-4 items-center">
-             <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
                 <button onClick={onRefresh} disabled={isRefreshing} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Refresh data from server"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh</button>
                 <SaveStatusIndicator status={saveStatus} />
                 <div className="w-px h-4 bg-slate-300"></div>
@@ -907,36 +1091,45 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           )}
           <div className="min-w-max relative">
               <>
-                <div className="flex bg-slate-200 border-b border-slate-200 sticky top-0 z-40 h-8 items-center shadow-sm">
+                {/* Header Rows */}
+                <div className="flex bg-slate-200 border-b border-slate-200 sticky top-0 z-40 h-8 items-center">
                   <div className="flex-shrink-0 px-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group h-full flex items-center text-xs" style={stickyStyle}>
                     Project Structure
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={(e) => handleResizeStart('sidebar', sidebarWidth, e)}></div>
                   </div>
+                  
+                  {/* Start Column Header */}
                   <div className={`flex-shrink-0 flex items-center px-2 text-[11px] font-semibold text-slate-600 border-r border-slate-200 relative h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}>
-                    <div className="flex items-center justify-between w-full"><button onClick={() => setIsDetailsFrozen(!isDetailsFrozen)} title={isDetailsFrozen ? 'Unfreeze columns' : 'Freeze columns'} className="text-slate-400 hover:text-indigo-600 mr-1">{isDetailsFrozen ? <PinOff size={14} /> : <Pin size={14} />}</button><span className="flex-1 text-center">Start</span></div>
+                    <div className="flex items-center justify-between w-full">
+                        <button onClick={() => setIsDetailsFrozen(!isDetailsFrozen)} title={isDetailsFrozen ? 'Unfreeze columns' : 'Freeze columns'} className="text-slate-400 hover:text-indigo-600 mr-1">{isDetailsFrozen ? <PinOff size={14} /> : <Pin size={14} />}</button>
+                        <span className="flex-1 text-center">Start</span>
+                    </div>
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={(e) => handleResizeStart('start', startColWidth, e)}></div>
                   </div>
+
+                  {/* Duration Column Header */}
                   <div className={`flex-shrink-0 flex items-center justify-center px-2 text-[11px] font-semibold text-slate-600 border-r border-slate-200 relative h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}>
                     <span>Days</span>
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={(e) => handleResizeStart('duration', durationColWidth, e)}></div>
                   </div>
-                  <div className={`flex-shrink-0 flex items-center justify-center px-2 text-[11px] font-semibold text-slate-600 border-r border-slate-200 relative h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}>
+
+                  {/* Dependency Column Header */}
+                  <div title="Dependency" className={`flex-shrink-0 flex items-center justify-center px-2 text-[11px] font-semibold text-slate-600 border-r border-slate-200 relative h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}>
                     <Link2 size={14} className="text-slate-600" />
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={(e) => handleResizeStart('dependency', dependencyColWidth, e)}></div>
                   </div>
-                  {Object.values(yearHeaders).map((group: any, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+
+                  {Object.values(yearHeaders).map((group, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                 </div>
-                
                 {showMonthRow && (
-                  <div className="flex bg-slate-100 border-b border-slate-200 sticky top-8 z-40 h-8 items-center shadow-sm">
+                  <div className="flex bg-slate-100 border-b border-slate-200 sticky top-8 z-40 h-8 items-center">
                     <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
-                    {Object.values(monthHeaders).map((group: any, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-600 border-r border-slate-200 uppercase h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+                    {Object.values(monthHeaders).map((group, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-600 border-r border-slate-200 uppercase h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                   </div>
                 )}
-
                 <div className={`flex bg-slate-50 border-b border-slate-200 sticky z-40 shadow-sm h-8 items-center ${showMonthRow ? 'top-16' : 'top-8'}`}>
                   <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
                   <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
@@ -953,11 +1146,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                       }
                       let className = `flex-shrink-0 text-center text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col h-full`;
                       if (isHKHoliday) { className += ' bg-red-50 text-red-700'; } else if (isCurrent) { className += ' bg-amber-100 text-amber-800 border-b-4 border-b-amber-500'; } else { className += ' text-slate-500'; }
+                      if (isCurrent && !isHKHoliday) { className += ''; } // Already applied above
                       return (<div key={col.id} className={className} style={{ width: `${colWidth}px` }} title={isHKHoliday ? holidayName : (isCurrent ? 'Current Date' : '')}><span>{col.label}</span>{viewMode === 'day' && col.date && <span className={`text-[9px] ${isHKHoliday ? 'text-red-600 font-bold' : isCurrent ? 'text-amber-800 font-bold' : 'text-slate-400'}`}>{col.date.getDate()}</span>}</div>);
                   })}
                 </div>
               </>
 
+            {/* Today/Current Column Highlighter Overlay */}
             {currentColumnIndex !== -1 && (
                 <div 
                     className="absolute top-0 bottom-0 pointer-events-none z-30 border-l-2 border-r-2 border-amber-400 bg-amber-400/10"
@@ -982,6 +1177,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         {isEditingProject ? ( <input ref={editInputRef} value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown} className="bg-slate-600 text-white text-xs font-bold border border-slate-500 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500" /> ) : ( <span className="font-bold text-xs truncate select-none flex-1" onDoubleClick={(e) => startEditing(`project::${project.id}`, project.name, e)} title="Double click to rename">{project.name}</span> )}
                       </div>
                     </div>
+                    {/* Project Row Spacers */}
                     <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 39 : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 39 : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 39 : undefined }}></div>
@@ -1014,9 +1210,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 earliestDateObj = startDate;
                             }
                             const resourceName = assignment.resourceName || 'Unassigned';
-                            const holidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned');
-                            // Fix: Use Set directly or access dateSet
-                            const assignmentHolidays = holidayData?.durationMap ? new Set(holidayData.durationMap.keys()) : new Set<string>();
+                            const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>();
                             const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidays);
                             const endDate = new Date(endDateStr.replace(/-/g, '/'));
                             if (!moduleLatestEndDate || endDate > moduleLatestEndDate) {
@@ -1026,9 +1220,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         
                         if (earliestDateObj && moduleLatestEndDate) {
                             moduleEarliestStartDate = formatDateForInput(earliestDateObj);
-                            // Project Holiday Set for working days calc
-                            const projectHolidays = new Set(holidays.filter(h => h.country === 'HK').map(h => h.date));
-                            moduleTotalDuration = calculateWorkingDaysBetween(moduleEarliestStartDate, formatDateForInput(moduleLatestEndDate), projectHolidays);
+                            moduleTotalDuration = calculateWorkingDaysBetween(moduleEarliestStartDate, formatDateForInput(moduleLatestEndDate), projectHolidaySet);
                         }
                     }
 
@@ -1082,6 +1274,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             </div>
                           </div>
                           
+                          {/* Module Details Columns */}
                           <div className={`flex-shrink-0 text-[10px] font-bold ${style.totalTextColor}/80 border-r border-slate-200 flex items-center justify-center ${style.bgColor} ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 29 : undefined }}>
                             {isModuleCollapsed && moduleEarliestStartDate && <span title="Earliest Start Date" className={`${style.ganttGridColor} rounded p-1`}>{moduleEarliestStartDate}</span>}
                           </div>
@@ -1128,9 +1321,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                       earliestDateObj = startDate;
                                   }
                                   const resourceName = assignment.resourceName || 'Unassigned';
-                                  const holidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned');
-                                  // Fix: Use Set directly or access dateSet
-                                  const assignmentHolidays = holidayData?.durationMap ? new Set(holidayData.durationMap.keys()) : new Set<string>();
+                                  const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>();
                                   const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidays);
                                   const endDate = new Date(endDateStr.replace(/-/g, '/'));
                                   if (!latestEndDate || endDate > latestEndDate) {
@@ -1139,9 +1330,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               });
                               if (earliestDateObj && latestEndDate) {
                                   earliestStartDate = formatDateForInput(earliestDateObj);
-                                  // Project Holiday Set for working days calc
-                                  const projectHolidays = new Set(holidays.filter(h => h.country === 'HK').map(h => h.date));
-                                  totalDuration = calculateWorkingDaysBetween(earliestStartDate, formatDateForInput(latestEndDate), projectHolidays);
+                                  totalDuration = calculateWorkingDaysBetween(earliestStartDate, formatDateForInput(latestEndDate), projectHolidaySet);
                               }
                           }
                           
@@ -1179,6 +1368,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   {!isReadOnly && <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity"><button onClick={() => onAddAssignment(project.id, module.id, task.id, Role.EA)} className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200" title="Add another resource to this task"><UserPlus size={14} /></button></div>}
                                 </div>
                                 
+                                {/* Task Details Columns */}
                                 <div className={`flex-shrink-0 text-[10px] font-medium text-slate-500 border-r border-slate-200 flex items-center justify-center bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 19 : undefined }}>
                                   {isTaskCollapsed && earliestStartDate && <span title="Earliest Start Date" className="bg-slate-200/50 rounded p-1">{earliestStartDate}</span>}
                                 </div>
@@ -1217,11 +1407,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   assignmentStartDate = new Date(assignment.startDate!.replace(/-/g, '/'));
                                   const resourceName = assignment.resourceName || 'Unassigned'; 
                                   const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'); 
-                                  // Fix: Use Set directly or access dateSet
-                                  const assignmentHolidays = holidayData?.durationMap ? new Set(holidayData.durationMap.keys()) : new Set<string>();
+                                  const assignmentHolidays = resourceHolidayData?.dateSet || new Set<string>();
                                   endDateStr = calculateEndDate(assignment.startDate!, assignment.duration!, assignmentHolidays);
                                   assignmentEndDate = new Date(endDateStr.replace(/-/g, '/'));
                                 } else {
+                                  // Fallback for display if no schedule
                                   assignmentStartDate = new Date();
                                 }
                                 
@@ -1265,6 +1455,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     </div>
                                   </div>
                                   
+                                  {/* Assignment Details Columns */}
                                   <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
                                       {!isReadOnly && <div className="cursor-grab text-slate-300 hover:text-slate-500 mr-1" title="Drag to reorder assignment"><GripVertical size={14} /></div>}
                                       <div className="relative w-full">
@@ -1330,11 +1521,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             const resourceName = assignment.resourceName || 'Unassigned';
                                             const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned');
                                             const dateStr = col.date ? formatDateForInput(col.date) : '';
-                                            // Fix: Access dateSet for checking existence, and durationMap for duration
                                             const isHol = viewMode === 'day' && !!(resourceHolidayData && resourceHolidayData.dateSet.has(dateStr));
-                                            const holidayDuration = isHol ? (resourceHolidayData!.durationMap.get(dateStr) || 1.0) : 0;
                                             const holidayInfo = isHol ? resourceHolidayData!.holidays.find(h => h.date === dateStr) : undefined;
-                                            
                                             const raw = getRawCellValue(assignment, col);
                                             return (
                                                 <GridNumberInput
@@ -1345,8 +1533,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                                     rowIndex={currentRowIndex}
                                                     colIndex={colIndex}
                                                     width={colWidth}
-                                                    isHoliday={false} // Deprecated prop, using holidayDuration
-                                                    holidayDuration={holidayDuration}
+                                                    isHoliday={isHol}
                                                     holidayName={holidayInfo}
                                                     isCurrent={false}
                                                     disabled={isReadOnly}
