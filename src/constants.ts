@@ -2,7 +2,7 @@
 import { TimelineColumn, ViewMode, Holiday } from './types';
 
 // Mock "Government Database" - Expanded for 2024-2027
-export const GOV_HOLIDAYS_DB: Record<string, Omit<Holiday, 'id'>[]> = {
+export const GOV_HOLIDAYS_DB: Record<string, Omit<Holiday, 'id' | 'user_id'>[]> = {
   'HK': [
     // 2024
     { date: '2024-12-25', name: 'Christmas Day', country: 'HK' },

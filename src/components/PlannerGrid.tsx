@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
@@ -137,6 +136,7 @@ interface PlannerGridProps {
   saveStatus: 'idle' | 'saving' | 'success' | 'error';
   isRefreshing: boolean;
   isReadOnly?: boolean;
+  isOwner?: boolean;
 }
 
 const SaveStatusIndicator: React.FC<{ status: PlannerGridProps['saveStatus'] }> = ({ status }) => {
@@ -351,6 +351,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   saveStatus,
   isRefreshing,
   isReadOnly = false,
+  isOwner = true,
 }) => {
   // --- Persistent State Initialization ---
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>(() => {
@@ -731,7 +732,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         let currentModule: ProjectModule | null = null;
         let currentTask: ProjectTask | null = null;
         planJson.forEach((row, index) => {
-            if (row.Project && row.Project !== currentProject?.name) { currentProject = { id: `p-${index}`, name: row.Project, modules: [] }; importedProjects.push(currentProject); currentModule = null; currentTask = null; }
+            if (row.Project && row.Project !== currentProject?.name) { currentProject = { id: `p-${index}`, name: row.Project, modules: [], user_id: 'imported' }; importedProjects.push(currentProject); currentModule = null; currentTask = null; }
             if (!currentProject) return;
             if (row.Module && row.Module !== currentModule?.name) { currentModule = { id: `m-${index}`, name: row.Module, tasks: [], functionPoints: 0, legacyFunctionPoints: 0 }; currentProject.modules.push(currentModule); currentTask = null; }
             if (!currentModule) return;

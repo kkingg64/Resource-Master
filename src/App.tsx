@@ -1,18 +1,17 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-// FIX: Corrected import paths to be relative to the `src` directory.
-import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from '../constants';
-import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType, ProjectRole, ProjectMember } from '../types';
-import { Dashboard } from '../components/Dashboard';
-import { PlannerGrid } from '../components/PlannerGrid';
-import { Estimator } from '../components/Estimator';
-import { Settings } from '../components/Settings';
-import { Resources } from '../components/Resources';
-import { VersionHistory } from '../components/VersionHistory';
-import { DebugLog } from '../components/DebugLog';
-import { AdminSettings } from '../components/AdminSettings';
-import { AIAssistant } from '../components/AIAssistant';
-import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X, Mail, Plus, Trash2, UserPlus } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
+import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
+import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType, ProjectRole, ProjectMember } from './types';
+import { Dashboard } from './components/Dashboard';
+import { PlannerGrid } from './components/PlannerGrid';
+import { Estimator } from './components/Estimator';
+import { Settings } from './components/Settings';
+import { Resources } from './components/Resources';
+import { VersionHistory } from './components/VersionHistory';
+import { DebugLog } from './components/DebugLog';
+import { AdminSettings } from './components/AdminSettings';
+import { AIAssistant } from './components/AIAssistant';
+import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X, Mail, Plus, Trash2, UserPlus, Database, AlertTriangle } from 'lucide-react';
+import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 
@@ -24,7 +23,8 @@ const structureProjectsData = (
   assignments: any[],
   allocations: any[],
   currentUserId: string,
-  members: any[] = []
+  members: any[] = [],
+  currentUserEmail: string = ''
 ): Project[] => {
   const allocationsByAssignment = new Map<string, any[]>();
   allocations.forEach(a => {
@@ -125,7 +125,9 @@ const structureProjectsData = (
     if (p.user_id === currentUserId) {
         role = 'owner';
     } else {
-        const membership = members.find(m => m.project_id === p.id && (m.user_id === currentUserId || m.user_email === currentUserId)); // Fallback to ID check if emails not joined
+        // Members lookup: match project_id and the current user's email
+        // Note: We use Email because project_members stores user_email
+        const membership = members.find(m => m.project_id === p.id && m.user_email === currentUserEmail);
         if (membership) {
             role = membership.role;
         }
@@ -136,7 +138,8 @@ const structureProjectsData = (
         name: p.name,
         modules: (modulesByProject.get(p.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
         currentUserRole: role,
-        ownerEmail: p.owner_email // Assuming backend joins owner profile or stores email
+        ownerEmail: p.owner_email,
+        user_id: p.user_id // Pass this through to identify owner
     };
   }).sort((a,b) => a.name.localeCompare(b.name));
 };
@@ -163,6 +166,120 @@ const shiftWeekIdByAmount = (weekId: string, amount: number): string => {
     if (isNaN(point.year) || isNaN(point.week)) return weekId;
     const newPoint = addWeeksToPoint(point, amount);
     return `${newPoint.year}-${String(newPoint.week).padStart(2, '0')}`;
+};
+
+// Fix DB Screen Component
+const FixRecursionScreen: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
+  const sql = `-- FIX RECURSION BY USING SECURITY DEFINER FUNCTIONS
+-- These functions bypass RLS to prevent infinite loops.
+
+-- 1. Helper function to check if current user is a member of a project
+CREATE OR REPLACE FUNCTION is_project_member(_project_id uuid)
+RETURNS boolean AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM project_members 
+    WHERE project_id = _project_id 
+    AND user_email = auth.email()
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- 2. Helper function to check if current user owns a project
+CREATE OR REPLACE FUNCTION is_project_owner(_project_id uuid)
+RETURNS boolean AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM projects 
+    WHERE id = _project_id 
+    AND user_id = auth.uid()
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- 3. Reset Policies
+DROP POLICY IF EXISTS "Projects Select Policy" ON projects;
+DROP POLICY IF EXISTS "Projects Manage Policy" ON projects;
+DROP POLICY IF EXISTS "Members Select Policy" ON project_members;
+DROP POLICY IF EXISTS "Members Manage Policy" ON project_members;
+
+-- 4. Projects Policy
+-- Allow access if you are the owner OR a member
+CREATE POLICY "Projects Select Policy" ON projects
+  FOR SELECT USING (
+    user_id = auth.uid() 
+    OR 
+    is_project_member(id)
+  );
+
+CREATE POLICY "Projects Manage Policy" ON projects
+  FOR ALL USING (user_id = auth.uid());
+
+-- 5. Members Policy
+-- Allow access if it's your own membership OR you own the project
+CREATE POLICY "Members Select Policy" ON project_members
+  FOR SELECT USING (
+    user_email = auth.email() OR is_project_owner(project_id)
+  );
+
+CREATE POLICY "Members Manage Policy" ON project_members
+  FOR ALL USING (
+    is_project_owner(project_id)
+  );`;
+
+  return (
+    <div className="fixed inset-0 bg-slate-50 z-[100] flex items-center justify-center p-4">
+      <div className="bg-white max-w-3xl w-full rounded-xl shadow-2xl border border-red-200 overflow-hidden animate-in fade-in zoom-in-95">
+        <div className="bg-red-50 p-6 border-b border-red-100 flex items-start gap-4">
+          <div className="p-3 bg-red-100 rounded-full text-red-600">
+            <Database size={24} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-red-900">Database Policy Repair</h2>
+            <p className="text-red-700 mt-1">Infinite recursion detected in Row Level Security (RLS) policies.</p>
+          </div>
+        </div>
+        <div className="p-6">
+          <p className="text-slate-600 mb-4 text-sm">
+            Your database policies may be stuck in a loop or incorrectly configured, preventing you from seeing your projects.
+            <br/><br/>
+            <strong>Solution:</strong> Please run the following SQL script in your Supabase SQL Editor. It creates secure helper functions to safely handle permission checks.
+          </p>
+          <div className="bg-slate-900 rounded-lg p-4 relative group mb-6">
+            <pre className="text-xs text-slate-300 font-mono overflow-x-auto whitespace-pre-wrap max-h-64 custom-scrollbar">
+              {sql}
+            </pre>
+            <button 
+              onClick={() => {
+                navigator.clipboard.writeText(sql);
+                alert("SQL copied to clipboard!");
+              }}
+              className="absolute top-2 right-2 bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded text-xs transition-colors"
+            >
+              Copy SQL
+            </button>
+          </div>
+          <div className="flex justify-end gap-2">
+             <button 
+              onClick={onRetry}
+              className="bg-white text-slate-600 border border-slate-300 px-4 py-2 rounded-lg font-medium hover:bg-slate-50 transition-colors"
+            >
+              Cancel / Retry
+            </button>
+            <button 
+              onClick={() => {
+                  onRetry();
+                  window.location.reload();
+              }}
+              className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-indigo-700 transition-colors shadow-sm flex items-center gap-2"
+            >
+              <Check size={16} /> I've run the SQL, Reload App
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const ShareModal: React.FC<{ onClose: () => void, projectId: string, session: any }> = ({ onClose, projectId, session }) => {
@@ -354,7 +471,11 @@ const App: React.FC = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [isTakingTooLong, setIsTakingTooLong] = useState(false); // Track slow loading
   
+  // Database Error State
+  const [dbError, setDbError] = useState<any>(null);
+
   // Selection
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
@@ -365,6 +486,15 @@ const App: React.FC = () => {
   
   const isReadOnlyMode = currentRole === 'viewer';
   const isOwner = currentRole === 'owner';
+
+  // Filter resources and holidays to match the project owner
+  const activeProjectResources = useMemo(() => 
+    resources.filter(r => currentProject && (r.user_id === currentProject.user_id || !r.user_id)), // Show if matches owner OR is public (no user_id)
+  [resources, currentProject]);
+
+  const activeProjectHolidays = useMemo(() => 
+    holidays.filter(h => currentProject && (h.user_id === currentProject.user_id || !h.user_id)), // Show if matches owner OR is public (no user_id)
+  [holidays, currentProject]);
 
   const [timelineStart, setTimelineStart] = useState<WeekPoint>(DEFAULT_START);
   const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
@@ -377,14 +507,23 @@ const App: React.FC = () => {
     return () => window.clearTimeout(statusTimeoutRef.current);
   }, []);
 
+  // Loading Timeout Watcher
+  useEffect(() => {
+    let timer: number;
+    if (loading) {
+      setIsTakingTooLong(false);
+      timer = window.setTimeout(() => {
+        setIsTakingTooLong(true);
+      }, 4000); // 4 seconds
+    }
+    return () => clearTimeout(timer);
+  }, [loading]);
+
   const [isDebugLogEnabled, setIsDebugLogEnabled] = useState(false);
   const [isAIEnabled, setIsAIEnabled] = useState(false);
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const nextLogId = useRef(0);
   
-  // Database Error State
-  const [dbError, setDbError] = useState<any>(null);
-
   const log = (message: string, payload: any, status: LogEntry['status'] = 'pending'): number => {
     if (!isDebugLogEnabled) return -1;
     const id = nextLogId.current++;
@@ -530,16 +669,32 @@ const App: React.FC = () => {
     } else {
       setLoading(true);
     }
+    setDbError(null);
 
     // 1. Fetch Owned Projects
     const { data: ownedProjects, error: ownedError } = await supabase.from('projects').select('*').eq('user_id', session.user.id);
-    if (ownedError) console.error("Error fetching owned projects", ownedError);
+    if (ownedError) {
+        console.error("Error fetching owned projects", ownedError);
+        // Broader check for errors that might be recursion related (500 or 42P17)
+        if (ownedError.code === '42P17' || ownedError.message?.includes('recursion') || ownedError.code === '500' || (ownedError as any).status === 500) {
+            setDbError(ownedError);
+            setLoading(false);
+            return;
+        }
+    }
 
     // 2. Fetch Shared Projects (Safe fail if table doesn't exist yet)
     let sharedProjects: any[] = [];
     let memberships: any[] = [];
     try {
-        const { data: memberData } = await supabase.from('project_members').select('*, projects(*)').eq('user_email', session.user.email);
+        const { data: memberData, error: memberError } = await supabase.from('project_members').select('*, projects(*)').eq('user_email', session.user.email);
+        if (memberError) {
+             if (memberError.code === '42P17' || memberError.message?.includes('recursion') || memberError.code === '500' || (memberError as any).status === 500) {
+                setDbError(memberError);
+                setLoading(false);
+                return;
+            }
+        }
         if (memberData) {
             memberships = memberData;
             sharedProjects = memberData.map((m: any) => m.projects).filter(Boolean);
@@ -568,6 +723,9 @@ const App: React.FC = () => {
     }
 
     const projectIds = uniqueProjects.map(p => p.id);
+    // Collect all owner IDs from the projects we have access to
+    const ownerIds = Array.from(new Set(uniqueProjects.map(p => p.user_id)));
+
     let modulesData = [], tasksData = [], assignmentsData = [], allocationsData = [];
 
     if (projectIds.length > 0) {
@@ -593,25 +751,26 @@ const App: React.FC = () => {
       }
     }
     
-    // Fetch resources (Only owned for now, shared logic needs complexity for shared resources)
+    // Fetch resources for ALL relevant owners (current user + owners of shared projects)
     const { data: resourcesData, error: resourcesError } = await supabase
       .from('resources')
       .select('*, individual_holidays(*)')
-      .eq('user_id', session.user.id)
+      .in('user_id', ownerIds)
       .order('name');
     
     if (resourcesError) console.error(resourcesError);
     const freshResources = resourcesData || [];
 
+    // Fetch holidays for ALL relevant owners
     const { data: holidaysData, error: holidaysError } = await supabase
       .from('holidays')
       .select('*')
-      .eq('user_id', session.user.id);
+      .in('user_id', ownerIds);
       
     if (holidaysError) console.error(holidaysError);
     const freshHolidays = holidaysData || [];
     
-    const structuredProjects = structureProjectsData(uniqueProjects, modulesData, tasksData, assignmentsData, allocationsData, session.user.id, memberships);
+    const structuredProjects = structureProjectsData(uniqueProjects, modulesData, tasksData, assignmentsData, allocationsData, session.user.id, memberships, session.user.email);
     
     // Set state after all data is fetched and processed
     setHolidays(freshHolidays);
@@ -1317,7 +1476,7 @@ const App: React.FC = () => {
         supabase.from('projects').insert({ name, user_id: session.user.id }).select().single()
     );
     if(data && !error) {
-        setProjects(prev => [...prev, { id: data.id, name: data.name, modules: [] }]);
+        setProjects(prev => [...prev, { id: data.id, name: data.name, modules: [], user_id: data.user_id, currentUserRole: 'owner' }]);
     }
   };
   
@@ -1726,9 +1885,11 @@ const App: React.FC = () => {
                <Globe size={20} /> {!isSidebarCollapsed && <span>Holidays</span>}
             </button>
             <div className="h-px bg-slate-800 my-2 mx-2"></div>
-            <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Settings">
-               <SettingsIcon size={20} /> {!isSidebarCollapsed && <span>Settings</span>}
-            </button>
+            {isOwner && (
+                <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Settings">
+                <SettingsIcon size={20} /> {!isSidebarCollapsed && <span>Settings</span>}
+                </button>
+            )}
           </nav>
           
           <div className="p-2 border-t border-slate-800">
@@ -1747,12 +1908,12 @@ const App: React.FC = () => {
        {/* Main Content */}
        <main className={`flex-1 flex flex-col min-w-0 h-full bg-white relative custom-scrollbar ${['planner', 'estimator'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'}`}>
           <div className={`flex-1 h-full ${['planner', 'estimator'].includes(activeTab) ? 'p-0 overflow-hidden' : 'p-4'}`}>
-            {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
+            {activeTab === 'dashboard' && <Dashboard projects={projects} resources={activeProjectResources} holidays={activeProjectHolidays} />}
             
             {activeTab === 'planner' && <div className="h-full p-4 overflow-hidden"><PlannerGrid 
               projects={projects} 
-              holidays={holidays}
-              resources={resources}
+              holidays={activeProjectHolidays}
+              resources={activeProjectResources}
               timelineStart={timelineStart}
               timelineEnd={timelineEnd}
               onExtendTimeline={handleExtendTimeline}
@@ -1789,7 +1950,7 @@ const App: React.FC = () => {
             
             {activeTab === 'estimator' && <div className="h-full p-4 overflow-hidden"><Estimator 
               projects={projects} 
-              holidays={holidays} 
+              holidays={activeProjectHolidays} 
               onUpdateModuleEstimates={updateModuleEstimates}
               onUpdateTaskEstimates={updateTaskEstimates}
               onUpdateModuleComplexity={updateModuleComplexity}
@@ -1797,13 +1958,12 @@ const App: React.FC = () => {
               onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
               onUpdateModuleStartTask={updateModuleStartTask}
               onReorderModules={reorderModules}
-              // FIX: Add missing onDeleteModule prop
               onDeleteModule={deleteModule}
               isReadOnly={isReadOnlyMode}
             /></div>}
             
             {activeTab === 'resources' && <Resources 
-              resources={resources} 
+              resources={activeProjectResources} 
               onAddResource={addResource} 
               onDeleteResource={deleteResource}
               onUpdateResourceCategory={updateResourceCategory}
@@ -1815,7 +1975,7 @@ const App: React.FC = () => {
               isReadOnly={isReadOnlyMode}
             />}
             
-            {activeTab === 'settings' && <Settings 
+            {activeTab === 'settings' && isOwner && <Settings 
               isDebugLogEnabled={isDebugLogEnabled}
               setIsDebugLogEnabled={setIsDebugLogEnabled}
               isAIEnabled={isAIEnabled}
@@ -1824,7 +1984,7 @@ const App: React.FC = () => {
             />}
             
             {activeTab === 'holidays' && <AdminSettings 
-              holidays={holidays}
+              holidays={activeProjectHolidays}
               onAddHolidays={addHoliday}
               onDeleteHoliday={deleteHoliday}
               onDeleteHolidaysByCountry={deleteHolidaysByCountry}
@@ -1833,7 +1993,7 @@ const App: React.FC = () => {
        </main>
 
        {/* Modals & Overlays */}
-       {isAIEnabled && <AIAssistant projects={projects} resources={resources} onAddTask={addTask} onAssignResource={updateAssignmentResourceName} />}
+       {isAIEnabled && <AIAssistant projects={projects} resources={activeProjectResources} onAddTask={addTask} onAssignResource={updateAssignmentResourceName} />}
        {isDebugLogEnabled && <DebugLog entries={logEntries} setEntries={setLogEntries} />}
        {showShareModal && <ShareModal onClose={() => setShowShareModal(false)} projectId={selectedProjectId} session={session} />}
        {showHistory && <VersionHistory onClose={() => setShowHistory(false)} onRestore={restoreVersion} onSaveCurrent={saveCurrentVersion} />}
