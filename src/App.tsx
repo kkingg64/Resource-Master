@@ -10,7 +10,7 @@ import { VersionHistory } from '../components/VersionHistory';
 import { DebugLog } from '../components/DebugLog';
 import { AdminSettings } from '../components/AdminSettings';
 import { AIAssistant } from '../components/AIAssistant';
-import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X, Mail, Plus, Trash2, UserPlus, Database } from 'lucide-react';
+import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X, Mail, Plus, Trash2, UserPlus, Database, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
@@ -459,6 +459,7 @@ const App: React.FC = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [isTakingTooLong, setIsTakingTooLong] = useState(false); // Track slow loading
   
   // Database Error State
   const [dbError, setDbError] = useState<any>(null);
@@ -484,6 +485,18 @@ const App: React.FC = () => {
   useEffect(() => {
     return () => window.clearTimeout(statusTimeoutRef.current);
   }, []);
+
+  // Loading Timeout Watcher
+  useEffect(() => {
+    let timer: number;
+    if (loading) {
+      setIsTakingTooLong(false);
+      timer = window.setTimeout(() => {
+        setIsTakingTooLong(true);
+      }, 4000); // 4 seconds
+    }
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   const [isDebugLogEnabled, setIsDebugLogEnabled] = useState(false);
   const [isAIEnabled, setIsAIEnabled] = useState(false);
@@ -641,7 +654,8 @@ const App: React.FC = () => {
     const { data: ownedProjects, error: ownedError } = await supabase.from('projects').select('*').eq('user_id', session.user.id);
     if (ownedError) {
         console.error("Error fetching owned projects", ownedError);
-        if (ownedError.code === '42P17' || ownedError.message?.includes('recursion')) {
+        // Broader check for errors that might be recursion related (500 or 42P17)
+        if (ownedError.code === '42P17' || ownedError.message?.includes('recursion') || ownedError.code === '500' || (ownedError as any).status === 500) {
             setDbError(ownedError);
             setLoading(false);
             return;
@@ -654,7 +668,7 @@ const App: React.FC = () => {
     try {
         const { data: memberData, error: memberError } = await supabase.from('project_members').select('*, projects(*)').eq('user_email', session.user.email);
         if (memberError) {
-             if (memberError.code === '42P17' || memberError.message?.includes('recursion')) {
+             if (memberError.code === '42P17' || memberError.message?.includes('recursion') || memberError.code === '500' || (memberError as any).status === 500) {
                 setDbError(memberError);
                 setLoading(false);
                 return;
@@ -1817,9 +1831,22 @@ const App: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 text-slate-500 gap-2">
-        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-        <span>Loading plan...</span>
+      <div className="flex flex-col h-screen items-center justify-center bg-slate-50 text-slate-500 gap-4">
+        <div className="flex items-center gap-2">
+            <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+            <span>Loading plan...</span>
+        </div>
+        {isTakingTooLong && (
+            <div className="animate-in fade-in zoom-in-95 mt-4">
+                <button 
+                    onClick={() => setDbError({ code: 'FORCE_FIX', message: 'User forced fix' })}
+                    className="flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg shadow-sm hover:bg-red-50 text-sm font-medium transition-colors"
+                >
+                    <AlertTriangle size={16} />
+                    Taking too long? Fix Database
+                </button>
+            </div>
+        )}
       </div>
     );
   }
@@ -1922,6 +1949,7 @@ const App: React.FC = () => {
               onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
               onUpdateModuleStartTask={updateModuleStartTask}
               onReorderModules={reorderModules}
+              // FIX: Add missing onDeleteModule prop
               onDeleteModule={deleteModule}
               isReadOnly={isReadOnlyMode}
             />}
