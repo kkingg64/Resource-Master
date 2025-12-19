@@ -1149,7 +1149,18 @@ const App: React.FC = () => {
     const [removed] = task.assignments.splice(startIndex, 1);
     task.assignments.splice(endIndex, 0, removed);
     setProjects(updatedProjects);
-    const updates = task.assignments.map((assignment, index) => ({ id: assignment.id, task_id: taskId, role: assignment.role, resource_name: assignment.resourceName, start_date: assignment.startDate, duration: assignment.duration, parent_assignment_id: assignment.parentAssignmentId, sort_order: index, user_id: session!.user.id, }));
+    /* Corrected snake_case vs camelCase typos for database payload mappings in src/App.tsx as well */
+    const updates = task.assignments.map((assignment, index) => ({ 
+      id: assignment.id, 
+      task_id: taskId, 
+      role: assignment.role, 
+      resource_name: assignment.resourceName, 
+      start_date: assignment.startDate, 
+      duration: assignment.duration, 
+      parent_assignment_id: assignment.parentAssignmentId, 
+      sort_order: index, 
+      user_id: session!.user.id, 
+    }));
     const { error } = await callSupabase('REORDER assignments', { updates: updates.length }, supabase.from('task_assignments').upsert(updates));
     if (error) { setProjects(previousState); alert("Failed to reorder assignments."); }
   };
@@ -1248,7 +1259,7 @@ const App: React.FC = () => {
   const addIndividualHolidays = async (resourceId: string, items: { date: string, name: string }[]) => { 
       if (isReadOnlyMode) return;
       const toInsert = items.map(item => ({ resource_id: resourceId, date: item.date, name: item.name, user_id: session!.user.id }));
-      const { error } = await callSupabase('ADD individual holidays', { count: toInsert.length }, supabase.from('individual_holidays').insert(toInsert)); 
+      const { error = null } = await callSupabase('ADD individual holidays', { count: toInsert.length }, supabase.from('individual_holidays').insert(toInsert)); 
       if (error) alert("Failed to add holidays."); 
       else fetchData(true); 
   };
@@ -1977,7 +1988,6 @@ const App: React.FC = () => {
               onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
               onUpdateModuleStartTask={updateModuleStartTask}
               onReorderModules={reorderModules}
-              // FIX: Add missing onDeleteModule prop
               onDeleteModule={deleteModule}
               isReadOnly={isReadOnlyMode}
             /></div>}

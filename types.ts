@@ -1,4 +1,5 @@
 
+
 export enum Role {
   CNF = 'CNF',
   BRAND_SOLUTIONS = 'Brand Solutions',
@@ -117,6 +118,8 @@ export interface Project {
   modules: ProjectModule[];
   currentUserRole?: ProjectRole; // Role of the current user in this project
   ownerEmail?: string;
+  /* Added user_id to Project interface to fix missing property error */
+  user_id: string;
 }
 
 export interface WeeklySummary {
@@ -154,6 +157,8 @@ export interface Holiday {
   date: string; // YYYY-MM-DD
   name: string;
   country: string; // Country code e.g., 'MY', 'SG', 'Global'
+  /* Added optional user_id to Holiday interface to fix missing property error */
+  user_id?: string;
 }
 
 export interface IndividualHoliday {
@@ -178,6 +183,8 @@ export interface Resource {
   holiday_region?: string;
   individual_holidays?: IndividualHoliday[];
   type: 'Internal' | 'External';
+  /* Added optional user_id to Resource interface to fix missing property error */
+  user_id?: string;
 }
 
 export interface ProjectMember {

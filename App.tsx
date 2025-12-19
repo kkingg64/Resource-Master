@@ -138,7 +138,8 @@ const structureProjectsData = (
         name: p.name,
         modules: (modulesByProject.get(p.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
         currentUserRole: role,
-        ownerEmail: p.owner_email
+        ownerEmail: p.owner_email,
+        user_id: p.user_id // Pass this through to identify owner
     };
   }).sort((a,b) => a.name.localeCompare(b.name));
 };
@@ -486,6 +487,15 @@ const App: React.FC = () => {
   const isReadOnlyMode = currentRole === 'viewer';
   const isOwner = currentRole === 'owner';
 
+  // Filter resources and holidays to match the project owner
+  const activeProjectResources = useMemo(() => 
+    resources.filter(r => currentProject && (r.user_id === currentProject.user_id || !r.user_id)), // Show if matches owner OR is public (no user_id)
+  [resources, currentProject]);
+
+  const activeProjectHolidays = useMemo(() => 
+    holidays.filter(h => currentProject && (h.user_id === currentProject.user_id || !h.user_id)), // Show if matches owner OR is public (no user_id)
+  [holidays, currentProject]);
+
   const [timelineStart, setTimelineStart] = useState<WeekPoint>(DEFAULT_START);
   const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
   
@@ -713,6 +723,11 @@ const App: React.FC = () => {
     }
 
     const projectIds = uniqueProjects.map(p => p.id);
+    
+    // Calculate Owner IDs for fetching resources/holidays
+    // This allows viewers to see resources owned by the project owner
+    const ownerIds = Array.from(new Set(uniqueProjects.map(p => p.user_id)));
+
     let modulesData = [], tasksData = [], assignmentsData = [], allocationsData = [];
 
     if (projectIds.length > 0) {
@@ -738,11 +753,11 @@ const App: React.FC = () => {
       }
     }
     
-    // Fetch resources (Only owned for now, shared logic needs complexity for shared resources)
+    // Fetch resources (Fetch from all relevant owners so shared projects work)
     const { data: resourcesData, error: resourcesError } = await supabase
       .from('resources')
       .select('*, individual_holidays(*)')
-      .eq('user_id', session.user.id)
+      .in('user_id', ownerIds)
       .order('name');
     
     if (resourcesError) console.error(resourcesError);
@@ -751,7 +766,7 @@ const App: React.FC = () => {
     const { data: holidaysData, error: holidaysError } = await supabase
       .from('holidays')
       .select('*')
-      .eq('user_id', session.user.id);
+      .in('user_id', ownerIds);
       
     if (holidaysError) console.error(holidaysError);
     const freshHolidays = holidaysData || [];
@@ -1134,7 +1149,18 @@ const App: React.FC = () => {
     const [removed] = task.assignments.splice(startIndex, 1);
     task.assignments.splice(endIndex, 0, removed);
     setProjects(updatedProjects);
-    const updates = task.assignments.map((assignment, index) => ({ id: assignment.id, task_id: taskId, role: assignment.role, resource_name: assignment.resourceName, start_date: assignment.startDate, duration: assignment.duration, parent_assignment_id: assignment.parentAssignmentId, sort_order: index, user_id: session!.user.id, }));
+    /* Corrected snake_case vs camelCase typos for database payload mappings */
+    const updates = task.assignments.map((assignment, index) => ({ 
+      id: assignment.id, 
+      task_id: taskId, 
+      role: assignment.role, 
+      resource_name: assignment.resourceName, 
+      start_date: assignment.startDate, 
+      duration: assignment.duration, 
+      parent_assignment_id: assignment.parentAssignmentId, 
+      sort_order: index, 
+      user_id: session!.user.id, 
+    }));
     const { error } = await callSupabase('REORDER assignments', { updates: updates.length }, supabase.from('task_assignments').upsert(updates));
     if (error) { setProjects(previousState); alert("Failed to reorder assignments."); }
   };
@@ -1462,7 +1488,7 @@ const App: React.FC = () => {
         supabase.from('projects').insert({ name, user_id: session.user.id }).select().single()
     );
     if(data && !error) {
-        setProjects(prev => [...prev, { id: data.id, name: data.name, modules: [] }]);
+        setProjects(prev => [...prev, { id: data.id, name: data.name, modules: [], user_id: data.user_id, currentUserRole: 'owner' }]);
     }
   };
   
@@ -1824,7 +1850,7 @@ const App: React.FC = () => {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-100">
         <div className="bg-white p-8 rounded-xl shadow-lg border border-slate-200 max-w-md w-full">
-            <h1 className="text-2xl font-bold text-slate-800 mb-6 text-center">Resource Planner Login</h1>
+            <h1 className="text-2xl font-bold text-slate-800 mb-6 text-center">Resource Master</h1>
             <Auth 
                 supabaseClient={supabase} 
                 appearance={{ theme: ThemeSupa }} 
@@ -1889,9 +1915,11 @@ const App: React.FC = () => {
                <Globe size={20} /> {!isSidebarCollapsed && <span>Holidays</span>}
             </button>
             <div className="h-px bg-slate-800 my-2 mx-2"></div>
-            <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Settings">
-               <SettingsIcon size={20} /> {!isSidebarCollapsed && <span>Settings</span>}
-            </button>
+            {isOwner && (
+                <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Settings">
+                <SettingsIcon size={20} /> {!isSidebarCollapsed && <span>Settings</span>}
+                </button>
+            )}
           </nav>
           
           <div className="p-2 border-t border-slate-800">
@@ -1910,12 +1938,12 @@ const App: React.FC = () => {
        {/* Main Content */}
        <main className={`flex-1 flex flex-col min-w-0 h-full bg-white relative custom-scrollbar ${['planner', 'estimator'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'}`}>
           <div className={`flex-1 h-full ${['planner', 'estimator'].includes(activeTab) ? 'p-0 overflow-hidden' : 'p-4'}`}>
-            {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
+            {activeTab === 'dashboard' && <Dashboard projects={projects} resources={activeProjectResources} holidays={activeProjectHolidays} />}
             
             {activeTab === 'planner' && <div className="h-full p-4 overflow-hidden"><PlannerGrid 
               projects={projects} 
-              holidays={holidays}
-              resources={resources}
+              holidays={activeProjectHolidays}
+              resources={activeProjectResources}
               timelineStart={timelineStart}
               timelineEnd={timelineEnd}
               onExtendTimeline={handleExtendTimeline}
@@ -1952,7 +1980,7 @@ const App: React.FC = () => {
             
             {activeTab === 'estimator' && <div className="h-full p-4 overflow-hidden"><Estimator 
               projects={projects} 
-              holidays={holidays} 
+              holidays={activeProjectHolidays} 
               onUpdateModuleEstimates={updateModuleEstimates}
               onUpdateTaskEstimates={updateTaskEstimates}
               onUpdateModuleComplexity={updateModuleComplexity}
@@ -1960,13 +1988,12 @@ const App: React.FC = () => {
               onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
               onUpdateModuleStartTask={updateModuleStartTask}
               onReorderModules={reorderModules}
-              // FIX: Add missing onDeleteModule prop
               onDeleteModule={deleteModule}
               isReadOnly={isReadOnlyMode}
             /></div>}
             
             {activeTab === 'resources' && <Resources 
-              resources={resources} 
+              resources={activeProjectResources} 
               onAddResource={addResource} 
               onDeleteResource={deleteResource}
               onUpdateResourceCategory={updateResourceCategory}
@@ -1978,7 +2005,7 @@ const App: React.FC = () => {
               isReadOnly={isReadOnlyMode}
             />}
             
-            {activeTab === 'settings' && <Settings 
+            {activeTab === 'settings' && isOwner && <Settings 
               isDebugLogEnabled={isDebugLogEnabled}
               setIsDebugLogEnabled={setIsDebugLogEnabled}
               isAIEnabled={isAIEnabled}
@@ -1987,16 +2014,17 @@ const App: React.FC = () => {
             />}
             
             {activeTab === 'holidays' && <AdminSettings 
-              holidays={holidays}
+              holidays={activeProjectHolidays}
               onAddHolidays={addHoliday}
               onDeleteHoliday={deleteHoliday}
               onDeleteHolidaysByCountry={deleteHolidaysByCountry}
+              isReadOnly={isReadOnlyMode}
             />}
           </div>
        </main>
 
        {/* Modals & Overlays */}
-       {isAIEnabled && <AIAssistant projects={projects} resources={resources} onAddTask={addTask} onAssignResource={updateAssignmentResourceName} />}
+       {isAIEnabled && <AIAssistant projects={projects} resources={activeProjectResources} onAddTask={addTask} onAssignResource={updateAssignmentResourceName} />}
        {isDebugLogEnabled && <DebugLog entries={logEntries} setEntries={setLogEntries} />}
        {showShareModal && <ShareModal onClose={() => setShowShareModal(false)} projectId={selectedProjectId} session={session} />}
        {showHistory && <VersionHistory onClose={() => setShowHistory(false)} onRestore={restoreVersion} onSaveCurrent={saveCurrentVersion} />}

@@ -8,9 +8,11 @@ interface AdminSettingsProps {
   onAddHolidays: (holidays: Omit<Holiday, 'id'>[]) => Promise<void>;
   onDeleteHoliday: (id: string) => Promise<void>;
   onDeleteHolidaysByCountry: (country: string) => Promise<void>;
+  /* Added isReadOnly property to AdminSettingsProps to fix assignment error in App.tsx */
+  isReadOnly?: boolean;
 }
 
-export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHolidays, onDeleteHoliday, onDeleteHolidaysByCountry }) => {
+export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHolidays, onDeleteHoliday, onDeleteHolidaysByCountry, isReadOnly = false }) => {
   const [selectedCountryCode, setSelectedCountryCode] = useState<string>('HK');
   const [isSyncing, setIsSyncing] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -36,6 +38,8 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
   const activeCountryHolidays = holidays.filter(h => h.country === selectedCountryCode);
 
   const handleSync = async () => {
+    /* Guard against sync in read-only mode */
+    if (isReadOnly) return;
     setIsSyncing(true);
     const holidaysToSync = sourceHolidays.filter(sh => !holidays.some(h => h.date === sh.date && h.country === sh.country));
     if (holidaysToSync.length > 0) {
@@ -46,7 +50,8 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
 
   const handleAddCustomHoliday = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newHolidayStartDate || !newHolidayName.trim()) return;
+    /* Guard against adding custom holidays in read-only mode */
+    if (isReadOnly || !newHolidayStartDate || !newHolidayName.trim()) return;
     setIsAdding(true);
 
     const items: Omit<Holiday, 'id'>[] = [];
@@ -76,6 +81,8 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
   };
 
   const handleDeleteAllFromCountry = async () => {
+    /* Guard against delete action in read-only mode */
+    if (isReadOnly) return;
     if (window.confirm(`Are you sure you want to delete all active holidays for ${selectedCountryName}?`)) {
         await onDeleteHolidaysByCountry(selectedCountryCode);
     }
@@ -143,7 +150,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
              <div className="flex gap-3">
                <button 
                  onClick={handleDeleteAllFromCountry}
-                 disabled={activeCountryHolidays.length === 0}
+                 disabled={activeCountryHolidays.length === 0 || isReadOnly}
                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                >
                  <Trash2 size={16} />
@@ -151,7 +158,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
                </button>
                <button 
                  onClick={handleSync}
-                 disabled={isSyncing || sourceHolidays.every(isHolidayActive)}
+                 disabled={isSyncing || sourceHolidays.every(isHolidayActive) || isReadOnly}
                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                >
                  {isSyncing ? <span className="animate-spin">⌛</span> : <Download size={16} />}
@@ -162,52 +169,54 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
           
           <div className="space-y-4">
              {/* Add Custom Holiday Form */}
-             <div className="border-t border-slate-200 pt-4">
-               <h3 className="text-sm font-semibold text-slate-600 mb-2 flex items-center gap-2">
-                 <Building size={14} /> Add Company Holiday to {selectedCountryName}
-               </h3>
-               <form onSubmit={handleAddCustomHoliday} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
-                 <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">From</label>
-                    <input 
-                    type="date" 
-                    value={newHolidayStartDate}
-                    onChange={e => setNewHolidayStartDate(e.target.value)}
-                    required
-                    className="p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                    />
-                 </div>
-                 <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">To (Optional)</label>
-                    <input 
-                    type="date" 
-                    value={newHolidayEndDate}
-                    onChange={e => setNewHolidayEndDate(e.target.value)}
-                    className="p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                    />
-                 </div>
-                 <div className="flex flex-col gap-1 md:col-span-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Holiday Name</label>
-                    <div className="flex gap-2">
-                        <input 
-                        type="text" 
-                        value={newHolidayName}
-                        onChange={e => setNewHolidayName(e.target.value)}
-                        placeholder="e.g., Company Off-site Day" 
-                        required
-                        className="flex-1 p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                        />
-                        <button 
-                        type="submit" 
-                        disabled={isAdding}
-                        className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
-                        >
-                        <Plus size={16} /> {isAdding ? 'Adding...' : 'Add'}
-                        </button>
-                    </div>
-                 </div>
-               </form>
-             </div>
+             {!isReadOnly && (
+               <div className="border-t border-slate-200 pt-4">
+                 <h3 className="text-sm font-semibold text-slate-600 mb-2 flex items-center gap-2">
+                   <Building size={14} /> Add Company Holiday to {selectedCountryName}
+                 </h3>
+                 <form onSubmit={handleAddCustomHoliday} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+                   <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">From</label>
+                      <input 
+                      type="date" 
+                      value={newHolidayStartDate}
+                      onChange={e => setNewHolidayStartDate(e.target.value)}
+                      required
+                      className="p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                      />
+                   </div>
+                   <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">To (Optional)</label>
+                      <input 
+                      type="date" 
+                      value={newHolidayEndDate}
+                      onChange={e => setNewHolidayEndDate(e.target.value)}
+                      className="p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                      />
+                   </div>
+                   <div className="flex flex-col gap-1 md:col-span-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Holiday Name</label>
+                      <div className="flex gap-2">
+                          <input 
+                          type="text" 
+                          value={newHolidayName}
+                          onChange={e => setNewHolidayName(e.target.value)}
+                          placeholder="e.g., Company Off-site Day" 
+                          required
+                          className="flex-1 p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                          />
+                          <button 
+                          type="submit" 
+                          disabled={isAdding}
+                          className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
+                          >
+                          <Plus size={16} /> {isAdding ? 'Adding...' : 'Add'}
+                          </button>
+                      </div>
+                   </div>
+                 </form>
+               </div>
+             )}
 
             {/* Preview List */}
             <div className="border rounded-lg border-slate-200 overflow-hidden">
@@ -290,13 +299,15 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
                                 )}
                              </td>
                              <td className="p-3 text-right pr-6">
-                               <button 
-                                 onClick={() => onDeleteHoliday(h.id)}
-                                 className="text-slate-400 hover:text-red-600 transition-colors"
-                                 title="Remove holiday"
-                               >
-                                 <Trash2 size={14} />
-                               </button>
+                               {!isReadOnly && (
+                                 <button 
+                                   onClick={() => onDeleteHoliday(h.id)}
+                                   className="text-slate-400 hover:text-red-600 transition-colors"
+                                   title="Remove holiday"
+                                 >
+                                   <Trash2 size={14} />
+                                 </button>
+                               )}
                              </td>
                            </tr>
                         ))}
