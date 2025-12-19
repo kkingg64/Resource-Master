@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Resource, Role, IndividualHoliday } from '../types';
 import { Users, Plus, Trash2, Calendar, ChevronDown, Edit2, Check, X } from 'lucide-react';
@@ -12,21 +11,20 @@ interface ResourcesProps {
   onUpdateResourceRegion: (id: string, region: string | null) => Promise<void>;
   onUpdateResourceType: (id: string, type: 'Internal' | 'External') => Promise<void>;
   onUpdateResourceName: (id: string, name: string) => Promise<void>;
-  onAddIndividualHoliday: (resourceId: string, items: { date: string, name: string, duration?: number }[]) => Promise<void>;
+  onAddIndividualHoliday: (resourceId: string, items: { date: string, name: string }[]) => Promise<void>;
   onDeleteIndividualHoliday: (holidayId: string) => Promise<void>;
   isReadOnly?: boolean;
 }
 
 const IndividualHolidayManager: React.FC<{
   resource: Resource;
-  onAdd: (items: { date: string, name: string, duration?: number }[]) => Promise<void>;
+  onAdd: (items: { date: string, name: string }[]) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   isReadOnly?: boolean;
 }> = ({ resource, onAdd, onDelete, isReadOnly }) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [name, setName] = useState('');
-  const [duration, setDuration] = useState<number>(1.0); // 1.0 Full, 0.5 Half
   const [isAdding, setIsAdding] = useState(false);
 
   const handleAddHoliday = async (e: React.FormEvent) => {
@@ -34,7 +32,7 @@ const IndividualHolidayManager: React.FC<{
     if (!startDate || !name.trim()) return;
     setIsAdding(true);
 
-    const items: { date: string, name: string, duration: number }[] = [];
+    const items: { date: string, name: string }[] = [];
     const current = new Date(startDate);
     const end = endDate ? new Date(endDate) : new Date(startDate);
     
@@ -45,8 +43,7 @@ const IndividualHolidayManager: React.FC<{
     while (current <= end) {
         items.push({
             date: current.toISOString().split('T')[0],
-            name: name.trim(),
-            duration: duration
+            name: name.trim()
         });
         current.setUTCDate(current.getUTCDate() + 1);
     }
@@ -58,14 +55,13 @@ const IndividualHolidayManager: React.FC<{
     setStartDate('');
     setEndDate('');
     setName('');
-    setDuration(1.0);
     setIsAdding(false);
   };
   
-  const regionalHolidays = (GOV_HOLIDAYS_DB[resource.holiday_region || ''] || []).map(h => ({ ...h, duration: h.duration || 1.0 }));
+  const regionalHolidays = GOV_HOLIDAYS_DB[resource.holiday_region || ''] || [];
   const allHolidays = [
     ...regionalHolidays.map(h => ({ ...h, type: 'Regional' as const })),
-    ...(resource.individual_holidays || []).map(h => ({ ...h, type: 'Individual' as const, duration: h.duration || 1.0 })),
+    ...(resource.individual_holidays || []).map(h => ({ ...h, type: 'Individual' as const })),
   ].sort((a,b) => a.date.localeCompare(b.date));
 
 
@@ -82,13 +78,6 @@ const IndividualHolidayManager: React.FC<{
                 <label className="text-[10px] font-bold text-slate-500 uppercase">To (Optional)</label>
                 <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="p-2 border border-slate-300 rounded-lg text-sm"/>
             </div>
-            <div className="flex flex-col gap-1 w-24">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">Duration</label>
-                <select value={duration} onChange={e => setDuration(parseFloat(e.target.value))} className="p-2 border border-slate-300 rounded-lg text-sm">
-                    <option value={1.0}>Full Day</option>
-                    <option value={0.5}>Half Day</option>
-                </select>
-            </div>
         </div>
         <div className="flex gap-2">
             <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Annual Leave" required className="flex-1 p-2 border border-slate-300 rounded-lg text-sm"/>
@@ -103,7 +92,6 @@ const IndividualHolidayManager: React.FC<{
             <div className="flex items-center gap-2">
               <span className={`font-mono ${holiday.type === 'Individual' ? 'text-indigo-600' : 'text-slate-500'}`}>{holiday.date}</span>
               <span className="font-medium text-slate-800">{holiday.name}</span>
-              {holiday.duration < 1.0 && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 rounded">½ Day</span>}
               <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${holiday.type === 'Individual' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'}`}>
                 {holiday.type}
               </span>

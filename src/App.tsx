@@ -321,19 +321,13 @@ const App: React.FC = () => {
     }
   
     // Build holiday map for efficient lookup
-    const resourceHolidaysMap = new Map<string, Map<string, number>>();
-    const defaultHolidays = new Map<string, number>();
-    currentHolidays.filter(h => h.country === 'HK').forEach(h => defaultHolidays.set(h.date, h.duration || 1.0));
-    
+    const resourceHolidaysMap = new Map<string, Set<string>>();
+    const defaultHolidays = new Set(currentHolidays.filter(h => h.country === 'HK').map(h => h.date));
     resourceHolidaysMap.set('Unassigned', defaultHolidays);
-    
     currentResources.forEach(res => {
-      const map = new Map<string, number>();
       const regional = currentHolidays.filter(h => h.country === res.holiday_region);
-      regional.forEach(h => map.set(h.date, h.duration || 1.0));
       const individual = res.individual_holidays || [];
-      individual.forEach(h => map.set(h.date, h.duration || 1.0));
-      resourceHolidaysMap.set(res.name, map);
+      resourceHolidaysMap.set(res.name, new Set([...regional, ...individual].map(h => h.date)));
     });
   
     let minDate: Date | null = null;
@@ -358,8 +352,8 @@ const App: React.FC = () => {
                 if (!isNaN(startDate.getTime())) {
                   updateMinMax(startDate);
                   if (assignment.duration) {
-                    const holidayMap = resourceHolidaysMap.get(assignment.resourceName || 'Unassigned') || defaultHolidays;
-                    const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, holidayMap);
+                    const holidaySet = resourceHolidaysMap.get(assignment.resourceName || 'Unassigned') || defaultHolidays;
+                    const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, holidaySet);
                     const endDate = new Date(endDateStr.replace(/-/g, '/'));
                     if (!isNaN(endDate.getTime())) {
                       updateMinMax(endDate);
@@ -518,10 +512,7 @@ const App: React.FC = () => {
              // Default to HK if unassigned or no region, to be safe
              const regional = res?.holiday_region ? holidays.filter(h => h.country === res.holiday_region) : holidays.filter(h => h.country === 'HK');
              const individual = res?.individual_holidays || [];
-             const map = new Map<string, number>();
-             regional.forEach(h => map.set(h.date, h.duration || 1.0));
-             individual.forEach(h => map.set(h.date, h.duration || 1.0));
-             return map;
+             return new Set([...regional, ...individual].map(h => h.date));
         };
 
         const parentHolidays = getHolidays(parent.resourceName || 'Unassigned');
@@ -631,10 +622,7 @@ const App: React.FC = () => {
         const res = resources.find(r => r.name === resourceName);
         const regional = res?.holiday_region ? holidays.filter(h => h.country === res.holiday_region) : holidays.filter(h => h.country === 'HK');
         const individual = res?.individual_holidays || [];
-        
-        const holidayMap = new Map<string, number>();
-        regional.forEach(h => holidayMap.set(h.date, h.duration || 1.0));
-        individual.forEach(h => holidayMap.set(h.date, h.duration || 1.0));
+        const holidaySet = new Set([...regional, ...individual].map(h => h.date));
 
         const newAllocationsMap = new Map<string, ResourceAllocation>();
         let currentDate = new Date(startDate.replace(/-/g, '/'));
@@ -643,11 +631,10 @@ const App: React.FC = () => {
         while (workingDaysFound < duration) {
             const dateStr = formatDateForInput(currentDate);
             const dayOfWeek = currentDate.getDay();
-            const holidayDuration = holidayMap.get(dateStr) || 0;
             
-            // If it's a working day (Mon-Fri) and not a FULL holiday
-            if (dayOfWeek !== 0 && dayOfWeek !== 6 && holidayDuration < 1.0) {
-                workingDaysFound += (1 - holidayDuration); // Simplified: count partial days
+            // If it's a working day (Mon-Fri and not a holiday)
+            if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidaySet.has(dateStr)) {
+                workingDaysFound++;
                 const weekId = getWeekIdFromDate(currentDate);
                 
                 if (!newAllocationsMap.has(weekId)) {
@@ -656,8 +643,8 @@ const App: React.FC = () => {
                 
                 const alloc = newAllocationsMap.get(weekId)!;
                 alloc.days = alloc.days || {};
-                alloc.days[dateStr] = 1 - holidayDuration; // Allocation for the day
-                alloc.count += (1 - holidayDuration);
+                alloc.days[dateStr] = 1; // Default to 1 man-day (FTE) per working day
+                alloc.count += 1;
             }
             
             currentDate.setDate(currentDate.getDate() + 1);
@@ -779,10 +766,7 @@ const App: React.FC = () => {
                      const res = resources.find(r => r.name === resName);
                      const regional = res?.holiday_region ? holidays.filter(h => h.country === res.holiday_region) : holidays.filter(h => h.country === 'HK');
                      const individual = res?.individual_holidays || [];
-                     const map = new Map<string, number>();
-                     regional.forEach(h => map.set(h.date, h.duration || 1.0));
-                     individual.forEach(h => map.set(h.date, h.duration || 1.0));
-                     return map;
+                     return new Set([...regional, ...individual].map(h => h.date));
                  };
                  const parentEndDate = calculateEndDate(parentAssignment.startDate, parentAssignment.duration || 1, getHolidays(parentAssignment.resourceName || 'Unassigned'));
                  const myHolidays = getHolidays(targetAssignment.resourceName || 'Unassigned');

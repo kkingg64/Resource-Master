@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation, Resource, Holiday } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
@@ -299,21 +300,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     const twoWeeksLaterStr = formatDateForInput(twoWeeksLater);
 
     // Build efficient holiday map for end date calculation
-    const resourceHolidaysMap = new Map<string, Map<string, number>>();
-    const defaultHolidays = new Map<string, number>();
-    holidays.filter(h => h.country === 'HK').forEach(h => defaultHolidays.set(h.date, h.duration || 1.0));
-    
+    const resourceHolidaysMap = new Map<string, Set<string>>();
+    const defaultHolidays = new Set(holidays.filter(h => h.country === 'HK').map(h => h.date));
     resourceHolidaysMap.set('Unassigned', defaultHolidays);
-    
     resources.forEach(res => {
-      const map = new Map<string, number>();
       const regional = holidays.filter(h => h.country === (res.holiday_region || 'HK'));
-      regional.forEach(h => map.set(h.date, h.duration || 1.0));
-      
       const individual = res.individual_holidays || [];
-      individual.forEach(h => map.set(h.date, h.duration || 1.0));
-      
-      resourceHolidaysMap.set(res.name, map);
+      resourceHolidaysMap.set(res.name, new Set([...regional, ...individual].map(h => h.date)));
     });
 
     const tasks: any[] = [];
@@ -326,8 +319,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                         const start = a.startDate;
                         
                         const resourceName = a.resourceName || 'Unassigned';
-                        const holidayMap = resourceHolidaysMap.get(resourceName) || defaultHolidays;
-                        const end = calculateEndDate(start, a.duration, holidayMap);
+                        const holidaySet = resourceHolidaysMap.get(resourceName) || defaultHolidays;
+                        const end = calculateEndDate(start, a.duration, holidaySet);
 
                         // Logic: 
                         // 1. Starts between today and 2 weeks

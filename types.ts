@@ -154,7 +154,6 @@ export interface Holiday {
   date: string; // YYYY-MM-DD
   name: string;
   country: string; // Country code e.g., 'MY', 'SG', 'Global'
-  duration?: number; // 1.0 = Full Day, 0.5 = Half Day. Default 1.0 if undefined
 }
 
 export interface IndividualHoliday {
@@ -162,7 +161,6 @@ export interface IndividualHoliday {
   date: string; // YYYY-MM-DD
   name: string;
   resource_id: string;
-  duration?: number; // 1.0 = Full Day, 0.5 = Half Day. Default 1.0 if undefined
 }
 
 export interface LogEntry {
