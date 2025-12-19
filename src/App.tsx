@@ -1345,7 +1345,7 @@ const App: React.FC = () => {
                  name: data.name,
                  tasks: [],
                  legacyFunctionPoints: 0,
-                 function_points: 0,
+                 functionPoints: 0,
                  sort_order: data.sort_order
              };
              project.modules.push(newModule);
