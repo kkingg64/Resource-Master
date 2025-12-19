@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation, Resource, Holiday } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
@@ -186,7 +187,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     
     Object.entries(usage).forEach(([res, weeks]) => {
         Object.entries(weeks).forEach(([weekId, data]) => {
-            const d = data as any;
+            // Explicitly cast to internal UsageData type to avoid unknown error
+            const d = data as { total: number, modules: Set<string> };
             // Conflict if allocated more than 5 days OR works on multiple modules
             if (d.modules.size > 1 || d.total > 5) {
                 if (!result[res]) result[res] = [];
@@ -288,7 +290,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     return onLeave;
   }, [resources, holidays]);
 
-  // 8. Upcoming Tasks Logic (Next 2 Weeks)
+  // 8. Upcoming Tasks Logic (Next 2 Weeks) - Grouped by Task ID (No Resources)
   const upcomingTasks = useMemo(() => {
     const todayDate = new Date();
     todayDate.setHours(0, 0, 0, 0);
@@ -313,6 +315,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     projects.forEach(p => {
         p.modules.forEach(m => {
             m.tasks.forEach(t => {
+                // Find earliest start and latest end for the entire task across all assignments
+                let taskStart: string | null = null;
+                let taskEnd: string | null = null;
+
                 t.assignments.forEach(a => {
                     if (a.startDate && a.duration && a.duration > 0) {
                         const start = a.startDate;
@@ -321,29 +327,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                         const holidaySet = resourceHolidaysMap.get(resourceName) || defaultHolidays;
                         const end = calculateEndDate(start, a.duration, holidaySet);
 
-                        // Logic: 
-                        // 1. Starts between today and 2 weeks
-                        // 2. OR is currently active (Started before today, Ends after today)
-                        
-                        const isStartingSoon = start >= todayStr && start <= twoWeeksLaterStr;
-                        const isActive = start < todayStr && end >= todayStr;
-
-                        if (isStartingSoon || isActive) {
-                            tasks.push({
-                                id: a.id,
-                                project: p.name,
-                                module: m.name,
-                                task: t.name,
-                                resource: a.resourceName || 'Unassigned',
-                                start,
-                                end,
-                                progress: a.progress || 0,
-                                status: isActive ? 'Active' : 'Upcoming',
-                                startObj: new Date(start) // for sorting
-                            });
-                        }
+                        if (!taskStart || start < taskStart) taskStart = start;
+                        if (!taskEnd || end > taskEnd) taskEnd = end;
                     }
                 });
+
+                if (taskStart && taskEnd) {
+                    const isStartingSoon = taskStart >= todayStr && taskStart <= twoWeeksLaterStr;
+                    const isActive = taskStart < todayStr && taskEnd >= todayStr;
+
+                    if (isStartingSoon || isActive) {
+                        tasks.push({
+                            id: t.id, // Group by Task ID
+                            project: p.name,
+                            module: m.name,
+                            task: t.name,
+                            start: taskStart,
+                            end: taskEnd,
+                            // Calculate aggregate progress based on time
+                            progress: calculateTimeBasedProgress(taskStart, taskEnd),
+                            status: isActive ? 'Active' : 'Upcoming',
+                            startObj: new Date(taskStart) // for sorting
+                        });
+                    }
+                }
             });
         });
     });
@@ -696,17 +703,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                                 </td>
                                 <td className="px-6 py-3 font-mono text-xs text-slate-500">
                                     <div className="flex items-center gap-1">
-                                        <span>{new Date(t.earliestStart).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>
+                                        <span>{new Date(t.start).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>
                                         <ArrowRight size={10} className="text-slate-300" />
-                                        <span>{new Date(t.latestEnd).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>
+                                        <span>{new Date(t.end).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>
                                     </div>
                                 </td>
                                 <td className="px-6 py-3">
                                     <div className="flex items-center gap-2">
                                         <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden w-24">
-                                            <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${t.calculatedProgress}%` }}></div>
+                                            <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${t.progress}%` }}></div>
                                         </div>
-                                        <span className="text-xs font-bold text-slate-600 w-8 text-right">{t.calculatedProgress}%</span>
+                                        <span className="text-xs font-bold text-slate-600 w-8 text-right">{t.progress}%</span>
                                     </div>
                                 </td>
                             </tr>
