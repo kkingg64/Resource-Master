@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation, Resource, Holiday } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
@@ -313,7 +314,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
         project: string;
         module: string;
         task: string;
-        resources: Set<string>;
         earliestStart: string;
         latestEnd: string;
         calculatedProgress: number;
@@ -347,7 +347,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                                     project: p.name,
                                     module: m.name,
                                     task: t.name,
-                                    resources: new Set<string>(),
                                     earliestStart: start,
                                     latestEnd: end,
                                     calculatedProgress: 0,
@@ -356,7 +355,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                             }
 
                             const group = tasksMap.get(t.id)!;
-                            group.resources.add(resourceName);
                             if (start < group.earliestStart) group.earliestStart = start;
                             if (end > group.latestEnd) group.latestEnd = end;
                             
@@ -372,7 +370,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     return Array.from(tasksMap.values()).map(t => ({
         ...t,
         calculatedProgress: calculateTimeBasedProgress(t.earliestStart, t.latestEnd),
-        resources: Array.from(t.resources),
         startObj: new Date(t.earliestStart)
     })).sort((a, b) => a.startObj.getTime() - b.startObj.getTime());
 
@@ -692,7 +689,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                     <tr>
                         <th className="px-6 py-3 w-1/4">Task</th>
                         <th className="px-6 py-3 w-1/5">Context</th>
-                        <th className="px-6 py-3 w-32">Team</th>
                         <th className="px-6 py-3 w-24">Status</th>
                         <th className="px-6 py-3 w-48">Schedule</th>
                         <th className="px-6 py-3">Progress (Time)</th>
@@ -701,7 +697,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                 <tbody className="divide-y divide-slate-100">
                     {upcomingTasks.length === 0 ? (
                         <tr>
-                            <td colSpan={6} className="p-8 text-center text-slate-400">
+                            <td colSpan={5} className="p-8 text-center text-slate-400">
                                 No tasks starting or active in the next 2 weeks.
                             </td>
                         </tr>
@@ -715,15 +711,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                                     <div className="flex flex-col">
                                         <span className="text-xs font-semibold text-slate-600">{t.module}</span>
                                         <span className="text-[10px] text-slate-400">{t.project}</span>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-3">
-                                    <div className="flex flex-wrap gap-1">
-                                        {t.resources.map((res, idx) => (
-                                            <span key={idx} className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${res === 'Unassigned' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>
-                                                {res}
-                                            </span>
-                                        ))}
                                     </div>
                                 </td>
                                 <td className="px-6 py-3">
