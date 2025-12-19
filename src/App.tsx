@@ -1743,10 +1743,10 @@ const App: React.FC = () => {
 
        {/* Main Content */}
        <main className={`flex-1 flex flex-col min-w-0 h-full bg-white relative custom-scrollbar ${['planner', 'estimator'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'}`}>
-          <div className="flex-1 p-4 relative h-full">
+          <div className={`flex-1 h-full ${['planner', 'estimator'].includes(activeTab) ? 'p-0 overflow-hidden' : 'p-4'}`}>
             {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
             
-            {activeTab === 'planner' && <PlannerGrid 
+            {activeTab === 'planner' && <div className="h-full p-4 overflow-hidden"><PlannerGrid 
               projects={projects} 
               holidays={holidays}
               resources={resources}
@@ -1782,9 +1782,9 @@ const App: React.FC = () => {
               saveStatus={saveStatus}
               isRefreshing={isRefreshing}
               isReadOnly={isReadOnlyMode}
-            />}
+            /></div>}
             
-            {activeTab === 'estimator' && <Estimator 
+            {activeTab === 'estimator' && <div className="h-full p-4 overflow-hidden"><Estimator 
               projects={projects} 
               holidays={holidays} 
               onUpdateModuleEstimates={updateModuleEstimates}
@@ -1797,7 +1797,7 @@ const App: React.FC = () => {
               // FIX: Add missing onDeleteModule prop
               onDeleteModule={deleteModule}
               isReadOnly={isReadOnlyMode}
-            />}
+            /></div>}
             
             {activeTab === 'resources' && <Resources 
               resources={resources} 
