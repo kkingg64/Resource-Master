@@ -1033,10 +1033,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             style={{ display: 'none' }}
         ></div>
 
-        <div className="px-4 py-3 border-b border-slate-200 flex flex-wrap justify-between items-center bg-slate-50 gap-4">
+        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50 relative h-14">
           
           {/* LEFT: View Controls */}
-          <div className="flex items-center gap-4 flex-shrink-0">
+          <div className="flex items-center gap-4 z-10">
              <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-500" /><span className="text-sm font-semibold text-slate-700">Timeline</span></div>
              
              <div className="relative">
@@ -1057,8 +1057,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             </div>
           </div>
 
-          {/* CENTER: Timeline Navigation & Zoom */}
-          <div className="flex items-center gap-4 flex-shrink-0">
+          {/* CENTER: Timeline Navigation & Zoom (Absolute Centering) */}
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-4 z-0">
              <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden shadow-sm">
               <button onClick={() => onExtendTimeline('start')} className="px-3 py-1.5 hover:bg-slate-100 text-xs font-medium text-slate-600 border-r border-slate-200 transition-colors" title="Add Month to Start">&lt; +Month</button>
               <button onClick={() => onExtendTimeline('end')} className="px-3 py-1.5 hover:bg-slate-100 text-xs font-medium text-slate-600 transition-colors" title="Add Month to End">+Month &gt;</button>
@@ -1073,7 +1073,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           </div>
 
           {/* RIGHT: Actions */}
-          <div className="flex items-center gap-4 flex-shrink-0">
+          <div className="flex items-center gap-4 z-10">
             <div className="flex items-center gap-2">
                 <button onClick={onRefresh} disabled={isRefreshing} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm" title="Refresh data from server"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh</button>
                 <SaveStatusIndicator status={saveStatus} />

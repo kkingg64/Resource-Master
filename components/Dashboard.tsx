@@ -289,7 +289,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     return onLeave;
   }, [resources, holidays]);
 
-  // 8. Upcoming Tasks Logic (Next 2 Weeks)
+  // 8. Upcoming Tasks Logic (Next 2 Weeks) - Grouped by Task
   const upcomingTasks = useMemo(() => {
     const todayDate = new Date();
     todayDate.setHours(0, 0, 0, 0);
@@ -314,10 +314,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     projects.forEach(p => {
         p.modules.forEach(m => {
             m.tasks.forEach(t => {
+                let earliestStart: string | null = null;
+                let latestEnd: string | null = null;
+                let totalProgress = 0;
+                let assignmentCount = 0;
+                let isRelevant = false;
+
                 t.assignments.forEach(a => {
                     if (a.startDate && a.duration && a.duration > 0) {
                         const start = a.startDate;
-                        
                         const resourceName = a.resourceName || 'Unassigned';
                         const holidaySet = resourceHolidaysMap.get(resourceName) || defaultHolidays;
                         const end = calculateEndDate(start, a.duration, holidaySet);
@@ -330,21 +335,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                         const isActive = start < todayStr && end >= todayStr;
 
                         if (isStartingSoon || isActive) {
-                            tasks.push({
-                                id: a.id,
-                                project: p.name,
-                                module: m.name,
-                                task: t.name,
-                                resource: a.resourceName || 'Unassigned',
-                                start,
-                                end,
-                                progress: a.progress || 0,
-                                status: isActive ? 'Active' : 'Upcoming',
-                                startObj: new Date(start) // for sorting
-                            });
+                            isRelevant = true;
                         }
+
+                        // Aggregate dates for the task
+                        if (!earliestStart || start < earliestStart) earliestStart = start;
+                        if (!latestEnd || end > latestEnd) latestEnd = end;
+                        
+                        totalProgress += (a.progress || 0);
+                        assignmentCount++;
                     }
                 });
+
+                // If task has assignments relevant to the timeline window
+                if (isRelevant && earliestStart && latestEnd) {
+                    const avgProgress = assignmentCount > 0 ? Math.round(totalProgress / assignmentCount) : 0;
+                    const isActive = earliestStart < todayStr && latestEnd >= todayStr;
+
+                    tasks.push({
+                        id: t.id,
+                        project: p.name,
+                        module: m.name,
+                        task: t.name,
+                        start: earliestStart,
+                        end: latestEnd,
+                        progress: avgProgress,
+                        status: isActive ? 'Active' : 'Upcoming',
+                        startObj: new Date(earliestStart) // for sorting
+                    });
+                }
             });
         });
     });
@@ -664,9 +683,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
             <table className="w-full text-sm text-left">
                 <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
                     <tr>
-                        <th className="px-6 py-3 w-1/4">Task</th>
-                        <th className="px-6 py-3 w-1/5">Context</th>
-                        <th className="px-6 py-3 w-32">Resource</th>
+                        <th className="px-6 py-3 w-1/3">Task</th>
+                        <th className="px-6 py-3 w-1/4">Context</th>
                         <th className="px-6 py-3 w-24">Status</th>
                         <th className="px-6 py-3 w-48">Schedule</th>
                         <th className="px-6 py-3">Progress</th>
@@ -675,7 +693,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                 <tbody className="divide-y divide-slate-100">
                     {upcomingTasks.length === 0 ? (
                         <tr>
-                            <td colSpan={6} className="p-8 text-center text-slate-400">
+                            <td colSpan={5} className="p-8 text-center text-slate-400">
                                 No tasks starting or active in the next 2 weeks.
                             </td>
                         </tr>
@@ -690,11 +708,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                                         <span className="text-xs font-semibold text-slate-600">{t.module}</span>
                                         <span className="text-[10px] text-slate-400">{t.project}</span>
                                     </div>
-                                </td>
-                                <td className="px-6 py-3">
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${t.resource === 'Unassigned' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>
-                                        {t.resource}
-                                    </span>
                                 </td>
                                 <td className="px-6 py-3">
                                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${t.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-600'}`}>
