@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
-import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
+import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from './types';
+import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from './constants';
 import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { DependencyLines } from './DependencyLines';
+import { DependencyLines } from './components/DependencyLines';
 
 // --- Custom DatePicker Component ---
 interface DatePickerProps {
@@ -730,11 +730,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         let currentModule: ProjectModule | null = null;
         let currentTask: ProjectTask | null = null;
         planJson.forEach((row, index) => {
-            if (row.Project && row.Project !== currentProject?.name) { currentProject = { id: `p-${index}`, name: row.Project, modules: [] }; importedProjects.push(currentProject); currentModule = null; currentTask = null; }
+            /* Added missing user_id property to correctly satisfy the Project interface during import */
+            if (row.Project && row.Project !== currentProject?.name) { currentProject = { id: `p-${index}`, name: row.Project, modules: [], user_id: 'imported' }; importedProjects.push(currentProject); currentModule = null; currentTask = null; }
             if (!currentProject) return;
             if (row.Module && row.Module !== currentModule?.name) { currentModule = { id: `m-${index}`, name: row.Module, tasks: [], functionPoints: 0, legacyFunctionPoints: 0 }; currentProject.modules.push(currentModule); currentTask = null; }
             if (!currentModule) return;
             if (row.Task && row.Task !== currentTask?.name) { currentTask = { id: `t-${index}`, name: row.Task, assignments: [] }; currentModule.tasks.push(currentTask); }
+            if (!currentProject) return; // redundant but for TS safety
             if (!currentTask) return;
             const allocations: { weekId: string, count: number }[] = [];
             Object.keys(row).forEach(key => { if (/^\d{4}-\d{2}$/.test(key)) { allocations.push({ weekId: key, count: Number(row[key]) }); } });
@@ -1572,10 +1574,4 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         <div style={{ top: contextMenu.y, left: contextMenu.x }} className="absolute z-50 bg-white shadow-xl rounded-md border border-slate-200 p-1 animate-in fade-in">
           {contextMenu.type === 'project' && ( <> <button onClick={() => { onAddModule(contextMenu.projectId); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"><Plus size={12} /> Add New Module</button> <div className="h-px bg-slate-100 my-1"></div> <button onClick={() => { onDeleteProject(contextMenu.projectId); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Project</button> </> )}
           {contextMenu.type === 'module' && contextMenu.moduleId && ( <> <button onClick={() => { handleAddTaskClick(contextMenu.projectId, contextMenu.moduleId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"><Plus size={12} /> Add New Task</button> <div className="h-px bg-slate-100 my-1"></div> <button onClick={() => { onDeleteModule(contextMenu.projectId, contextMenu.moduleId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Module</button> </> )}
-          {contextMenu.type === 'task' && contextMenu.moduleId && contextMenu.taskId && ( <> <button onClick={() => { onAddAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, Role.EA); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"><UserPlus size={12} /> Add Resource</button> <div className="h-px bg-slate-100 my-1"></div> <button onClick={() => { onDeleteTask(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Task</button> </> )}
-          {contextMenu.type === 'assignment' && contextMenu.assignmentId && contextMenu.moduleId && contextMenu.taskId && ( <> <button onClick={() => { onCopyAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"><Copy size={12} /> Duplicate Assignment</button> {onUpdateAssignmentProgress && ( <div className="px-3 py-1.5 text-xs flex items-center gap-2 text-slate-700"> <Percent size={12} /> <span>Progress</span> <input type="range" min="0" max="100" step="10" className="w-20 accent-indigo-600" onClick={(e) => e.stopPropagation()} defaultValue={projects.find(p => p.id === contextMenu.projectId)?.modules.find(m => m.id === contextMenu.moduleId)?.tasks.find(t => t.id === contextMenu.taskId)?.assignments.find(a => a.id === contextMenu.assignmentId)?.progress || 0} onChange={(e) => onUpdateAssignmentProgress(contextMenu.assignmentId!, parseInt(e.target.value))} /> </div> )} <div className="h-px bg-slate-100 my-1"></div> <button onClick={() => { onDeleteAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Assignment</button> </> )}
-        </div>
-      )}
-    </>
-  );
-};
+          {contextMenu.type === 'task' && contextMenu.moduleId && contextMenu.taskId && ( <> <button onClick={() => { onAddAssignment(contextMenu.projectId, contextMenu.moduleId!,
