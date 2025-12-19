@@ -382,6 +382,9 @@ const App: React.FC = () => {
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const nextLogId = useRef(0);
   
+  // Database Error State
+  const [dbError, setDbError] = useState<any>(null);
+
   const log = (message: string, payload: any, status: LogEntry['status'] = 'pending'): number => {
     if (!isDebugLogEnabled) return -1;
     const id = nextLogId.current++;
@@ -1342,7 +1345,7 @@ const App: React.FC = () => {
                  name: data.name,
                  tasks: [],
                  legacyFunctionPoints: 0,
-                 functionPoints: 0,
+                 function_points: 0,
                  sort_order: data.sort_order
              };
              project.modules.push(newModule);
@@ -1817,6 +1820,7 @@ const App: React.FC = () => {
               setIsDebugLogEnabled={setIsDebugLogEnabled}
               isAIEnabled={isAIEnabled}
               setIsAIEnabled={setIsAIEnabled}
+              onOpenDatabaseFix={() => setDbError({ code: 'MANUAL_FIX', message: 'User requested manual fix' })}
             />}
             
             {activeTab === 'holidays' && <AdminSettings 

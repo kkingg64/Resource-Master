@@ -1,15 +1,16 @@
 import React from 'react';
-import { Info, Code, Database, Bug, Sparkles } from 'lucide-react';
+import { Info, Code, Database, Bug, Sparkles, ShieldAlert } from 'lucide-react';
 
 interface SettingsProps {
   isDebugLogEnabled: boolean;
   setIsDebugLogEnabled: (enabled: boolean) => void;
   isAIEnabled: boolean;
   setIsAIEnabled: (enabled: boolean) => void;
+  onOpenDatabaseFix: () => void;
 }
 
 
-export const Settings: React.FC<SettingsProps> = ({ isDebugLogEnabled, setIsDebugLogEnabled, isAIEnabled, setIsAIEnabled }) => {
+export const Settings: React.FC<SettingsProps> = ({ isDebugLogEnabled, setIsDebugLogEnabled, isAIEnabled, setIsAIEnabled, onOpenDatabaseFix }) => {
   const version = "1.1.2";
 
   return (
@@ -99,9 +100,17 @@ export const Settings: React.FC<SettingsProps> = ({ isDebugLogEnabled, setIsDebu
               </p>
             </div>
           </div>
-          <p>
-            After setting these variables, redeploy your Vercel project for the changes to take effect.
-          </p>
+          
+          <div className="border-t border-slate-100 pt-4 mt-4">
+             <h3 className="font-bold text-slate-700 mb-2 flex items-center gap-2"><ShieldAlert size={16} className="text-amber-500"/> Troubleshooting</h3>
+             <p className="mb-3">If you are experiencing issues with data not loading or "Infinite Recursion" errors, you may need to reset your database policies.</p>
+             <button 
+                onClick={onOpenDatabaseFix}
+                className="px-4 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-sm font-medium hover:bg-amber-100 transition-colors flex items-center gap-2"
+             >
+                <Database size={14} /> Open Database Repair Tool
+             </button>
+          </div>
         </div>
       </div>
     </div>
