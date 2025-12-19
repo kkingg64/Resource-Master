@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType, ProjectRole, ProjectMember } from './types';
@@ -723,7 +724,9 @@ const App: React.FC = () => {
     }
 
     const projectIds = uniqueProjects.map(p => p.id);
-    // Collect all owner IDs from the projects we have access to
+    
+    // Calculate Owner IDs for fetching resources/holidays
+    // This allows viewers to see resources owned by the project owner
     const ownerIds = Array.from(new Set(uniqueProjects.map(p => p.user_id)));
 
     let modulesData = [], tasksData = [], assignmentsData = [], allocationsData = [];
@@ -751,7 +754,7 @@ const App: React.FC = () => {
       }
     }
     
-    // Fetch resources for ALL relevant owners (current user + owners of shared projects)
+    // Fetch resources (Fetch from all relevant owners so shared projects work)
     const { data: resourcesData, error: resourcesError } = await supabase
       .from('resources')
       .select('*, individual_holidays(*)')
@@ -761,7 +764,6 @@ const App: React.FC = () => {
     if (resourcesError) console.error(resourcesError);
     const freshResources = resourcesData || [];
 
-    // Fetch holidays for ALL relevant owners
     const { data: holidaysData, error: holidaysError } = await supabase
       .from('holidays')
       .select('*')
@@ -1849,11 +1851,29 @@ const App: React.FC = () => {
     );
   }
 
+  // Check for DB Error - recursion fix
+  if (dbError) {
+      return <FixRecursionScreen onRetry={() => fetchData(false)} />;
+  }
+
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 text-slate-500 gap-2">
-        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-        <span>Loading plan...</span>
+      <div className="flex flex-col h-screen items-center justify-center bg-slate-50 text-slate-500 gap-4">
+        <div className="flex items-center gap-2">
+            <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+            <span>Loading plan...</span>
+        </div>
+        {isTakingTooLong && (
+            <div className="animate-in fade-in zoom-in-95 mt-4">
+                <button 
+                    onClick={() => setDbError({ code: 'FORCE_FIX', message: 'User forced fix' })}
+                    className="flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg shadow-sm hover:bg-red-50 text-sm font-medium transition-colors"
+                >
+                    <AlertTriangle size={16} />
+                    Taking too long? Fix Database
+                </button>
+            </div>
+        )}
       </div>
     );
   }
@@ -1988,6 +2008,7 @@ const App: React.FC = () => {
               onAddHolidays={addHoliday}
               onDeleteHoliday={deleteHoliday}
               onDeleteHolidaysByCountry={deleteHolidaysByCountry}
+              isReadOnly={isReadOnlyMode}
             />}
           </div>
        </main>
