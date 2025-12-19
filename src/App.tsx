@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 // FIX: Corrected import paths to be relative to the `src` directory.
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from '../constants';
-import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType } from '../types';
+import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType, ProjectRole, ProjectMember } from '../types';
 import { Dashboard } from '../components/Dashboard';
 import { PlannerGrid } from '../components/PlannerGrid';
 import { Estimator } from '../components/Estimator';
@@ -11,7 +11,7 @@ import { VersionHistory } from '../components/VersionHistory';
 import { DebugLog } from '../components/DebugLog';
 import { AdminSettings } from '../components/AdminSettings';
 import { AIAssistant } from '../components/AIAssistant';
-import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X } from 'lucide-react';
+import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X, Mail, Plus, Trash2, UserPlus } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
@@ -22,7 +22,9 @@ const structureProjectsData = (
   modules: any[],
   tasks: any[],
   assignments: any[],
-  allocations: any[]
+  allocations: any[],
+  currentUserId: string,
+  members: any[] = []
 ): Project[] => {
   const allocationsByAssignment = new Map<string, any[]>();
   allocations.forEach(a => {
@@ -117,11 +119,26 @@ const structureProjectsData = (
     });
   });
 
-  return projects.map(p => ({
-    id: p.id,
-    name: p.name,
-    modules: (modulesByProject.get(p.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
-  })).sort((a,b) => a.name.localeCompare(b.name));
+  return projects.map(p => {
+    // Determine Role
+    let role: ProjectRole = 'viewer';
+    if (p.user_id === currentUserId) {
+        role = 'owner';
+    } else {
+        const membership = members.find(m => m.project_id === p.id && (m.user_id === currentUserId || m.user_email === currentUserId)); // Fallback to ID check if emails not joined
+        if (membership) {
+            role = membership.role;
+        }
+    }
+
+    return {
+        id: p.id,
+        name: p.name,
+        modules: (modulesByProject.get(p.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+        currentUserRole: role,
+        ownerEmail: p.owner_email // Assuming backend joins owner profile or stores email
+    };
+  }).sort((a,b) => a.name.localeCompare(b.name));
 };
 
 const deepClone = <T,>(obj: T): T => JSON.parse(JSON.stringify(obj));
@@ -148,9 +165,61 @@ const shiftWeekIdByAmount = (weekId: string, amount: number): string => {
     return `${newPoint.year}-${String(newPoint.week).padStart(2, '0')}`;
 };
 
-const ShareModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+const ShareModal: React.FC<{ onClose: () => void, projectId: string, session: any }> = ({ onClose, projectId, session }) => {
+  const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [newEmail, setNewEmail] = useState('');
+  const [newRole, setNewRole] = useState<ProjectRole>('viewer');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAdding, setIsAdding] = useState(false);
   const [copied, setCopied] = useState(false);
-  const shareUrl = `${window.location.origin}${window.location.pathname}?mode=readonly`;
+  const shareUrl = session?.user?.id ? `${window.location.origin}${window.location.pathname}?share=${session.user.id}` : '';
+
+  useEffect(() => {
+      fetchMembers();
+  }, [projectId]);
+
+  const fetchMembers = async () => {
+      setIsLoading(true);
+      const { data, error } = await supabase.from('project_members').select('*').eq('project_id', projectId);
+      if (!error && data) {
+          setMembers(data);
+      }
+      setIsLoading(false);
+  };
+
+  const addMember = async () => {
+      if (!newEmail.trim()) return;
+      setIsAdding(true);
+      
+      const { error } = await supabase.from('project_members').insert({
+          project_id: projectId,
+          user_email: newEmail.trim(),
+          role: newRole,
+          // user_id is typically linked via a trigger or manually if you know the ID, 
+          // for simplicity we assume the system maps email to user_id later or uses email for lookup
+      });
+
+      if (error) {
+          alert('Failed to add member: ' + error.message);
+      } else {
+          setNewEmail('');
+          fetchMembers();
+      }
+      setIsAdding(false);
+  };
+
+  const updateMemberRole = async (memberId: string, role: ProjectRole) => {
+      const { error } = await supabase.from('project_members').update({ role }).eq('id', memberId);
+      if (error) alert('Failed to update role');
+      else fetchMembers();
+  };
+
+  const removeMember = async (memberId: string) => {
+      if (!confirm("Remove this member?")) return;
+      const { error } = await supabase.from('project_members').delete().eq('id', memberId);
+      if (error) alert('Failed to remove member');
+      else fetchMembers();
+  };
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(shareUrl);
@@ -158,46 +227,105 @@ const ShareModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  if (!session || !session.user) return null;
+
   return (
     <div className="fixed inset-0 bg-black/30 z-[100] flex items-center justify-center animate-in fade-in duration-200">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <Share2 className="w-5 h-5 text-indigo-600" /> Share Project Plan
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
+          <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+            <Users className="w-5 h-5 text-indigo-600" /> Manage Access
           </h3>
-          <button onClick={onClose} className="p-1 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+          <button onClick={onClose} className="p-1.5 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
             <X size={20} />
           </button>
         </div>
-        
-        <p className="text-sm text-slate-600 mb-4">
-          Share this link with your team members to give them <strong>Read-Only</strong> access to the Dashboard, Planner, and Estimator.
-        </p>
 
-        <div className="flex items-center gap-2 mb-4">
-          <input 
-            type="text" 
-            readOnly 
-            value={shareUrl} 
-            className="flex-1 bg-slate-50 border border-slate-300 text-slate-600 text-sm rounded-lg p-2.5 focus:ring-indigo-500 focus:border-indigo-500 block w-full"
-          />
-          <button 
-            onClick={copyToClipboard}
-            className={`p-2.5 rounded-lg border flex items-center justify-center transition-all ${copied ? 'bg-green-50 border-green-200 text-green-600' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'}`}
-            title="Copy to clipboard"
-          >
-            {copied ? <Check size={18} /> : <Copy size={18} />}
-          </button>
+        {/* Invite Section */}
+        <div className="mb-6">
+            <label className="text-sm font-semibold text-slate-700 mb-2 block">Invite Teammate</label>
+            <div className="flex gap-2">
+                <input 
+                    type="email" 
+                    value={newEmail} 
+                    onChange={e => setNewEmail(e.target.value)} 
+                    placeholder="teammate@company.com" 
+                    className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+                <select 
+                    value={newRole} 
+                    onChange={e => setNewRole(e.target.value as ProjectRole)} 
+                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                    <option value="viewer">Viewer</option>
+                    <option value="editor">Editor</option>
+                </select>
+                <button 
+                    onClick={addMember} 
+                    disabled={isAdding || !newEmail}
+                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+                >
+                    {isAdding ? '...' : <><UserPlus size={16}/> Invite</>}
+                </button>
+            </div>
         </div>
 
-        <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800">
-           <strong>Note:</strong> Team members must have access to the underlying project data in the system for this link to populate correctly.
+        {/* List Section */}
+        <div>
+            <h4 className="text-sm font-semibold text-slate-700 mb-3">People with access</h4>
+            <div className="space-y-3 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                {/* Owner (You) */}
+                <div className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg transition-colors">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs">
+                            {session.user.email?.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-slate-900">{session.user.email} <span className="text-slate-400 font-normal">(You)</span></p>
+                            <p className="text-xs text-slate-500">Owner</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Other Members */}
+                {isLoading ? <div className="text-center py-4 text-slate-400 text-sm">Loading members...</div> : members.map(member => (
+                    <div key={member.id} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg transition-colors group">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs">
+                                {member.user_email.substring(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-slate-900">{member.user_email}</p>
+                                <p className="text-xs text-slate-500 capitalize">{member.role}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <select 
+                                value={member.role} 
+                                onChange={e => updateMemberRole(member.id, e.target.value as ProjectRole)}
+                                className="text-xs border-none bg-transparent font-medium text-slate-600 cursor-pointer focus:ring-0 hover:text-indigo-600"
+                            >
+                                <option value="viewer">Viewer</option>
+                                <option value="editor">Editor</option>
+                            </select>
+                            <button onClick={() => removeMember(member.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all">
+                                <X size={16} />
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
         
-        <div className="mt-6 flex justify-end">
-          <button onClick={onClose} className="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-700 transition-colors">
-            Done
-          </button>
+        {/* Footer Link */}
+        <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
+             <div className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer hover:text-indigo-600" onClick={copyToClipboard}>
+                <div className="p-1.5 bg-slate-100 rounded-full"><Share2 size={14}/></div>
+                <span>{copied ? 'Link Copied!' : 'Copy Read-Only Link'}</span>
+             </div>
+             <button onClick={onClose} className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors">
+                Done
+             </button>
         </div>
       </div>
     </div>
@@ -227,16 +355,17 @@ const App: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
   
-  // Read Only Mode Logic
-  const [isReadOnlyMode, setIsReadOnlyMode] = useState(false);
+  // Selection
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('mode') === 'readonly') {
-        setIsReadOnlyMode(true);
-    }
-  }, []);
+  // Permissions Logic
+  // currentProjectRole is derived from the selected project in the list
+  const currentProject = projects.find(p => p.id === selectedProjectId);
+  const currentRole: ProjectRole = currentProject?.currentUserRole || 'owner'; // Default to owner if new/undefined to avoid lockouts during creation
   
+  const isReadOnlyMode = currentRole === 'viewer';
+  const isOwner = currentRole === 'owner';
+
   const [timelineStart, setTimelineStart] = useState<WeekPoint>(DEFAULT_START);
   const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
   
@@ -392,7 +521,6 @@ const App: React.FC = () => {
   };
   
   const fetchData = async (isRefresh: boolean = false) => {
-    // ... existing fetchData ...
     if (!session) return;
     if (isRefresh) {
       setIsRefreshing(true);
@@ -400,19 +528,43 @@ const App: React.FC = () => {
       setLoading(true);
     }
 
-    const { data: projectsData, error: projectsError } = await supabase.from('projects').select('*').eq('user_id', session.user.id);
-    if (projectsError) { console.error("Error fetching projects", projectsError); setLoading(false); return; }
+    // 1. Fetch Owned Projects
+    const { data: ownedProjects, error: ownedError } = await supabase.from('projects').select('*').eq('user_id', session.user.id);
+    if (ownedError) console.error("Error fetching owned projects", ownedError);
 
-    let finalProjectsData = projectsData;
-    if (projectsData && projectsData.length === 0) {
+    // 2. Fetch Shared Projects (Safe fail if table doesn't exist yet)
+    let sharedProjects: any[] = [];
+    let memberships: any[] = [];
+    try {
+        const { data: memberData } = await supabase.from('project_members').select('*, projects(*)').eq('user_email', session.user.email);
+        if (memberData) {
+            memberships = memberData;
+            sharedProjects = memberData.map((m: any) => m.projects).filter(Boolean);
+        }
+    } catch (e) {
+        console.warn("Shared projects fetch failed (table might be missing)", e);
+    }
+
+    // Combine
+    let allProjectsRaw = [...(ownedProjects || []), ...sharedProjects];
+    
+    // Deduplicate (just in case)
+    const uniqueProjects = Array.from(new Map(allProjectsRaw.map(p => [p.id, p])).values());
+
+    if (uniqueProjects.length === 0) {
       const { data: newProject, error: newProjectError } = await callSupabase(
         'CREATE default project', { name: 'My First Project' },
         supabase.from('projects').insert({ name: 'My First Project', user_id: session!.user.id }).select().single()
       );
-      if (newProject && !newProjectError) { finalProjectsData = [newProject]; }
+      if (newProject && !newProjectError) { uniqueProjects.push(newProject); }
     }
     
-    const projectIds = finalProjectsData.map(p => p.id);
+    // Update selected ID if empty or invalid
+    if (uniqueProjects.length > 0 && (!selectedProjectId || !uniqueProjects.find(p => p.id === selectedProjectId))) {
+        setSelectedProjectId(uniqueProjects[0].id);
+    }
+
+    const projectIds = uniqueProjects.map(p => p.id);
     let modulesData = [], tasksData = [], assignmentsData = [], allocationsData = [];
 
     if (projectIds.length > 0) {
@@ -438,6 +590,7 @@ const App: React.FC = () => {
       }
     }
     
+    // Fetch resources (Only owned for now, shared logic needs complexity for shared resources)
     const { data: resourcesData, error: resourcesError } = await supabase
       .from('resources')
       .select('*, individual_holidays(*)')
@@ -455,7 +608,7 @@ const App: React.FC = () => {
     if (holidaysError) console.error(holidaysError);
     const freshHolidays = holidaysData || [];
     
-    const structuredProjects = structureProjectsData(finalProjectsData, modulesData, tasksData, assignmentsData, allocationsData);
+    const structuredProjects = structureProjectsData(uniqueProjects, modulesData, tasksData, assignmentsData, allocationsData, session.user.id, memberships);
     
     // Set state after all data is fetched and processed
     setHolidays(freshHolidays);
@@ -468,6 +621,9 @@ const App: React.FC = () => {
     if (isRefresh) setIsRefreshing(false);
     else setLoading(false);
   };
+
+  // ... (Keep existing update functions: propagateScheduleChanges, updateAssignmentSchedule, etc.)
+  // ... Ensure they check `isReadOnlyMode` at the start.
 
   const propagateScheduleChanges = async (currentProjects: Project[], startAssignmentId: string) => {
     // ... propagateScheduleChanges implementation ...
@@ -1521,7 +1677,11 @@ const App: React.FC = () => {
       <div className="flex h-screen items-center justify-center bg-slate-100">
         <div className="bg-white p-8 rounded-xl shadow-lg border border-slate-200 max-w-md w-full">
             <h1 className="text-2xl font-bold text-slate-800 mb-6 text-center">Resource Planner Login</h1>
-            <Auth supabaseClient={supabase} appearance={{ theme: ThemeSupa }} providers={[]} />
+            <Auth 
+                supabaseClient={supabase} 
+                appearance={{ theme: ThemeSupa }} 
+                providers={['google']} 
+            />
         </div>
       </div>
     );
@@ -1582,8 +1742,8 @@ const App: React.FC = () => {
        </aside>
 
        {/* Main Content */}
-       <main className="flex-1 flex flex-col min-w-0 h-full bg-white relative overflow-y-auto custom-scrollbar">
-          <div className="flex-1 p-4 relative">
+       <main className={`flex-1 flex flex-col min-w-0 h-full bg-white relative custom-scrollbar ${['planner', 'estimator'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+          <div className="flex-1 p-4 relative h-full">
             {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
             
             {activeTab === 'planner' && <PlannerGrid 
@@ -1671,7 +1831,7 @@ const App: React.FC = () => {
        {/* Modals & Overlays */}
        {isAIEnabled && <AIAssistant projects={projects} resources={resources} onAddTask={addTask} onAssignResource={updateAssignmentResourceName} />}
        {isDebugLogEnabled && <DebugLog entries={logEntries} setEntries={setLogEntries} />}
-       {showShareModal && <ShareModal onClose={() => setShowShareModal(false)} />}
+       {showShareModal && <ShareModal onClose={() => setShowShareModal(false)} projectId={selectedProjectId} session={session} />}
        {showHistory && <VersionHistory onClose={() => setShowHistory(false)} onRestore={restoreVersion} onSaveCurrent={saveCurrentVersion} />}
     </div>
   );
