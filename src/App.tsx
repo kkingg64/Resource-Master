@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType, ProjectRole, ProjectMember } from './types';
@@ -1840,7 +1839,7 @@ const App: React.FC = () => {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-100">
         <div className="bg-white p-8 rounded-xl shadow-lg border border-slate-200 max-w-md w-full">
-            <h1 className="text-2xl font-bold text-slate-800 mb-6 text-center">Resource Planner Login</h1>
+            <h1 className="text-2xl font-bold text-slate-800 mb-6 text-center">Resource Master</h1>
             <Auth 
                 supabaseClient={supabase} 
                 appearance={{ theme: ThemeSupa }} 
@@ -1978,6 +1977,7 @@ const App: React.FC = () => {
               onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
               onUpdateModuleStartTask={updateModuleStartTask}
               onReorderModules={reorderModules}
+              // FIX: Add missing onDeleteModule prop
               onDeleteModule={deleteModule}
               isReadOnly={isReadOnlyMode}
             /></div>}
