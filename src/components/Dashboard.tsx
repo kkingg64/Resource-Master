@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation, Resource, Holiday } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
@@ -187,9 +186,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     
     Object.entries(usage).forEach(([res, weeks]) => {
         Object.entries(weeks).forEach(([weekId, data]) => {
-            const d = data as UsageData;
+            const d = data as any;
             // Conflict if allocated more than 5 days OR works on multiple modules
-            if (d.modules.size > 1 || (d.total as number) > 5) {
+            if (d.modules.size > 1 || d.total > 5) {
                 if (!result[res]) result[res] = [];
                 result[res].push({
                     weekId,
@@ -289,7 +288,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     return onLeave;
   }, [resources, holidays]);
 
-  // 8. Upcoming Tasks Logic (Next 2 Weeks) - Grouped by Task ID
+  // 8. Upcoming Tasks Logic (Next 2 Weeks)
   const upcomingTasks = useMemo(() => {
     const todayDate = new Date();
     todayDate.setHours(0, 0, 0, 0);
@@ -309,18 +308,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
       resourceHolidaysMap.set(res.name, new Set([...regional, ...individual].map(h => h.date)));
     });
 
-    interface GroupedTask {
-        id: string;
-        project: string;
-        module: string;
-        task: string;
-        earliestStart: string;
-        latestEnd: string;
-        calculatedProgress: number;
-        status: string;
-    }
-
-    const tasksMap = new Map<string, GroupedTask>();
+    const tasks: any[] = [];
 
     projects.forEach(p => {
         p.modules.forEach(m => {
@@ -341,25 +329,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                         const isActive = start < todayStr && end >= todayStr;
 
                         if (isStartingSoon || isActive) {
-                            if (!tasksMap.has(t.id)) {
-                                tasksMap.set(t.id, {
-                                    id: t.id,
-                                    project: p.name,
-                                    module: m.name,
-                                    task: t.name,
-                                    earliestStart: start,
-                                    latestEnd: end,
-                                    calculatedProgress: 0,
-                                    status: isActive ? 'Active' : 'Upcoming'
-                                });
-                            }
-
-                            const group = tasksMap.get(t.id)!;
-                            if (start < group.earliestStart) group.earliestStart = start;
-                            if (end > group.latestEnd) group.latestEnd = end;
-                            
-                            // Re-evaluate overall status (if any part is active, consider active)
-                            if (isActive) group.status = 'Active';
+                            tasks.push({
+                                id: a.id,
+                                project: p.name,
+                                module: m.name,
+                                task: t.name,
+                                resource: a.resourceName || 'Unassigned',
+                                start,
+                                end,
+                                progress: a.progress || 0,
+                                status: isActive ? 'Active' : 'Upcoming',
+                                startObj: new Date(start) // for sorting
+                            });
                         }
                     }
                 });
@@ -367,12 +348,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
         });
     });
 
-    return Array.from(tasksMap.values()).map(t => ({
-        ...t,
-        calculatedProgress: calculateTimeBasedProgress(t.earliestStart, t.latestEnd),
-        startObj: new Date(t.earliestStart)
-    })).sort((a, b) => a.startObj.getTime() - b.startObj.getTime());
-
+    return tasks.sort((a, b) => a.startObj.getTime() - b.startObj.getTime());
   }, [projects, resources, holidays]);
 
   return (
