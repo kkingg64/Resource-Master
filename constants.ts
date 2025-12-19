@@ -214,170 +214,173 @@ const generateWeeks = (start: WeekPoint, end: WeekPoint): TimelineColumn[] => {
 
   while ((current.year * 100 + current.week) <= endValue) {
     const paddedWeek = current.week.toString().padStart(2, '0');
+    const weekId = `${current.year}-${paddedWeek}`;
     
     // Get the Monday of the week
     const monday = getDateFromWeek(current.year, current.week);
+    const monthName = MONTH_NAMES[monday.getMonth()];
     
-    // Determine the month based on the Thursday (ISO-8601 standard)
-    // This ensures W01 of 2025 (which might start Dec 30) is correctly labeled as Jan 2025
-    const thursday = new Date(monday);
-    thursday.setDate(monday.getDate() + 3);
-    
-    const monthName = MONTH_NAMES[thursday.getMonth()];
-    const yearForMonth = thursday.getFullYear();
-    const weekLabel = `W${paddedWeek}`;
-
-    weeks.push({ 
-      id: `${current.year}-${paddedWeek}`, 
-      label: weekLabel,
-      yearLabel: `${current.year}`,
-      monthLabel: `${monthName} ${yearForMonth}`,
-      weekLabel: weekLabel,
-      type: 'week'
+    weeks.push({
+        id: weekId,
+        label: `Wk ${current.week}`,
+        yearLabel: current.year.toString(),
+        monthLabel: `${monthName} ${current.year}`,
+        weekLabel: `Wk ${current.week}`,
+        type: 'week',
+        date: monday
     });
+
+    // Increment week
     current = addWeeksToPoint(current, 1);
   }
   return weeks;
 };
 
-const generateMonths = (weeks: TimelineColumn[]): TimelineColumn[] => {
-  const monthsMap = new Map<string, TimelineColumn & { weekIds: string[] }>();
-  weeks.forEach(w => {
-    const [monthName, year] = w.monthLabel.split(' ');
-    const id = `${year}-${MONTH_NAMES.indexOf(monthName) + 1}`;
-    if (!monthsMap.has(id)) {
-      monthsMap.set(id, { id, label: monthName, yearLabel: year, monthLabel: w.monthLabel, weekLabel: '', type: 'month', weekIds: [] });
+export const DEFAULT_START: WeekPoint = { year: 2025, week: 1 };
+export const DEFAULT_END: WeekPoint = { year: 2025, week: 52 };
+
+export const getTimeline = (viewMode: ViewMode, start: WeekPoint, end: WeekPoint): TimelineColumn[] => {
+    if (viewMode === 'week') {
+        return generateWeeks(start, end);
+    } else if (viewMode === 'month') {
+        const weeks = generateWeeks(start, end);
+        // Group weeks into months
+        const months: TimelineColumn[] = [];
+        let currentMonthLabel = '';
+        let currentMonthWeeks: string[] = [];
+        let currentMonthDate: Date | undefined;
+        let yearLabel = '';
+        
+        weeks.forEach((week) => {
+            const mLabel = week.monthLabel;
+            if (mLabel !== currentMonthLabel) {
+                if (currentMonthLabel) {
+                    months.push({
+                        id: currentMonthLabel,
+                        label: currentMonthLabel.split(' ')[0], // Jan
+                        monthLabel: currentMonthLabel,
+                        yearLabel: yearLabel,
+                        weekLabel: '',
+                        type: 'month',
+                        weekIds: currentMonthWeeks,
+                        date: currentMonthDate
+                    });
+                }
+                currentMonthLabel = mLabel;
+                currentMonthWeeks = [];
+                currentMonthDate = week.date;
+                yearLabel = week.yearLabel;
+            }
+            currentMonthWeeks.push(week.id);
+        });
+        // Push last
+        if (currentMonthLabel) {
+             months.push({
+                id: currentMonthLabel,
+                label: currentMonthLabel.split(' ')[0],
+                monthLabel: currentMonthLabel,
+                yearLabel: yearLabel,
+                weekLabel: '',
+                type: 'month',
+                weekIds: currentMonthWeeks,
+                date: currentMonthDate
+            });
+        }
+        return months;
+    } else {
+        // Day view
+        const weeks = generateWeeks(start, end);
+        const days: TimelineColumn[] = [];
+        weeks.forEach(w => {
+            const monday = w.date!; // generateWeeks sets date to Monday
+            for (let i = 0; i < 5; i++) { // Mon-Fri
+                const d = new Date(monday);
+                d.setDate(monday.getDate() + i);
+                days.push({
+                    id: formatDateForInput(d),
+                    label: ['S','M','T','W','T','F','S'][d.getDay()], // Should be M, T, W, T, F
+                    yearLabel: w.yearLabel,
+                    monthLabel: w.monthLabel,
+                    weekLabel: w.label,
+                    type: 'day',
+                    date: d,
+                    parentWeekId: w.id
+                });
+            }
+        });
+        return days;
     }
-    monthsMap.get(id)?.weekIds.push(w.id);
-  });
-  return Array.from(monthsMap.values());
 };
 
-const generateDays = (weeks: TimelineColumn[]): TimelineColumn[] => {
-  const days: TimelineColumn[] = [];
-  weeks.forEach(week => {
-    const [yearStr, weekNumStr] = week.id.split('-');
-    const year = parseInt(yearStr);
-    const weekNum = parseInt(weekNumStr);
-    const monday = getDateFromWeek(year, weekNum);
-    ['M', 'T', 'W', 'T', 'F'].forEach((dayName, idx) => {
-       const date = new Date(monday);
-       date.setDate(monday.getDate() + idx);
-       
-       const monthName = MONTH_NAMES[date.getMonth()];
-       const currentYear = date.getFullYear();
-       
-       days.push({
-         id: `${week.id}-d${idx}`,
-         label: dayName,
-         yearLabel: `${currentYear}`, // Use actual year of the day
-         monthLabel: `${monthName} ${currentYear}`, // Use actual month of the day
-         weekLabel: week.weekLabel,
-         type: 'day',
-         parentWeekId: week.id,
-         date: date
-       });
-    });
-  });
-  return days;
-};
+export const calculateEndDate = (startDateStr: string, durationDays: number, holidays: Set<string>): string => {
+    let currentDate = new Date(startDateStr.replace(/-/g, '/'));
+    let workingDaysFound = 0;
+    
+    if (durationDays <= 0) return startDateStr;
 
-export const getTimeline = (mode: ViewMode, start: WeekPoint, end: WeekPoint): TimelineColumn[] => {
-  const weeks = generateWeeks(start, end);
-  switch (mode) {
-    case 'month': return generateMonths(weeks);
-    case 'day': return generateDays(weeks);
-    case 'week': 
-    default:
-      return weeks;
-  }
-};
-
-export const DEFAULT_START = { year: 2025, week: 44 };
-export const DEFAULT_END = { year: 2026, week: 16 };
-
-const _weeks = generateWeeks({ year: 2024, week: 1 }, { year: 2027, week: 52 });
-export const ALL_WEEK_IDS = _weeks.map(w => w.id);
-
-export const getWeekdaysForWeekId = (weekId: string): string[] => {
-  const [yearStr, weekNumStr] = weekId.split('-');
-  if (!yearStr || !weekNumStr) return [];
-  
-  const year = parseInt(yearStr);
-  const weekNum = parseInt(weekNumStr);
-  if (isNaN(year) || isNaN(weekNum)) return [];
-
-  const monday = getDateFromWeek(year, weekNum);
-  const weekdays: string[] = [];
-  for (let i = 0; i < 5; i++) {
-    const date = new Date(monday);
-    date.setDate(monday.getDate() + i);
-    weekdays.push(formatDateForInput(date));
-  }
-  return weekdays;
-};
-
-export const calculateEndDate = (startDate: string, duration: number, holidays: Set<string>): string => {
-  if (!startDate || duration <= 0) return startDate;
-
-  let currentDate = new Date(startDate.replace(/-/g, '/'));
-  let workingDaysCounted = 0;
-
-  while (workingDaysCounted < duration) {
-    const dayOfWeek = currentDate.getDay();
-    const dateStr = formatDateForInput(currentDate);
-
-    if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidays.has(dateStr)) {
-      workingDaysCounted++;
+    while (workingDaysFound < durationDays) {
+        const dateStr = formatDateForInput(currentDate);
+        const day = currentDate.getDay();
+        const isWeekend = day === 0 || day === 6;
+        const isHoliday = holidays.has(dateStr);
+        
+        if (!isWeekend && !isHoliday) {
+            workingDaysFound++;
+        }
+        
+        if (workingDaysFound < durationDays) {
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
     }
     
-    if (workingDaysCounted < duration) {
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-  }
+    return formatDateForInput(currentDate);
+};
 
-  return formatDateForInput(currentDate);
+export const calculateWorkingDaysBetween = (startStr: string, endStr: string, holidays: Set<string>): number => {
+    const start = new Date(startStr.replace(/-/g, '/'));
+    const end = new Date(endStr.replace(/-/g, '/'));
+    
+    if (start > end) return -calculateWorkingDaysBetween(endStr, startStr, holidays);
+    
+    let count = 0;
+    let curr = new Date(start);
+    while (curr <= end) {
+        const day = curr.getDay();
+        const dateStr = formatDateForInput(curr);
+        if (day !== 0 && day !== 6 && !holidays.has(dateStr)) {
+            count++;
+        }
+        curr.setDate(curr.getDate() + 1);
+    }
+    return count;
 };
 
 export const findNextWorkingDay = (dateStr: string, holidays: Set<string>): string => {
-  let currentDate = new Date(dateStr.replace(/-/g, '/'));
-  currentDate.setDate(currentDate.getDate() + 1); // Start from the next day
-
-  while (true) {
-    const dayOfWeek = currentDate.getDay();
-    const currentDayStr = formatDateForInput(currentDate);
-
-    if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidays.has(currentDayStr)) {
-      return currentDayStr;
-    }
-    currentDate.setDate(currentDate.getDate() + 1);
-  }
-};
-
-export const calculateWorkingDaysBetween = (startDateStr: string, endDateStr: string, holidays: Set<string>): number => {
-  if (!startDateStr || !endDateStr) return 0;
-  
-  let currentDate = new Date(startDateStr.replace(/-/g, '/'));
-  const endDate = new Date(endDateStr.replace(/-/g, '/'));
-  
-  if (currentDate > endDate) return 0;
-
-  let workingDays = 0;
-  
-  while (currentDate <= endDate) {
-    const dayOfWeek = currentDate.getDay();
-    const dateStr = formatDateForInput(currentDate);
-
-    if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidays.has(dateStr)) {
-      workingDays++;
-    }
+    let date = new Date(dateStr.replace(/-/g, '/'));
+    date.setDate(date.getDate() + 1); // Start checking from tomorrow
     
-    currentDate.setDate(currentDate.getDate() + 1);
-  }
-  return workingDays;
+    while (true) {
+        const dStr = formatDateForInput(date);
+        const day = date.getDay();
+        if (day !== 0 && day !== 6 && !holidays.has(dStr)) {
+            return dStr;
+        }
+        date.setDate(date.getDate() + 1);
+    }
 };
 
-// Helper function for shared FP logic
+export const getWeekdaysForWeekId = (weekId: string): string[] => {
+  const [year, week] = weekId.split('-').map(Number);
+  const monday = getDateFromWeek(year, week);
+  const days = [];
+  for (let i = 0; i < 5; i++) { // Mon-Fri
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    days.push(formatDateForInput(d));
+  }
+  return days;
+};
+
 export const getTaskBaseName = (name: string): string => {
   const prefixes = ["Design & Build-", "QA-", "UAT-"];
   for (const prefix of prefixes) {
