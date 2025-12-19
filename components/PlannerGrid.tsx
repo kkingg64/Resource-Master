@@ -981,10 +981,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const currentColumnIndex = timeline.findIndex(c => isCurrentColumn(c));
   const stickyLeftOffset = sidebarWidth + startColWidth + durationColWidth + dependencyColWidth;
 
-  const assignmentRenderInfo = useMemo(() => {
+  const assignmentRenderInfo = useMemo<{ 
+      map: Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>; 
+      totalHeight: number 
+  }>(() => {
     const map = new Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>();
     let rowIndex = 0;
-    const HEADER_HEIGHT = (showYearRow ? 33 : 0) + (showMonthRow ? 33 : 0) + 33;
+    const HEADER_HEIGHT = (showYearRow ? 32 : 0) + (showMonthRow ? 32 : 0) + 32;
     const ROW_HEIGHT = 33;
 
     projects.forEach(project => {
@@ -1030,11 +1033,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             style={{ display: 'none' }}
         ></div>
 
-        <div className="px-4 py-3 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-          <div className="flex items-center gap-4">
+        <div className="px-4 py-3 border-b border-slate-200 flex flex-wrap justify-between items-center bg-slate-50 gap-4">
+          
+          {/* LEFT: View Controls */}
+          <div className="flex items-center gap-4 flex-shrink-0">
              <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-500" /><span className="text-sm font-semibold text-slate-700">Timeline</span></div>
+             
              <div className="relative">
-                <button ref={toggleButtonRef} onClick={(e) => { e.stopPropagation(); setShowToggleMenu(!showToggleMenu); }} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors">
+                <button ref={toggleButtonRef} onClick={(e) => { e.stopPropagation(); setShowToggleMenu(!showToggleMenu); }} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors shadow-sm">
                   <Eye size={14} /> View Options <ChevronDown size={12} />
                 </button>
                 {showToggleMenu && (
@@ -1044,33 +1050,46 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   </div>
                 )}
             </div>
+
             <div className="flex items-center gap-2 bg-slate-200 rounded-lg p-1">
                 <button onClick={() => setDisplayMode('allocation')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'allocation' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Grid View (Allocations)"><LayoutList size={14} /> Grid</button>
                 <button onClick={() => setDisplayMode('gantt')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'gantt' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Gantt View (Timeline Bars)"><CalendarRange size={14} /> Gantt</button>
             </div>
-            <div className="h-4 w-px bg-slate-300"></div>
-            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden">
-              <button onClick={() => onExtendTimeline('start')} className="px-2 py-1 hover:bg-slate-100 text-xs text-slate-600 border-r border-slate-200" title="Add Month to Start">&lt; +Month</button>
-              <button onClick={() => onExtendTimeline('end')} className="px-2 py-1 hover:bg-slate-100 text-xs text-slate-600" title="Add Month to End">+Month &gt;</button>
+          </div>
+
+          {/* CENTER: Timeline Navigation & Zoom */}
+          <div className="flex items-center gap-4 flex-shrink-0">
+             <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden shadow-sm">
+              <button onClick={() => onExtendTimeline('start')} className="px-3 py-1.5 hover:bg-slate-100 text-xs font-medium text-slate-600 border-r border-slate-200 transition-colors" title="Add Month to Start">&lt; +Month</button>
+              <button onClick={() => onExtendTimeline('end')} className="px-3 py-1.5 hover:bg-slate-100 text-xs font-medium text-slate-600 transition-colors" title="Add Month to End">+Month &gt;</button>
             </div>
+            
             <div className="h-4 w-px bg-slate-300"></div>
+            
             <div className="flex items-center gap-2" title="Adjust Column Width">
               <Settings2 size={14} className="text-slate-400" />
-              <input type="range" min="20" max="100" value={colWidthBase} onChange={(e) => setColWidthBase(parseInt(e.target.value))} className="w-20 h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+              <input type="range" min="20" max="100" value={colWidthBase} onChange={(e) => setColWidthBase(parseInt(e.target.value))} className="w-24 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 hover:accent-indigo-500" />
             </div>
           </div>
-          <div className="flex gap-4 items-center">
+
+          {/* RIGHT: Actions */}
+          <div className="flex items-center gap-4 flex-shrink-0">
             <div className="flex items-center gap-2">
-                <button onClick={onRefresh} disabled={isRefreshing} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Refresh data from server"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh</button>
+                <button onClick={onRefresh} disabled={isRefreshing} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm" title="Refresh data from server"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh</button>
                 <SaveStatusIndicator status={saveStatus} />
-                <div className="w-px h-4 bg-slate-300"></div>
-                {!isReadOnly && <button onClick={onShowHistory} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="View and restore saved versions"><History size={12} /></button>}
-                <button onClick={handleExportExcel} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Export the current plan as an Excel file"><Download size={12} /></button>
-                {!isReadOnly && <button onClick={() => importInputRef.current?.click()} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Import a plan from an Excel file"><Upload size={12} /></button>}
+                
+                <div className="w-px h-4 bg-slate-300 mx-1"></div>
+                
+                {!isReadOnly && <button onClick={onShowHistory} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1.5 rounded hover:bg-slate-100 border border-slate-200 transition-colors shadow-sm" title="View and restore saved versions"><History size={14} /></button>}
+                <button onClick={handleExportExcel} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1.5 rounded hover:bg-slate-100 border border-slate-200 transition-colors shadow-sm" title="Export the current plan as an Excel file"><Download size={14} /></button>
+                {!isReadOnly && <button onClick={() => importInputRef.current?.click()} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1.5 rounded hover:bg-slate-100 border border-slate-200 transition-colors shadow-sm" title="Import a plan from an Excel file"><Upload size={14} /></button>}
                 <input type="file" ref={importInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
             </div>
+            
             <div className="w-px h-4 bg-slate-300"></div>
-            {!isReadOnly && <button onClick={onAddProject} className="text-xs flex items-center gap-1 bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 transition-colors"><Plus size={12} /> Add Project</button>}
+            
+            {!isReadOnly && <button onClick={onAddProject} className="text-xs flex items-center gap-1.5 bg-slate-800 text-white px-3 py-1.5 rounded hover:bg-slate-700 transition-colors shadow-sm font-medium"><Plus size={14} /> Add Project</button>}
+            
             <div className="flex bg-slate-200 p-1 rounded-lg">
               {(['day', 'week', 'month'] as ViewMode[]).map((mode) => (
                 <button key={mode} onClick={() => setViewMode(mode)} className={`px-3 py-1 text-xs font-medium rounded-md transition-all capitalize ${viewMode === mode ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{mode}</button>
@@ -1093,7 +1112,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           <div className="min-w-max relative">
               <>
                 {/* Header Rows */}
-                <div className="flex bg-slate-200 border-b border-slate-200 sticky top-0 z-40 h-[33px] items-center">
+                <div className="flex bg-slate-200 border-b border-slate-200 sticky top-0 z-40 h-8 items-center">
                   <div className="flex-shrink-0 px-3 font-semibold text-slate-700 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] relative group h-full flex items-center text-xs" style={stickyStyle}>
                     Project Structure
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={(e) => handleResizeStart('sidebar', sidebarWidth, e)}></div>
@@ -1123,7 +1142,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   {Object.values(yearHeaders).map((group: { label: string; colspan: number }, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                 </div>
                 {showMonthRow && (
-                  <div className="flex bg-slate-100 border-b border-slate-200 sticky top-[33px] z-40 h-[33px] items-center">
+                  <div className="flex bg-slate-100 border-b border-slate-200 sticky top-8 z-40 h-8 items-center">
                     <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
@@ -1131,7 +1150,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     {Object.values(monthHeaders).map((group: { label: string; colspan: number }, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-600 border-r border-slate-200 uppercase h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                   </div>
                 )}
-                <div className={`flex bg-slate-50 border-b border-slate-200 sticky z-40 shadow-sm h-[33px] items-center ${showMonthRow ? 'top-[66px]' : 'top-[33px]'}`}>
+                <div className={`flex bg-slate-50 border-b border-slate-200 sticky z-40 shadow-sm h-8 items-center ${showMonthRow ? 'top-16' : 'top-8'}`}>
                   <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
                   <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
                   <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
@@ -1170,7 +1189,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
               return (
                 <React.Fragment key={project.id}>
-                  <div className="flex bg-slate-700 border-b border-slate-600 sticky z-30 group h-[33px]">
+                  <div className="flex bg-slate-700 border-b border-slate-600 sticky z-30 group">
                     <div className="flex-shrink-0 px-3 py-1.5 pr-2 border-r border-slate-600 sticky left-0 bg-slate-700 z-40 cursor-pointer flex items-center justify-between text-white shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]" style={stickyStyle} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'project', x: e.pageX, y: e.pageY, projectId: project.id }); }}>
                       <div className="flex items-center gap-2 overflow-hidden flex-1" onClick={() => !isEditingProject && toggleProject(project.id)}>
                         {isProjectCollapsed ? <ChevronRight className="w-4 h-4 text-slate-300" /> : <ChevronDown className="w-4 h-4 text-slate-300" />}
@@ -1251,7 +1270,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                     return (
                       <div key={module.id} draggable={!isReadOnly} onDragStart={(e) => handleModuleDragStart(e, index)} onDragOver={handleModuleDragOver} onDrop={(e) => handleModuleDrop(e, project.id, module.id, index)} className={`${draggedModuleIndex === index ? 'opacity-50' : 'opacity-100'}`} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'module', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id }); }}>
-                        <div className={`flex ${style.bgColor} border-b border-slate-100 ${style.hoverBgColor} transition-colors group h-[33px]`}>
+                        <div className={`flex ${style.bgColor} border-b border-slate-100 ${style.hoverBgColor} transition-colors group`}>
                           <div className={`flex-shrink-0 py-1.5 px-3 pl-6 border-r border-slate-200 sticky left-0 ${style.bgColor} z-30 flex items-center justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`} style={stickyStyle}>
                             <div className="flex items-center gap-2 flex-1 overflow-hidden cursor-pointer" onClick={() => !isEditingModule && toggleModule(module.id)}>
                               {!isReadOnly && <div className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500" title="Drag to reorder"><GripVertical className="w-4 h-4" /></div>}
@@ -1358,7 +1377,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                           return (
                             <React.Fragment key={task.id}>
-                              <div draggable={!isReadOnly} onDragStart={(e) => handleTaskDragStart(e, project.id, module.id, taskIndex)} onDragOver={handleTaskDragOver} onDrop={(e) => handleTaskDrop(e, project.id, module.id, taskIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'task', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id }); }} className={`flex border-b border-slate-100 bg-slate-50 group/task h-[33px] ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>
+                              <div draggable={!isReadOnly} onDragStart={(e) => handleTaskDragStart(e, project.id, module.id, taskIndex)} onDragOver={handleTaskDragOver} onDrop={(e) => handleTaskDrop(e, project.id, module.id, taskIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'task', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id }); }} className={`flex border-b border-slate-100 bg-slate-50 group/task ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>
                                 <div className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50 z-20 flex items-center justify-between pl-6 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}>
                                   <div className="flex items-center gap-2 overflow-hidden cursor-pointer flex-1" onClick={() => !isEditingTask && toggleTask(task.id)}>
                                     {!isReadOnly && <div className="cursor-grab text-slate-400 hover:text-slate-600" title="Drag to reorder task"><GripVertical size={14} /></div>}
@@ -1446,7 +1465,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 const currentRowIndex = gridRowIndex++;
 
                                 return (
-                                <div key={assignment.id} className={`flex border-b border-slate-100 group/assign h-[33px] ${draggedAssignment?.taskId === task.id && draggedAssignment?.index === assignmentIndex ? 'opacity-30' : ''} ${datePickerState.assignmentId === assignment.id ? 'relative z-40' : ''}`} draggable={!isReadOnly} onDragStart={(e) => handleAssignmentDragStart(e, task.id, assignmentIndex)} onDragOver={handleAssignmentDragOver} onDrop={(e) => handleAssignmentDrop(e, project.id, module.id, task.id, assignmentIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'assignment', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id, assignmentId: assignment.id }); }}>
+                                <div key={assignment.id} className={`flex border-b border-slate-100 group/assign ${draggedAssignment?.taskId === task.id && draggedAssignment?.index === assignmentIndex ? 'opacity-30' : ''} ${datePickerState.assignmentId === assignment.id ? 'relative z-40' : ''}`} draggable={!isReadOnly} onDragStart={(e) => handleAssignmentDragStart(e, task.id, assignmentIndex)} onDragOver={handleAssignmentDragOver} onDrop={(e) => handleAssignmentDrop(e, project.id, module.id, task.id, assignmentIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'assignment', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id, assignmentId: assignment.id }); }}>
                                   <div className={`flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-10 flex items-center justify-between border-l-[3px] ${roleStyle.border} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`} style={stickyStyle}>
                                     <div className="flex-1 overflow-hidden flex items-center gap-2 pl-12">
                                       <select disabled={isReadOnly} value={assignment.resourceName || 'Unassigned'} onChange={(e) => onUpdateAssignmentResourceName(project.id, module.id, task.id, assignment.id, e.target.value)} className="w-full text-[11px] text-slate-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer hover:text-indigo-600 disabled:cursor-default disabled:hover:text-slate-600">
@@ -1559,8 +1578,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
               );
             })}
             
-            <div className="flex bg-slate-800 text-white border-t border-slate-700 sticky bottom-0 z-30 shadow-[0_-4px_10px_rgba(0,0,0,0.2)] mt-0.5 h-[33px] items-center">
-              <div className="flex-shrink-0 px-3 py-1.5 border-r border-slate-700 sticky left-0 bg-slate-800 z-50 font-bold text-xs shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)] flex items-center h-full" style={stickyStyle}>GRAND TOTAL</div>
+            <div className="flex bg-slate-800 text-white border-t border-slate-700 sticky bottom-0 z-30 shadow-[0_-4px_10px_rgba(0,0,0,0.2)] mt-0.5">
+              <div className="flex-shrink-0 px-3 py-1.5 border-r border-slate-700 sticky left-0 bg-slate-800 z-50 font-bold text-xs shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)] flex items-center" style={stickyStyle}>GRAND TOTAL</div>
               
               <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
               <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
