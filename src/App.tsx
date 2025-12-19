@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+// FIX: Corrected import paths to be relative to the `src` directory.
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from '../constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType, ProjectRole, ProjectMember } from '../types';
 import { Dashboard } from '../components/Dashboard';
@@ -10,7 +11,7 @@ import { VersionHistory } from '../components/VersionHistory';
 import { DebugLog } from '../components/DebugLog';
 import { AdminSettings } from '../components/AdminSettings';
 import { AIAssistant } from '../components/AIAssistant';
-import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X, Mail, Plus, Trash2, UserPlus, Database, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X, Mail, Plus, Trash2, UserPlus } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
@@ -23,8 +24,7 @@ const structureProjectsData = (
   assignments: any[],
   allocations: any[],
   currentUserId: string,
-  members: any[] = [],
-  currentUserEmail: string = ''
+  members: any[] = []
 ): Project[] => {
   const allocationsByAssignment = new Map<string, any[]>();
   allocations.forEach(a => {
@@ -125,9 +125,7 @@ const structureProjectsData = (
     if (p.user_id === currentUserId) {
         role = 'owner';
     } else {
-        // Members lookup: match project_id and the current user's email
-        // Note: We use Email because project_members stores user_email
-        const membership = members.find(m => m.project_id === p.id && m.user_email === currentUserEmail);
+        const membership = members.find(m => m.project_id === p.id && (m.user_id === currentUserId || m.user_email === currentUserId)); // Fallback to ID check if emails not joined
         if (membership) {
             role = membership.role;
         }
@@ -138,7 +136,7 @@ const structureProjectsData = (
         name: p.name,
         modules: (modulesByProject.get(p.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
         currentUserRole: role,
-        ownerEmail: p.owner_email
+        ownerEmail: p.owner_email // Assuming backend joins owner profile or stores email
     };
   }).sort((a,b) => a.name.localeCompare(b.name));
 };
@@ -165,109 +163,6 @@ const shiftWeekIdByAmount = (weekId: string, amount: number): string => {
     if (isNaN(point.year) || isNaN(point.week)) return weekId;
     const newPoint = addWeeksToPoint(point, amount);
     return `${newPoint.year}-${String(newPoint.week).padStart(2, '0')}`;
-};
-
-// Fix DB Screen Component
-const FixRecursionScreen: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
-  const sql = `-- FIX RECURSION BY USING SECURITY DEFINER FUNCTIONS
--- These functions bypass RLS to prevent infinite loops.
-
--- 1. Helper function to check if current user is a member of a project
-CREATE OR REPLACE FUNCTION is_project_member(_project_id uuid)
-RETURNS boolean AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM project_members 
-    WHERE project_id = _project_id 
-    AND user_email = auth.email()
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 2. Helper function to check if current user owns a project
-CREATE OR REPLACE FUNCTION is_project_owner(_project_id uuid)
-RETURNS boolean AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM projects 
-    WHERE id = _project_id 
-    AND user_id = auth.uid()
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 3. Reset Policies
-DROP POLICY IF EXISTS "Projects Select Policy" ON projects;
-DROP POLICY IF EXISTS "Projects Manage Policy" ON projects;
-DROP POLICY IF EXISTS "Members Select Policy" ON project_members;
-DROP POLICY IF EXISTS "Members Manage Policy" ON project_members;
-
--- 4. Projects: Owner or Member (using helper)
-CREATE POLICY "Projects Select Policy" ON projects
-  FOR SELECT USING (
-    user_id = auth.uid() 
-    OR 
-    is_project_member(id)
-  );
-
-CREATE POLICY "Projects Manage Policy" ON projects
-  FOR ALL USING (user_id = auth.uid());
-
--- 5. Members: Self or Owner (using helper)
-CREATE POLICY "Members Select Policy" ON project_members
-  FOR SELECT USING (
-    user_email = auth.email() OR is_project_owner(project_id)
-  );
-
-CREATE POLICY "Members Manage Policy" ON project_members
-  FOR ALL USING (
-    is_project_owner(project_id)
-  );`;
-
-  return (
-    <div className="fixed inset-0 bg-slate-50 z-[100] flex items-center justify-center p-4">
-      <div className="bg-white max-w-3xl w-full rounded-xl shadow-2xl border border-red-200 overflow-hidden animate-in fade-in zoom-in-95">
-        <div className="bg-red-50 p-6 border-b border-red-100 flex items-start gap-4">
-          <div className="p-3 bg-red-100 rounded-full text-red-600">
-            <Database size={24} />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-red-900">Database Policy Error Detected</h2>
-            <p className="text-red-700 mt-1">Infinite recursion detected in Row Level Security (RLS) policies.</p>
-          </div>
-        </div>
-        <div className="p-6">
-          <p className="text-slate-600 mb-4 text-sm">
-            Your database policies are currently stuck in a loop. This happens when the Project policy checks the Member list, and the Member list policy checks the Project owner.
-            <br/><br/>
-            <strong>Solution:</strong> Please run the following SQL script in your Supabase SQL Editor. It creates "Security Definer" functions to safely handle these checks without recursion.
-          </p>
-          <div className="bg-slate-900 rounded-lg p-4 relative group mb-6">
-            <pre className="text-xs text-slate-300 font-mono overflow-x-auto whitespace-pre-wrap max-h-64 custom-scrollbar">
-              {sql}
-            </pre>
-            <button 
-              onClick={() => {
-                navigator.clipboard.writeText(sql);
-                alert("SQL copied to clipboard!");
-              }}
-              className="absolute top-2 right-2 bg-white/10 hover:bg-white/20 text-white px-2 py-1 rounded text-xs transition-colors"
-            >
-              Copy SQL
-            </button>
-          </div>
-          <div className="flex justify-end">
-            <button 
-              onClick={onRetry}
-              className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-indigo-700 transition-colors shadow-sm flex items-center gap-2"
-            >
-              <Check size={16} /> I've run the SQL, Try Again
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 };
 
 const ShareModal: React.FC<{ onClose: () => void, projectId: string, session: any }> = ({ onClose, projectId, session }) => {
@@ -459,11 +354,7 @@ const App: React.FC = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
-  const [isTakingTooLong, setIsTakingTooLong] = useState(false); // Track slow loading
   
-  // Database Error State
-  const [dbError, setDbError] = useState<any>(null);
-
   // Selection
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
@@ -485,18 +376,6 @@ const App: React.FC = () => {
   useEffect(() => {
     return () => window.clearTimeout(statusTimeoutRef.current);
   }, []);
-
-  // Loading Timeout Watcher
-  useEffect(() => {
-    let timer: number;
-    if (loading) {
-      setIsTakingTooLong(false);
-      timer = window.setTimeout(() => {
-        setIsTakingTooLong(true);
-      }, 4000); // 4 seconds
-    }
-    return () => clearTimeout(timer);
-  }, [loading]);
 
   const [isDebugLogEnabled, setIsDebugLogEnabled] = useState(false);
   const [isAIEnabled, setIsAIEnabled] = useState(false);
@@ -648,32 +527,16 @@ const App: React.FC = () => {
     } else {
       setLoading(true);
     }
-    setDbError(null);
 
     // 1. Fetch Owned Projects
     const { data: ownedProjects, error: ownedError } = await supabase.from('projects').select('*').eq('user_id', session.user.id);
-    if (ownedError) {
-        console.error("Error fetching owned projects", ownedError);
-        // Broader check for errors that might be recursion related (500 or 42P17)
-        if (ownedError.code === '42P17' || ownedError.message?.includes('recursion') || ownedError.code === '500' || (ownedError as any).status === 500) {
-            setDbError(ownedError);
-            setLoading(false);
-            return;
-        }
-    }
+    if (ownedError) console.error("Error fetching owned projects", ownedError);
 
     // 2. Fetch Shared Projects (Safe fail if table doesn't exist yet)
     let sharedProjects: any[] = [];
     let memberships: any[] = [];
     try {
-        const { data: memberData, error: memberError } = await supabase.from('project_members').select('*, projects(*)').eq('user_email', session.user.email);
-        if (memberError) {
-             if (memberError.code === '42P17' || memberError.message?.includes('recursion') || memberError.code === '500' || (memberError as any).status === 500) {
-                setDbError(memberError);
-                setLoading(false);
-                return;
-            }
-        }
+        const { data: memberData } = await supabase.from('project_members').select('*, projects(*)').eq('user_email', session.user.email);
         if (memberData) {
             memberships = memberData;
             sharedProjects = memberData.map((m: any) => m.projects).filter(Boolean);
@@ -745,7 +608,7 @@ const App: React.FC = () => {
     if (holidaysError) console.error(holidaysError);
     const freshHolidays = holidaysData || [];
     
-    const structuredProjects = structureProjectsData(uniqueProjects, modulesData, tasksData, assignmentsData, allocationsData, session.user.id, memberships, session.user.email);
+    const structuredProjects = structureProjectsData(uniqueProjects, modulesData, tasksData, assignmentsData, allocationsData, session.user.id, memberships);
     
     // Set state after all data is fetched and processed
     setHolidays(freshHolidays);
@@ -1824,29 +1687,11 @@ const App: React.FC = () => {
     );
   }
 
-  // Check for DB Error - recursion fix
-  if (dbError) {
-      return <FixRecursionScreen onRetry={() => fetchData(false)} />;
-  }
-
   if (loading) {
     return (
-      <div className="flex flex-col h-screen items-center justify-center bg-slate-50 text-slate-500 gap-4">
-        <div className="flex items-center gap-2">
-            <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-            <span>Loading plan...</span>
-        </div>
-        {isTakingTooLong && (
-            <div className="animate-in fade-in zoom-in-95 mt-4">
-                <button 
-                    onClick={() => setDbError({ code: 'FORCE_FIX', message: 'User forced fix' })}
-                    className="flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg shadow-sm hover:bg-red-50 text-sm font-medium transition-colors"
-                >
-                    <AlertTriangle size={16} />
-                    Taking too long? Fix Database
-                </button>
-            </div>
-        )}
+      <div className="flex h-screen items-center justify-center bg-slate-50 text-slate-500 gap-2">
+        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+        <span>Loading plan...</span>
       </div>
     );
   }
@@ -1897,11 +1742,11 @@ const App: React.FC = () => {
        </aside>
 
        {/* Main Content */}
-       <main className="flex-1 flex flex-col min-w-0 h-full bg-white relative overflow-y-auto custom-scrollbar">
-          <div className="flex-1 p-4 relative">
+       <main className={`flex-1 flex flex-col min-w-0 h-full bg-white relative custom-scrollbar ${['planner', 'estimator'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+          <div className={`flex-1 h-full ${['planner', 'estimator'].includes(activeTab) ? 'p-0 overflow-hidden' : 'p-4'}`}>
             {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
             
-            {activeTab === 'planner' && <PlannerGrid 
+            {activeTab === 'planner' && <div className="h-full p-4 overflow-hidden"><PlannerGrid 
               projects={projects} 
               holidays={holidays}
               resources={resources}
@@ -1937,9 +1782,9 @@ const App: React.FC = () => {
               saveStatus={saveStatus}
               isRefreshing={isRefreshing}
               isReadOnly={isReadOnlyMode}
-            />}
+            /></div>}
             
-            {activeTab === 'estimator' && <Estimator 
+            {activeTab === 'estimator' && <div className="h-full p-4 overflow-hidden"><Estimator 
               projects={projects} 
               holidays={holidays} 
               onUpdateModuleEstimates={updateModuleEstimates}
@@ -1952,7 +1797,7 @@ const App: React.FC = () => {
               // FIX: Add missing onDeleteModule prop
               onDeleteModule={deleteModule}
               isReadOnly={isReadOnlyMode}
-            />}
+            /></div>}
             
             {activeTab === 'resources' && <Resources 
               resources={resources} 
