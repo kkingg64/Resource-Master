@@ -1,7 +1,7 @@
 import { TimelineColumn, ViewMode, Holiday } from './types';
 
 // Mock "Government Database" - Expanded for 2024-2027
-export const GOV_HOLIDAYS_DB: Record<string, Omit<Holiday, 'id'>[]> = {
+export const GOV_HOLIDAYS_DB: Record<string, Omit<Holiday, 'id' | 'user_id'>[]> = {
   'HK': [
     // 2024
     { date: '2024-12-25', name: 'Christmas Day', country: 'HK' },
@@ -375,6 +375,28 @@ export const calculateWorkingDaysBetween = (startDateStr: string, endDateStr: st
     currentDate.setDate(currentDate.getDate() + 1);
   }
   return workingDays;
+};
+
+export const calculateTimeBasedProgress = (startDateStr: string, endDateStr: string): number => {
+  if (!startDateStr || !endDateStr) return 0;
+  
+  const now = new Date();
+  // Reset time to ensure day-based comparison
+  now.setHours(0, 0, 0, 0);
+  
+  const start = new Date(startDateStr.replace(/-/g, '/'));
+  const end = new Date(endDateStr.replace(/-/g, '/'));
+  
+  if (now < start) return 0;
+  if (now > end) return 100;
+  
+  const totalDuration = end.getTime() - start.getTime();
+  if (totalDuration <= 0) return 100; // Single day task passed
+  
+  const elapsed = now.getTime() - start.getTime();
+  const progress = Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
+  
+  return Math.round(progress);
 };
 
 // Helper function for shared FP logic
