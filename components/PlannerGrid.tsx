@@ -136,7 +136,6 @@ interface PlannerGridProps {
   saveStatus: 'idle' | 'saving' | 'success' | 'error';
   isRefreshing: boolean;
   isReadOnly?: boolean;
-  isOwner?: boolean;
 }
 
 const SaveStatusIndicator: React.FC<{ status: PlannerGridProps['saveStatus'] }> = ({ status }) => {
@@ -351,7 +350,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   saveStatus,
   isRefreshing,
   isReadOnly = false,
-  isOwner = true,
 }) => {
   // --- Persistent State Initialization ---
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>(() => {
@@ -732,12 +730,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         let currentModule: ProjectModule | null = null;
         let currentTask: ProjectTask | null = null;
         planJson.forEach((row, index) => {
+            /* Added missing user_id property to correctly satisfy the Project interface during import */
             if (row.Project && row.Project !== currentProject?.name) { currentProject = { id: `p-${index}`, name: row.Project, modules: [], user_id: 'imported' }; importedProjects.push(currentProject); currentModule = null; currentTask = null; }
             if (!currentProject) return;
             if (row.Module && row.Module !== currentModule?.name) { currentModule = { id: `m-${index}`, name: row.Module, tasks: [], functionPoints: 0, legacyFunctionPoints: 0 }; currentProject.modules.push(currentModule); currentTask = null; }
             if (!currentModule) return;
             if (row.Task && row.Task !== currentTask?.name) { currentTask = { id: `t-${index}`, name: row.Task, assignments: [] }; currentModule.tasks.push(currentTask); }
-            if (!currentProject) return;
+            if (!currentProject) return; // redundant but for TS safety
             if (!currentTask) return;
             const allocations: { weekId: string, count: number }[] = [];
             Object.keys(row).forEach(key => { if (/^\d{4}-\d{2}$/.test(key)) { allocations.push({ weekId: key, count: Number(row[key]) }); } });
@@ -981,10 +980,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const currentColumnIndex = timeline.findIndex(c => isCurrentColumn(c));
   const stickyLeftOffset = sidebarWidth + startColWidth + durationColWidth + dependencyColWidth;
 
-  const assignmentRenderInfo = useMemo<{ 
-      map: Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>; 
-      totalHeight: number 
-  }>(() => {
+  const assignmentRenderInfo = useMemo(() => {
     const map = new Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>();
     let rowIndex = 0;
     const HEADER_HEIGHT = (showYearRow ? 32 : 0) + (showMonthRow ? 32 : 0) + 32;
@@ -1033,14 +1029,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             style={{ display: 'none' }}
         ></div>
 
-        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50 relative h-14">
-          
-          {/* LEFT: View Controls */}
-          <div className="flex items-center gap-4 z-10">
+        <div className="px-4 py-3 border-b border-slate-200 flex justify-between items-center bg-slate-50 relative z-[60]">
+          <div className="flex items-center gap-4">
              <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-500" /><span className="text-sm font-semibold text-slate-700">Timeline</span></div>
-             
              <div className="relative">
-                <button ref={toggleButtonRef} onClick={(e) => { e.stopPropagation(); setShowToggleMenu(!showToggleMenu); }} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors shadow-sm">
+                <button ref={toggleButtonRef} onClick={(e) => { e.stopPropagation(); setShowToggleMenu(!showToggleMenu); }} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors">
                   <Eye size={14} /> View Options <ChevronDown size={12} />
                 </button>
                 {showToggleMenu && (
@@ -1050,46 +1043,33 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   </div>
                 )}
             </div>
-
             <div className="flex items-center gap-2 bg-slate-200 rounded-lg p-1">
                 <button onClick={() => setDisplayMode('allocation')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'allocation' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Grid View (Allocations)"><LayoutList size={14} /> Grid</button>
                 <button onClick={() => setDisplayMode('gantt')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'gantt' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Gantt View (Timeline Bars)"><CalendarRange size={14} /> Gantt</button>
             </div>
-          </div>
-
-          {/* CENTER: Timeline Navigation & Zoom (Absolute Centering) */}
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-4 z-0">
-             <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden shadow-sm">
-              <button onClick={() => onExtendTimeline('start')} className="px-3 py-1.5 hover:bg-slate-100 text-xs font-medium text-slate-600 border-r border-slate-200 transition-colors" title="Add Month to Start">&lt; +Month</button>
-              <button onClick={() => onExtendTimeline('end')} className="px-3 py-1.5 hover:bg-slate-100 text-xs font-medium text-slate-600 transition-colors" title="Add Month to End">+Month &gt;</button>
-            </div>
-            
             <div className="h-4 w-px bg-slate-300"></div>
-            
+            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden">
+              <button onClick={() => onExtendTimeline('start')} className="px-2 py-1 hover:bg-slate-100 text-xs text-slate-600 border-r border-slate-200" title="Add Month to Start">&lt; +Month</button>
+              <button onClick={() => onExtendTimeline('end')} className="px-2 py-1 hover:bg-slate-100 text-xs text-slate-600" title="Add Month to End">+Month &gt;</button>
+            </div>
+            <div className="h-4 w-px bg-slate-300"></div>
             <div className="flex items-center gap-2" title="Adjust Column Width">
               <Settings2 size={14} className="text-slate-400" />
-              <input type="range" min="20" max="100" value={colWidthBase} onChange={(e) => setColWidthBase(parseInt(e.target.value))} className="w-24 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 hover:accent-indigo-500" />
+              <input type="range" min="20" max="100" value={colWidthBase} onChange={(e) => setColWidthBase(parseInt(e.target.value))} className="w-20 h-1 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
             </div>
           </div>
-
-          {/* RIGHT: Actions */}
-          <div className="flex items-center gap-4 z-10">
+          <div className="flex gap-4 items-center">
             <div className="flex items-center gap-2">
-                <button onClick={onRefresh} disabled={isRefreshing} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm" title="Refresh data from server"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh</button>
+                <button onClick={onRefresh} disabled={isRefreshing} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Refresh data from server"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh</button>
                 <SaveStatusIndicator status={saveStatus} />
-                
-                <div className="w-px h-4 bg-slate-300 mx-1"></div>
-                
-                {!isReadOnly && <button onClick={onShowHistory} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1.5 rounded hover:bg-slate-100 border border-slate-200 transition-colors shadow-sm" title="View and restore saved versions"><History size={14} /></button>}
-                <button onClick={handleExportExcel} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1.5 rounded hover:bg-slate-100 border border-slate-200 transition-colors shadow-sm" title="Export the current plan as an Excel file"><Download size={14} /></button>
-                {!isReadOnly && <button onClick={() => importInputRef.current?.click()} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1.5 rounded hover:bg-slate-100 border border-slate-200 transition-colors shadow-sm" title="Import a plan from an Excel file"><Upload size={14} /></button>}
+                <div className="w-px h-4 bg-slate-300"></div>
+                {!isReadOnly && <button onClick={onShowHistory} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="View and restore saved versions"><History size={12} /></button>}
+                <button onClick={handleExportExcel} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Export the current plan as an Excel file"><Download size={12} /></button>
+                {!isReadOnly && <button onClick={() => importInputRef.current?.click()} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Import a plan from an Excel file"><Upload size={12} /></button>}
                 <input type="file" ref={importInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
             </div>
-            
             <div className="w-px h-4 bg-slate-300"></div>
-            
-            {!isReadOnly && <button onClick={onAddProject} className="text-xs flex items-center gap-1.5 bg-slate-800 text-white px-3 py-1.5 rounded hover:bg-slate-700 transition-colors shadow-sm font-medium"><Plus size={14} /> Add Project</button>}
-            
+            {!isReadOnly && <button onClick={onAddProject} className="text-xs flex items-center gap-1 bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 transition-colors"><Plus size={12} /> Add Project</button>}
             <div className="flex bg-slate-200 p-1 rounded-lg">
               {(['day', 'week', 'month'] as ViewMode[]).map((mode) => (
                 <button key={mode} onClick={() => setViewMode(mode)} className={`px-3 py-1 text-xs font-medium rounded-md transition-all capitalize ${viewMode === mode ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{mode}</button>
@@ -1139,7 +1119,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={(e) => handleResizeStart('dependency', dependencyColWidth, e)}></div>
                   </div>
 
-                  {Object.values(yearHeaders).map((group: { label: string; colspan: number }, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+                  {Object.values(yearHeaders).map((group, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                 </div>
                 {showMonthRow && (
                   <div className="flex bg-slate-100 border-b border-slate-200 sticky top-8 z-40 h-8 items-center">
@@ -1147,7 +1127,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
-                    {Object.values(monthHeaders).map((group: { label: string; colspan: number }, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-600 border-r border-slate-200 uppercase h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+                    {Object.values(monthHeaders).map((group, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-600 border-r border-slate-200 uppercase h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                   </div>
                 )}
                 <div className={`flex bg-slate-50 border-b border-slate-200 sticky z-40 shadow-sm h-8 items-center ${showMonthRow ? 'top-16' : 'top-8'}`}>
@@ -1594,8 +1574,20 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         <div style={{ top: contextMenu.y, left: contextMenu.x }} className="absolute z-50 bg-white shadow-xl rounded-md border border-slate-200 p-1 animate-in fade-in">
           {contextMenu.type === 'project' && ( <> <button onClick={() => { onAddModule(contextMenu.projectId); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"><Plus size={12} /> Add New Module</button> <div className="h-px bg-slate-100 my-1"></div> <button onClick={() => { onDeleteProject(contextMenu.projectId); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Project</button> </> )}
           {contextMenu.type === 'module' && contextMenu.moduleId && ( <> <button onClick={() => { handleAddTaskClick(contextMenu.projectId, contextMenu.moduleId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"><Plus size={12} /> Add New Task</button> <div className="h-px bg-slate-100 my-1"></div> <button onClick={() => { onDeleteModule(contextMenu.projectId, contextMenu.moduleId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Module</button> </> )}
-          {contextMenu.type === 'task' && contextMenu.moduleId && contextMenu.taskId && ( <> <button onClick={() => { onAddAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, Role.EA); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"><UserPlus size={12} /> Add Resource</button> <div className="h-px bg-slate-100 my-1"></div> <button onClick={() => { onDeleteTask(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Task</button> </> )}
-          {contextMenu.type === 'assignment' && contextMenu.assignmentId && contextMenu.moduleId && contextMenu.taskId && ( <> <button onClick={() => { onCopyAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"><Copy size={12} /> Duplicate Assignment</button> {onUpdateAssignmentProgress && ( <div className="px-3 py-1.5 text-xs flex items-center gap-2 text-slate-700"> <Percent size={12} /> <span>Progress</span> <input type="range" min="0" max="100" step="10" className="w-20 accent-indigo-600" onClick={(e) => e.stopPropagation()} defaultValue={projects.find(p => p.id === contextMenu.projectId)?.modules.find(m => m.id === contextMenu.moduleId)?.tasks.find(t => t.id === contextMenu.taskId)?.assignments.find(a => a.id === contextMenu.assignmentId)?.progress || 0} onChange={(e) => onUpdateAssignmentProgress(contextMenu.assignmentId!, parseInt(e.target.value))} /> </div> )} <div className="h-px bg-slate-100 my-1"></div> <button onClick={() => { onDeleteAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Assignment</button> </> )}
+          {contextMenu.type === 'task' && contextMenu.moduleId && contextMenu.taskId && ( 
+            <> 
+              <button onClick={() => { onAddAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, Role.EA); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"><UserPlus size={12} /> Add Resource</button> 
+              <div className="h-px bg-slate-100 my-1"></div> 
+              <button onClick={() => { onDeleteTask(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Task</button> 
+            </> 
+          )}
+          {contextMenu.type === 'assignment' && contextMenu.moduleId && contextMenu.taskId && contextMenu.assignmentId && ( 
+            <> 
+              <button onClick={() => { onCopyAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"><Copy size={12} /> Duplicate Assignment</button> 
+              <div className="h-px bg-slate-100 my-1"></div> 
+              <button onClick={() => { onDeleteAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Assignment</button> 
+            </> 
+          )}
         </div>
       )}
     </>
