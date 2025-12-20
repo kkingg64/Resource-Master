@@ -170,8 +170,8 @@ const shiftWeekIdByAmount = (weekId: string, amount: number): string => {
 
 // Fix DB Screen Component
 const FixRecursionScreen: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
-  const sql = `-- FIX RECURSION BY USING SECURITY DEFINER FUNCTIONS
--- These functions bypass RLS to prevent infinite loops.
+  const sql = `-- FIX POLICIES AND ENABLE GLOBAL RESOURCE ACCESS
+-- This script fixes recursion issues and makes Resources/Holidays editable by all team members.
 
 -- 1. Helper function to check if current user is a member of a project
 CREATE OR REPLACE FUNCTION is_project_member(_project_id uuid)
@@ -197,14 +197,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
--- 3. Reset Policies
+-- 3. Reset Policies for Projects
 DROP POLICY IF EXISTS "Projects Select Policy" ON projects;
 DROP POLICY IF EXISTS "Projects Manage Policy" ON projects;
 DROP POLICY IF EXISTS "Members Select Policy" ON project_members;
 DROP POLICY IF EXISTS "Members Manage Policy" ON project_members;
 
 -- 4. Projects Policy
--- Allow access if you are the owner OR a member
 CREATE POLICY "Projects Select Policy" ON projects
   FOR SELECT USING (
     user_id = auth.uid() 
@@ -216,7 +215,6 @@ CREATE POLICY "Projects Manage Policy" ON projects
   FOR ALL USING (user_id = auth.uid());
 
 -- 5. Members Policy
--- Allow access if it's your own membership OR you own the project
 CREATE POLICY "Members Select Policy" ON project_members
   FOR SELECT USING (
     user_email = auth.email() OR is_project_owner(project_id)
@@ -225,7 +223,22 @@ CREATE POLICY "Members Select Policy" ON project_members
 CREATE POLICY "Members Manage Policy" ON project_members
   FOR ALL USING (
     is_project_owner(project_id)
-  );`;
+  );
+
+-- 6. GLOBAL ACCESS for Resources & Holidays
+-- These tables are now shared across the organization.
+DROP POLICY IF EXISTS "Resources All Access" ON resources;
+CREATE POLICY "Resources All Access" ON resources
+  FOR ALL TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Holidays All Access" ON holidays;
+CREATE POLICY "Holidays All Access" ON holidays
+  FOR ALL TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Individual Holidays All Access" ON individual_holidays;
+CREATE POLICY "Individual Holidays All Access" ON individual_holidays
+  FOR ALL TO authenticated USING (true);
+`;
 
   return (
     <div className="fixed inset-0 bg-slate-50 z-[100] flex items-center justify-center p-4">
@@ -235,15 +248,15 @@ CREATE POLICY "Members Manage Policy" ON project_members
             <Database size={24} />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-red-900">Database Policy Repair</h2>
-            <p className="text-red-700 mt-1">Infinite recursion detected in Row Level Security (RLS) policies.</p>
+            <h2 className="text-xl font-bold text-red-900">Database Policy Update Required</h2>
+            <p className="text-red-700 mt-1">To enable Global Resources and Team Sharing, please update your database.</p>
           </div>
         </div>
         <div className="p-6">
           <p className="text-slate-600 mb-4 text-sm">
-            Your database policies may be stuck in a loop or incorrectly configured, preventing you from seeing your projects.
+            We've updated the permissions model to allow <strong>Shared Resources</strong> and prevent permission errors.
             <br/><br/>
-            <strong>Solution:</strong> Please run the following SQL script in your Supabase SQL Editor. It creates secure helper functions to safely handle permission checks.
+            <strong>Action Required:</strong> Copy the SQL script below and run it in your Supabase SQL Editor.
           </p>
           <div className="bg-slate-900 rounded-lg p-4 relative group mb-6">
             <pre className="text-xs text-slate-300 font-mono overflow-x-auto whitespace-pre-wrap max-h-64 custom-scrollbar">
@@ -487,14 +500,9 @@ const App: React.FC = () => {
   const isReadOnlyMode = currentRole === 'viewer';
   const isOwner = currentRole === 'owner';
 
-  // Filter resources and holidays to match the project owner
-  const activeProjectResources = useMemo(() => 
-    resources.filter(r => currentProject && (r.user_id === currentProject.user_id || !r.user_id)), // Show if matches owner OR is public (no user_id)
-  [resources, currentProject]);
-
-  const activeProjectHolidays = useMemo(() => 
-    holidays.filter(h => currentProject && (h.user_id === currentProject.user_id || !h.user_id)), // Show if matches owner OR is public (no user_id)
-  [holidays, currentProject]);
+  // Global Resources and Holidays are now available to everyone
+  const activeProjectResources = resources;
+  const activeProjectHolidays = holidays;
 
   const [timelineStart, setTimelineStart] = useState<WeekPoint>(DEFAULT_START);
   const [timelineEnd, setTimelineEnd] = useState<WeekPoint>(DEFAULT_END);
@@ -544,7 +552,13 @@ const App: React.FC = () => {
     payload: any,
     supabasePromise: PromiseLike<{ data: any; error: any }>
   ) => {
-    if (isReadOnlyMode) return { data: null, error: 'Read Only Mode' };
+    if (isReadOnlyMode) {
+        // Special case: Resource and Holiday edits are allowed globally even if project is read-only
+        const isGlobalEdit = message.includes('resource') || message.includes('holiday');
+        if (!isGlobalEdit) {
+            return { data: null, error: 'Read Only Mode' };
+        }
+    }
 
     const logId = log(message, payload);
     setSaveStatus('saving');
@@ -724,10 +738,6 @@ const App: React.FC = () => {
 
     const projectIds = uniqueProjects.map(p => p.id);
     
-    // Calculate Owner IDs for fetching resources/holidays
-    // This allows viewers to see resources owned by the project owner
-    const ownerIds = Array.from(new Set(uniqueProjects.map(p => p.user_id)));
-
     let modulesData = [], tasksData = [], assignmentsData = [], allocationsData = [];
 
     if (projectIds.length > 0) {
@@ -753,20 +763,19 @@ const App: React.FC = () => {
       }
     }
     
-    // Fetch resources (Fetch from all relevant owners so shared projects work)
+    // Fetch global resources (Accessible to all authenticated users)
     const { data: resourcesData, error: resourcesError } = await supabase
       .from('resources')
       .select('*, individual_holidays(*)')
-      .in('user_id', ownerIds)
       .order('name');
     
     if (resourcesError) console.error(resourcesError);
     const freshResources = resourcesData || [];
 
+    // Fetch global holidays (Accessible to all authenticated users)
     const { data: holidaysData, error: holidaysError } = await supabase
       .from('holidays')
-      .select('*')
-      .in('user_id', ownerIds);
+      .select('*');
       
     if (holidaysError) console.error(holidaysError);
     const freshHolidays = holidaysData || [];
@@ -1220,21 +1229,20 @@ const App: React.FC = () => {
   };
 
   const addResource = async (name: string, category: Role, region: string, type: 'Internal' | 'External') => {
-    if (isReadOnlyMode) return;
+    // Resources are now global - accessible by everyone
     const { error } = await callSupabase('CREATE resource', { name }, supabase.from('resources').insert({ name, category, holiday_region: region === 'No Region' ? null : region, type, user_id: session!.user.id }).select().single());
     if (error) { alert("Failed to add resource."); } else { fetchData(true); }
   };
   const deleteResource = async (id: string) => {
-    if (isReadOnlyMode) return;
+    // Resources are now global - accessible by everyone
     if (window.confirm('Delete resource?')) { const { error } = await callSupabase('DELETE resource', { id }, supabase.from('resources').delete().eq('id', id)); if (error) { alert("Failed to delete resource."); } else { fetchData(true); } }
   };
-  const updateResourceCategory = async (id: string, category: Role) => { if (isReadOnlyMode) return; const { error } = await callSupabase('UPDATE resource category', { id, category }, supabase.from('resources').update({ category }).eq('id', id)); if (error) alert("Failed to update resource category."); else fetchData(true); };
-  const updateResourceRegion = async (id: string, region: string | null) => { if (isReadOnlyMode) return; const { error } = await callSupabase('UPDATE resource region', { id, region }, supabase.from('resources').update({ holiday_region: region }).eq('id', id)); if (error) alert("Failed to update resource region."); else fetchData(true); };
-  const updateResourceType = async (id: string, type: 'Internal' | 'External') => { if (isReadOnlyMode) return; const { error } = await callSupabase('UPDATE resource type', { id, type }, supabase.from('resources').update({ type }).eq('id', id)); if (error) alert("Failed to update resource type."); else fetchData(true); };
+  const updateResourceCategory = async (id: string, category: Role) => { const { error } = await callSupabase('UPDATE resource category', { id, category }, supabase.from('resources').update({ category }).eq('id', id)); if (error) alert("Failed to update resource category."); else fetchData(true); };
+  const updateResourceRegion = async (id: string, region: string | null) => { const { error } = await callSupabase('UPDATE resource region', { id, region }, supabase.from('resources').update({ holiday_region: region }).eq('id', id)); if (error) alert("Failed to update resource region."); else fetchData(true); };
+  const updateResourceType = async (id: string, type: 'Internal' | 'External') => { const { error } = await callSupabase('UPDATE resource type', { id, type }, supabase.from('resources').update({ type }).eq('id', id)); if (error) alert("Failed to update resource type."); else fetchData(true); };
   
   // NEW: Rename Resource function
   const updateResourceName = async (id: string, name: string) => {
-    if (isReadOnlyMode) return;
     const resource = resources.find(r => r.id === id);
     const oldName = resource?.name;
     
@@ -1257,17 +1265,16 @@ const App: React.FC = () => {
 
   // Updated to accept an array of holidays for bulk insertion
   const addIndividualHolidays = async (resourceId: string, items: { date: string, name: string }[]) => { 
-      if (isReadOnlyMode) return;
       const toInsert = items.map(item => ({ resource_id: resourceId, date: item.date, name: item.name, user_id: session!.user.id }));
       const { error = null } = await callSupabase('ADD individual holidays', { count: toInsert.length }, supabase.from('individual_holidays').insert(toInsert)); 
       if (error) alert("Failed to add holidays."); 
       else fetchData(true); 
   };
   
-  const deleteIndividualHoliday = async (holidayId: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('DELETE individual holiday', { id: holidayId }, supabase.from('individual_holidays').delete().eq('id', holidayId)); if (error) alert("Failed to delete holiday."); else fetchData(true); };
-  const addHoliday = async (holidays: Omit<Holiday, 'id'>[]) => { if (isReadOnlyMode) return; const toInsert = holidays.map(h => ({ ...h, user_id: session!.user.id })); const { error } = await callSupabase('ADD holidays', { count: toInsert.length }, supabase.from('holidays').insert(toInsert)); if (error) alert("Failed to add holidays."); else fetchData(true); };
-  const deleteHoliday = async (id: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('DELETE holiday', { id }, supabase.from('holidays').delete().eq('id', id)); if (error) alert("Failed to delete holiday."); else fetchData(true); };
-  const deleteHolidaysByCountry = async (country: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('DELETE holidays by country', { country }, supabase.from('holidays').delete().eq('country', country).eq('user_id', session.user.id)); if (error) alert("Failed to delete holidays."); else fetchData(true); };
+  const deleteIndividualHoliday = async (holidayId: string) => { const { error } = await callSupabase('DELETE individual holiday', { id: holidayId }, supabase.from('individual_holidays').delete().eq('id', holidayId)); if (error) alert("Failed to delete holiday."); else fetchData(true); };
+  const addHoliday = async (holidays: Omit<Holiday, 'id'>[]) => { const toInsert = holidays.map(h => ({ ...h, user_id: session!.user.id })); const { error } = await callSupabase('ADD holidays', { count: toInsert.length }, supabase.from('holidays').insert(toInsert)); if (error) alert("Failed to add holidays."); else fetchData(true); };
+  const deleteHoliday = async (id: string) => { const { error } = await callSupabase('DELETE holiday', { id }, supabase.from('holidays').delete().eq('id', id)); if (error) alert("Failed to delete holiday."); else fetchData(true); };
+  const deleteHolidaysByCountry = async (country: string) => { const { error } = await callSupabase('DELETE holidays by country', { country }, supabase.from('holidays').delete().eq('country', country).eq('user_id', session.user.id)); if (error) alert("Failed to delete holidays."); else fetchData(true); };
   const saveCurrentVersion = async (name: string) => { if (isReadOnlyMode) return; const { error } = await callSupabase('SAVE version', { name }, supabase.from('versions').insert({ name, user_id: session!.user.id, data: { projects, resources, holidays } })); if (error) alert("Failed to save version."); };
   const restoreVersion = async (versionId: number) => { if (isReadOnlyMode) return; const { data, error } = await supabase.from('versions').select('data').eq('id', versionId).single(); if (error || !data) { alert("Failed to restore version."); return; } const snapshot = data.data; if (snapshot.projects) { alert("Version restore logic would implementation deep backend restore. Loading snapshot into memory only."); setProjects(snapshot.projects); setResources(snapshot.resources || []); setHolidays(snapshot.holidays || []); } };
 
@@ -2002,7 +2009,7 @@ const App: React.FC = () => {
               onUpdateResourceName={updateResourceName}
               onAddIndividualHoliday={addIndividualHolidays}
               onDeleteIndividualHoliday={deleteIndividualHoliday}
-              isReadOnly={isReadOnlyMode}
+              isReadOnly={false} 
             />}
             
             {activeTab === 'settings' && isOwner && <Settings 
@@ -2018,7 +2025,7 @@ const App: React.FC = () => {
               onAddHolidays={addHoliday}
               onDeleteHoliday={deleteHoliday}
               onDeleteHolidaysByCountry={deleteHolidaysByCountry}
-              isReadOnly={isReadOnlyMode}
+              isReadOnly={false}
             />}
           </div>
        </main>
