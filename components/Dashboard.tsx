@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation, Resource, Holiday } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
@@ -442,6 +441,73 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
         </div>
       </div>
 
+      {/* NEW: Upcoming Tasks Section (Moved above Weekly Pulse) */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <ArrowRight size={18} className="text-indigo-600" />
+                Upcoming Task Timeline (Next 2 Weeks)
+            </h3>
+            <span className="text-xs text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded">Sorted by Start Date</span>
+        </div>
+        <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+                    <tr>
+                        <th className="px-6 py-3 w-1/3">Task</th>
+                        <th className="px-6 py-3 w-1/4">Context</th>
+                        <th className="px-6 py-3 w-24">Status</th>
+                        <th className="px-6 py-3 w-48">Schedule</th>
+                        <th className="px-6 py-3">Progress</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                    {upcomingTasks.length === 0 ? (
+                        <tr>
+                            <td colSpan={5} className="p-8 text-center text-slate-400">
+                                No tasks starting or active in the next 2 weeks.
+                            </td>
+                        </tr>
+                    ) : (
+                        upcomingTasks.map((t) => (
+                            <tr key={`${t.id}`} className="hover:bg-slate-50 group">
+                                <td className="px-6 py-3 font-medium text-slate-700">
+                                    {t.task}
+                                </td>
+                                <td className="px-6 py-3">
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-semibold text-slate-600">{t.module}</span>
+                                        <span className="text-[10px] text-slate-400">{t.project}</span>
+                                    </div>
+                                </td>
+                                <td className="px-6 py-3">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${t.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-600'}`}>
+                                        {t.status}
+                                    </span>
+                                </td>
+                                <td className="px-6 py-3 font-mono text-xs text-slate-500">
+                                    <div className="flex items-center gap-1">
+                                        <span>{new Date(t.start).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>
+                                        <ArrowRight size={10} className="text-slate-300" />
+                                        <span>{new Date(t.end).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>
+                                    </div>
+                                </td>
+                                <td className="px-6 py-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden w-24">
+                                            <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${t.progress}%` }}></div>
+                                        </div>
+                                        <span className="text-xs font-bold text-slate-600 w-8 text-right">{t.progress}%</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))
+                    )}
+                </tbody>
+            </table>
+        </div>
+      </div>
+
       {/* Weekly Pulse Section (Grouped by Task) */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 overflow-hidden">
         <div className="flex items-center gap-2 mb-4 border-b border-slate-100 pb-2">
@@ -671,73 +737,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
               <Bar dataKey={Role.BRAND_SOLUTIONS} stackId="a" fill="#f97316" name="Brand Solutions" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* NEW: Upcoming Tasks Section */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-            <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                <ArrowRight size={18} className="text-indigo-600" />
-                Upcoming Task Timeline (Next 2 Weeks)
-            </h3>
-            <span className="text-xs text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded">Sorted by Start Date</span>
-        </div>
-        <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
-                    <tr>
-                        <th className="px-6 py-3 w-1/3">Task</th>
-                        <th className="px-6 py-3 w-1/4">Context</th>
-                        <th className="px-6 py-3 w-24">Status</th>
-                        <th className="px-6 py-3 w-48">Schedule</th>
-                        <th className="px-6 py-3">Progress</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                    {upcomingTasks.length === 0 ? (
-                        <tr>
-                            <td colSpan={5} className="p-8 text-center text-slate-400">
-                                No tasks starting or active in the next 2 weeks.
-                            </td>
-                        </tr>
-                    ) : (
-                        upcomingTasks.map((t) => (
-                            <tr key={`${t.id}`} className="hover:bg-slate-50 group">
-                                <td className="px-6 py-3 font-medium text-slate-700">
-                                    {t.task}
-                                </td>
-                                <td className="px-6 py-3">
-                                    <div className="flex flex-col">
-                                        <span className="text-xs font-semibold text-slate-600">{t.module}</span>
-                                        <span className="text-[10px] text-slate-400">{t.project}</span>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-3">
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${t.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-600'}`}>
-                                        {t.status}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-3 font-mono text-xs text-slate-500">
-                                    <div className="flex items-center gap-1">
-                                        <span>{new Date(t.start).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>
-                                        <ArrowRight size={10} className="text-slate-300" />
-                                        <span>{new Date(t.end).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-3">
-                                    <div className="flex items-center gap-2">
-                                        <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden w-24">
-                                            <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${t.progress}%` }}></div>
-                                        </div>
-                                        <span className="text-xs font-bold text-slate-600 w-8 text-right">{t.progress}%</span>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))
-                    )}
-                </tbody>
-            </table>
         </div>
       </div>
 
