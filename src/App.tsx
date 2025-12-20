@@ -1,4 +1,17 @@
-// ... imports
+import React, { useState, useEffect, useCallback } from 'react';
+import { Database, Check, Users, X, UserPlus, Share2, LayoutDashboard, Calendar as CalendarIcon, Calculator, Settings as SettingsIcon, ShieldCheck } from 'lucide-react';
+import { supabase } from './lib/supabaseClient';
+import { Project, Resource, Holiday, Role, ProjectRole, LogEntry, ProjectMember, ModuleType } from './types';
+import { Dashboard } from './components/Dashboard';
+import { PlannerGrid } from './components/PlannerGrid';
+import { Estimator } from './components/Estimator';
+import { Resources } from './components/Resources';
+import { AdminSettings } from './components/AdminSettings';
+import { Settings } from './components/Settings';
+import { AIAssistant } from './components/AIAssistant';
+import { DebugLog } from './components/DebugLog';
+import { VersionHistory } from './components/VersionHistory';
+import { DEFAULT_START, DEFAULT_END } from './constants';
 
 // Fix DB Screen Component
 const FixRecursionScreen: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
@@ -414,3 +427,155 @@ const ShareModal: React.FC<{ onClose: () => void, projectId: string, session: an
     </div>
   );
 };
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [session, setSession] = useState<any>(null);
+  const [debugLogs, setDebugLogs] = useState<LogEntry[]>([]);
+  const [isDebugLogEnabled, setIsDebugLogEnabled] = useState(false);
+  const [isAIEnabled, setIsAIEnabled] = useState(false);
+  const [showFixDb, setShowFixDb] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Load Data
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }: any) => {
+      setSession(session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchData = useCallback(async () => {
+    if (!session) return;
+    try {
+        const { data: projectsData } = await supabase.from('projects').select('*');
+        const { data: modulesData } = await supabase.from('modules').select('*');
+        const { data: tasksData } = await supabase.from('tasks').select('*');
+        const { data: assignmentsData } = await supabase.from('task_assignments').select('*');
+        const { data: allocationsData } = await supabase.from('resource_allocations').select('*');
+        
+        const { data: resData } = await supabase.from('resources').select('*, individual_holidays(*)');
+        const { data: holData } = await supabase.from('holidays').select('*');
+
+        if (projectsData) {
+            const assembledProjects: Project[] = projectsData.map((p: any) => ({
+                ...p,
+                modules: modulesData?.filter((m: any) => m.project_id === p.id).map((m: any) => ({
+                    ...m,
+                    tasks: tasksData?.filter((t: any) => t.module_id === m.id).map((t: any) => ({
+                        ...t,
+                        assignments: assignmentsData?.filter((a: any) => a.task_id === t.id).map((a: any) => ({
+                            ...a,
+                            allocations: allocationsData?.filter((al: any) => al.assignment_id === a.id) || []
+                        })) || []
+                    })) || []
+                })) || []
+            }));
+            setProjects(assembledProjects);
+        }
+        if (resData) setResources(resData);
+        if (holData) setHolidays(holData);
+
+    } catch (e) {
+        console.error(e);
+    }
+  }, [refreshTrigger, session]);
+
+  useEffect(() => {
+    if (session) fetchData();
+  }, [session, fetchData]);
+
+  // Placeholder handlers for Props (to satisfy TS)
+  const noop = async () => {};
+  
+  if (!session) {
+      return (
+        <div className="flex flex-col items-center justify-center h-screen bg-slate-100 gap-4">
+            <h1 className="text-2xl font-bold text-slate-800">Resource Master</h1>
+            <button onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })} className="px-6 py-3 bg-indigo-600 text-white rounded-lg shadow-lg hover:bg-indigo-700 transition-colors font-semibold">
+                Sign In with Google
+            </button>
+        </div>
+      );
+  }
+
+  return (
+    <div className="flex h-screen bg-slate-50 overflow-hidden">
+        {/* Sidebar Navigation */}
+        <div className="w-16 bg-slate-900 flex flex-col items-center py-4 gap-4 z-50">
+            <div className="p-2 bg-indigo-600 rounded-lg mb-4">
+                <LayoutDashboard className="text-white w-6 h-6" />
+            </div>
+            
+            <button onClick={() => setActiveTab('dashboard')} className={`p-3 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-white text-indigo-600 shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`} title="Dashboard">
+                <LayoutDashboard size={20} />
+            </button>
+            <button onClick={() => setActiveTab('planner')} className={`p-3 rounded-xl transition-all ${activeTab === 'planner' ? 'bg-white text-indigo-600 shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`} title="Planner">
+                <CalendarIcon size={20} />
+            </button>
+            <button onClick={() => setActiveTab('estimator')} className={`p-3 rounded-xl transition-all ${activeTab === 'estimator' ? 'bg-white text-indigo-600 shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`} title="Estimator">
+                <Calculator size={20} />
+            </button>
+            <button onClick={() => setActiveTab('resources')} className={`p-3 rounded-xl transition-all ${activeTab === 'resources' ? 'bg-white text-indigo-600 shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`} title="Resources">
+                <Users size={20} />
+            </button>
+             <button onClick={() => setActiveTab('admin')} className={`p-3 rounded-xl transition-all ${activeTab === 'admin' ? 'bg-white text-indigo-600 shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`} title="Admin Settings">
+                <ShieldCheck size={20} />
+            </button>
+            <div className="mt-auto">
+                 <button onClick={() => setActiveTab('settings')} className={`p-3 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-white text-indigo-600 shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`} title="Settings">
+                    <SettingsIcon size={20} />
+                </button>
+            </div>
+        </div>
+
+        <div className="flex-1 flex flex-col overflow-hidden">
+             {activeTab === 'dashboard' && <div className="p-6 overflow-auto h-full"><Dashboard projects={projects} resources={resources} holidays={holidays} /></div>}
+             {activeTab === 'planner' && <div className="p-6 overflow-hidden h-full flex flex-col"><PlannerGrid 
+                projects={projects} holidays={holidays} resources={resources}
+                timelineStart={DEFAULT_START} timelineEnd={DEFAULT_END}
+                onExtendTimeline={noop as any} onUpdateAllocation={noop as any} onUpdateAssignmentResourceName={noop as any}
+                onUpdateAssignmentDependency={noop as any} onAddTask={noop as any} onAddAssignment={noop as any}
+                onCopyAssignment={noop as any} onReorderModules={noop as any} onReorderTasks={noop as any}
+                onMoveTask={noop as any} onUpdateModuleType={noop as any} onReorderAssignments={noop as any}
+                onShiftTask={noop as any} onUpdateAssignmentSchedule={noop as any} onUpdateAssignmentProgress={noop as any}
+                onAddProject={noop as any} onAddModule={noop as any} onUpdateProjectName={noop as any}
+                onUpdateModuleName={noop as any} onUpdateTaskName={noop as any} onDeleteProject={noop as any}
+                onDeleteModule={noop as any} onDeleteTask={noop as any} onDeleteAssignment={noop as any}
+                onImportPlan={noop as any} onShowHistory={noop as any} onRefresh={() => setRefreshTrigger(p => p + 1)}
+                saveStatus="idle" isRefreshing={false}
+             /></div>}
+             {activeTab === 'estimator' && <div className="p-6 overflow-auto h-full"><Estimator 
+                projects={projects} holidays={holidays}
+                onUpdateModuleEstimates={noop as any} onUpdateTaskEstimates={noop as any} onUpdateModuleComplexity={noop as any}
+                onUpdateModuleStartDate={noop as any} onUpdateModuleDeliveryTask={noop as any} onUpdateModuleStartTask={noop as any}
+                onReorderModules={noop as any} onDeleteModule={noop as any}
+             /></div>}
+             {activeTab === 'resources' && <div className="p-6 overflow-auto h-full"><Resources 
+                resources={resources} onAddResource={noop as any} onDeleteResource={noop as any}
+                onUpdateResourceCategory={noop as any} onUpdateResourceRegion={noop as any} onUpdateResourceType={noop as any}
+                onUpdateResourceName={noop as any} onAddIndividualHoliday={noop as any} onDeleteIndividualHoliday={noop as any}
+             /></div>}
+             {activeTab === 'admin' && <div className="p-6 overflow-auto h-full"><AdminSettings 
+                holidays={holidays} onAddHolidays={noop as any} onDeleteHoliday={noop as any} onDeleteHolidaysByCountry={noop as any}
+             /></div>}
+             {activeTab === 'settings' && <div className="p-6 overflow-auto h-full"><Settings 
+                isDebugLogEnabled={isDebugLogEnabled} setIsDebugLogEnabled={setIsDebugLogEnabled}
+                isAIEnabled={isAIEnabled} setIsAIEnabled={setIsAIEnabled} onOpenDatabaseFix={() => setShowFixDb(true)}
+             /></div>}
+        </div>
+        
+        {showFixDb && <FixRecursionScreen onRetry={() => setShowFixDb(false)} />}
+        {isDebugLogEnabled && <DebugLog entries={debugLogs} setEntries={setDebugLogs} />}
+        {isAIEnabled && <AIAssistant projects={projects} resources={resources} onAddTask={noop as any} onAssignResource={noop as any} />}
+    </div>
+  );
+}
