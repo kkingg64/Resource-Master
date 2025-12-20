@@ -1449,6 +1449,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     title={`Duration: ${moduleTotalDuration} working days (${modProgress.toFixed(0)}%)`}
                                 >
                                     <div className={`h-full opacity-30 bg-black/25`} style={{ width: `${modProgress}%` }}></div>
+                                    {modProgress > 0 && (
+                                        <span className="absolute right-1 text-[9px] font-bold text-white/90 z-20 mix-blend-overlay pr-1">{Math.round(modProgress)}%</span>
+                                    )}
                                 </div>
                              )}
                             {timeline.map(col => {
@@ -1559,6 +1562,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             title={`Duration: ${totalDuration} working days (${taskProgress.toFixed(0)}%)`}
                                         >
                                             <div className="h-full bg-slate-600/30" style={{ width: `${taskProgress}%` }}></div>
+                                            {taskProgress > 0 && (
+                                                <span className="absolute right-1 text-[9px] font-bold text-white z-20 pr-1">{Math.round(taskProgress)}%</span>
+                                            )}
                                         </div>
                                     )}
                                     {timeline.map(col => {
