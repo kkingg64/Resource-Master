@@ -1224,6 +1224,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         }
                     }
 
+                    // --- NEW: Calculate Module Time-Based Progress ---
+                    let moduleTimeProgress = 0;
+                    if (moduleEarliestStartDate && moduleLatestEndDate) {
+                         const modEndDateStr = formatDateForInput(moduleLatestEndDate);
+                         moduleTimeProgress = calculateTimeBasedProgress(moduleEarliestStartDate, modEndDateStr);
+                    }
+                    // ------------------------------------------------
+
                     const { moduleStartIndex, moduleEndIndex } = (() => {
                         if (!moduleEarliestStartDate || !moduleLatestEndDate) return { moduleStartIndex: -1, moduleEndIndex: -1 };
                         
@@ -1291,8 +1299,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                         left: `${moduleStartIndex * colWidth + 2}px`,
                                         width: `${(moduleEndIndex - moduleStartIndex + 1) * colWidth - 4}px`,
                                     }}
-                                    title={`Duration: ${moduleTotalDuration} working days`}
-                                />
+                                    title={`Duration: ${moduleTotalDuration} working days (${moduleTimeProgress}%)`}
+                                >
+                                    <div className={`h-full opacity-30 bg-black/25`} style={{ width: `${moduleTimeProgress}%` }}></div>
+                                </div>
                              )}
                             {timeline.map(col => {
                                 const total = getModuleTotal(module, col);
@@ -1333,6 +1343,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   totalDuration = calculateWorkingDaysBetween(earliestStartDate, formatDateForInput(latestEndDate), projectHolidaySet);
                               }
                           }
+
+                          // --- NEW: Calculate Task Time-Based Progress ---
+                          let taskTimeProgress = 0;
+                          if (earliestStartDate && latestEndDate) {
+                               const tEndDateStr = formatDateForInput(latestEndDate);
+                               taskTimeProgress = calculateTimeBasedProgress(earliestStartDate, tEndDateStr);
+                          }
+                          // ----------------------------------------------
                           
                           const { taskStartIndex, taskEndIndex } = (() => {
                                 if (!earliestStartDate || !latestEndDate) return { taskStartIndex: -1, taskEndIndex: -1 };
@@ -1385,8 +1403,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                                 left: `${taskStartIndex * colWidth + 2}px`,
                                                 width: `${(taskEndIndex - taskStartIndex + 1) * colWidth - 4}px`,
                                             }}
-                                            title={`Duration: ${totalDuration} working days`}
-                                        />
+                                            title={`Duration: ${totalDuration} working days (${taskTimeProgress}%)`}
+                                        >
+                                            <div className="h-full bg-slate-600/30" style={{ width: `${taskTimeProgress}%` }}></div>
+                                        </div>
                                     )}
                                     {timeline.map(col => {
                                       const total = getTaskTotal(task, col);
