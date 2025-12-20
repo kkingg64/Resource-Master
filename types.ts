@@ -157,6 +157,7 @@ export interface Holiday {
   name: string;
   country: string; // Country code e.g., 'MY', 'SG', 'Global'
   user_id?: string; // Optional owner ID
+  duration?: number; // 1 for full day, 0.5 for half day
 }
 
 export interface IndividualHoliday {
@@ -164,6 +165,7 @@ export interface IndividualHoliday {
   date: string; // YYYY-MM-DD
   name: string;
   resource_id: string;
+  duration?: number; // 1 for full day, 0.5 for half day
 }
 
 export interface LogEntry {

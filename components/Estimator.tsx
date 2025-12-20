@@ -148,11 +148,13 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
     return () => window.removeEventListener('click', handleClick);
   }, []);
 
-  const holidaySet = useMemo(() => new Set(
+  const holidayMap = useMemo(() => {
+    const map = new Map<string, number>();
     holidays
         .filter(h => h.country === 'HK')
-        .map(h => h.date)
-  ), [holidays]);
+        .forEach(h => map.set(h.date, h.duration || 1));
+    return map;
+  }, [holidays]);
   
   useEffect(() => {
     let currentProject = projects.find(p => p.id === selectedProjectId);
@@ -212,7 +214,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
       let maxEndDate: Date | null = null;
       task.assignments.forEach(a => {
           if (a.startDate && a.duration) {
-              const endDateStr = calculateEndDate(a.startDate, a.duration, holidaySet);
+              const endDateStr = calculateEndDate(a.startDate, a.duration, holidayMap);
               const endDate = new Date(endDateStr.replace(/-/g, '/'));
               if (!maxEndDate || endDate > maxEndDate) {
                   maxEndDate = endDate;
@@ -303,7 +305,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         let estimatedDateStr: string | null = null;
         if (hasEffort && baseStartDate) { 
             if (totalDuration > 0) { 
-                estimatedDateStr = calculateEndDate(baseStartDate, totalDuration, holidaySet); 
+                estimatedDateStr = calculateEndDate(baseStartDate, totalDuration, holidayMap); 
             } else if (baseStartDate) { 
                 estimatedDateStr = formatDateForInput(new Date(baseStartDate.replace(/-/g, '/'))); 
             } 
@@ -317,14 +319,14 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         if (estimatedDateStr && plannerDateStr) { 
             if (estimatedDateStr <= plannerDateStr) { 
                 varianceStatus = 'safe'; 
-                let diff = calculateWorkingDaysBetween(estimatedDateStr, plannerDateStr, holidaySet) - 1; 
+                let diff = calculateWorkingDaysBetween(estimatedDateStr, plannerDateStr, holidayMap) - 1; 
                 if(estimatedDateStr === plannerDateStr) diff = 0; 
                 const savedDays = -diff; 
                 varianceText = `${savedDays}d`; 
                 varianceClass = 'text-green-600 font-bold'; 
             } else { 
                 varianceStatus = 'risk'; 
-                const diff = calculateWorkingDaysBetween(plannerDateStr, estimatedDateStr, holidaySet) - 1; 
+                const diff = calculateWorkingDaysBetween(plannerDateStr, estimatedDateStr, holidayMap) - 1; 
                 varianceText = `+${diff}d`; 
                 varianceClass = 'text-red-600 font-bold'; 
             } 
@@ -343,7 +345,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
         });
     });
     return calcMap;
-  }, [modules, holidaySet, allTasksMap, totalDevelopmentFP]);
+  }, [modules, holidayMap, allTasksMap, totalDevelopmentFP]);
 
   const groupedTotalsMap = useMemo(() => {
     const subtotals: Record<string, any> = {};
@@ -418,6 +420,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
 
       <div className="flex-1 overflow-auto bg-white relative">
         <table className="w-full text-left border-collapse table-fixed">
+            {/* ... (Keep existing layout) ... */}
             <colgroup>
                 <col className="w-8" />   {/* Drag */}
                 <col className="w-48" />  {/* Module Name */}
@@ -444,6 +447,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                 <col className="w-20" />  {/* Variance */}
             </colgroup>
             <thead className="bg-slate-50 text-slate-600 text-[10px] uppercase tracking-wider sticky top-0 z-20 shadow-sm font-semibold">
+                {/* ... (Keep existing Header) ... */}
                 <tr>
                     <th className="py-2 border-b border-slate-200 bg-slate-50"></th>
                     <th className="py-2 px-2 border-b border-slate-200 border-r text-left truncate bg-slate-50">Module / Task</th>
@@ -522,7 +526,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                         let subtotalVarianceClass = 'text-slate-400';
                         if (subtotalMaxEstDate && subtotalMaxPlanDate) {
                             const estStr = formatDateForInput(subtotalMaxEstDate); const planStr = formatDateForInput(subtotalMaxPlanDate);
-                            if (estStr <= planStr) { let diff = calculateWorkingDaysBetween(estStr, planStr, holidaySet) - 1; if(estStr === planStr) diff = 0; subtotalVarianceText = `${-diff}d`; subtotalVarianceClass = 'text-green-600 font-bold'; } else { const diff = calculateWorkingDaysBetween(planStr, estStr, holidaySet) - 1; subtotalVarianceText = `+${diff}d`; subtotalVarianceClass = 'text-red-600 font-bold'; }
+                            if (estStr <= planStr) { let diff = calculateWorkingDaysBetween(estStr, planStr, holidayMap) - 1; if(estStr === planStr) diff = 0; subtotalVarianceText = `${-diff}d`; subtotalVarianceClass = 'text-green-600 font-bold'; } else { const diff = calculateWorkingDaysBetween(planStr, estStr, holidayMap) - 1; subtotalVarianceText = `+${diff}d`; subtotalVarianceClass = 'text-red-600 font-bold'; }
                         }
 
                         return (
@@ -549,6 +553,7 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     return (
                         <React.Fragment key={m.id}>
                             <tr draggable={!isReadOnly} onDragStart={(e) => handleDragStart(e, index)} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, index)} className={`hover:bg-slate-50 transition-colors group ${draggedIndex === index ? 'opacity-40' : ''} ${typeStyle.rowBg}`} onContextMenu={(e) => { if (isReadOnly) return; e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.pageX, y: e.pageY, moduleId: m.id }); }}>
+                                {/* ... (Keep existing Module Row) ... */}
                                 <td className="text-center text-slate-300 cursor-grab active:cursor-grabbing border-b border-slate-100"><div className="flex justify-center group-hover:text-slate-500">{!isReadOnly && <GripVertical size={12} />}</div></td>
                                 <td className="px-2 py-1.5 border-b border-slate-100 border-r border-slate-200"><div className="flex items-center gap-1.5">{m.tasks.length > 0 && <button onClick={() => toggleModuleExpansion(m.id)} className="p-0.5 rounded hover:bg-black/5">{isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</button>}<Icon size={14} className="text-slate-400" title={MODULE_TYPE_DISPLAY_NAMES[moduleType]} /><span className="font-medium text-slate-700 truncate block w-full" title={m.name}>{m.name}</span></div></td>
                                 
@@ -595,10 +600,10 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                  const effectiveTaskStartDate = task.startDate || plannerTaskStartDate;
                                  const taskPlannedEndDate = getTaskLatestEndDate(task);
                                  let taskEstimatedEndDateStr: string | null = null;
-                                 if (effectiveTaskStartDate && taskTotalDuration > 0) { taskEstimatedEndDateStr = calculateEndDate(effectiveTaskStartDate, taskTotalDuration, holidaySet); } else if (effectiveTaskStartDate) { taskEstimatedEndDateStr = effectiveTaskStartDate; }
+                                 if (effectiveTaskStartDate && taskTotalDuration > 0) { taskEstimatedEndDateStr = calculateEndDate(effectiveTaskStartDate, taskTotalDuration, holidayMap); } else if (effectiveTaskStartDate) { taskEstimatedEndDateStr = effectiveTaskStartDate; }
                                  const taskPlannerDateStr = taskPlannedEndDate ? formatDateForInput(taskPlannedEndDate) : null;
                                  let taskVarianceStatus: 'safe' | 'risk' | 'unknown' = 'unknown'; let taskVarianceText = '-'; let taskVarianceClass = 'text-slate-400';
-                                 if (taskEstimatedEndDateStr && taskPlannerDateStr) { if (taskEstimatedEndDateStr <= taskPlannerDateStr) { taskVarianceStatus = 'safe'; let diff = calculateWorkingDaysBetween(taskEstimatedEndDateStr, taskPlannerDateStr, holidaySet) - 1; if(taskEstimatedEndDateStr === taskPlannerDateStr) diff = 0; taskVarianceText = `${-diff}d`; taskVarianceClass = 'text-green-600 font-bold'; } else { taskVarianceStatus = 'risk'; const diff = calculateWorkingDaysBetween(taskPlannerDateStr, taskEstimatedEndDateStr, holidaySet) - 1; taskVarianceText = `+${diff}d`; taskVarianceClass = 'text-red-600 font-bold'; } }
+                                 if (taskEstimatedEndDateStr && taskPlannerDateStr) { if (taskEstimatedEndDateStr <= taskPlannerDateStr) { taskVarianceStatus = 'safe'; let diff = calculateWorkingDaysBetween(taskEstimatedEndDateStr, taskPlannerDateStr, holidayMap) - 1; if(taskEstimatedEndDateStr === taskPlannerDateStr) diff = 0; taskVarianceText = `${-diff}d`; taskVarianceClass = 'text-green-600 font-bold'; } else { taskVarianceStatus = 'risk'; const diff = calculateWorkingDaysBetween(taskPlannerDateStr, taskEstimatedEndDateStr, holidayMap) - 1; taskVarianceText = `+${diff}d`; taskVarianceClass = 'text-red-600 font-bold'; } }
                                  const taskCellBg = taskVarianceStatus === 'risk' ? 'bg-red-50/30' : taskVarianceStatus === 'safe' ? 'bg-green-50/30' : '';
                                 return (
                                 <tr key={task.id} className="bg-slate-50/50 hover:bg-slate-100/50">
@@ -637,32 +642,4 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                         <input type="date" className="w-full h-full bg-transparent text-center text-xs border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 disabled:bg-slate-50/50" value={task.startDate || plannerTaskStartDate || ''} onChange={e => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { startDate: e.target.value || undefined })} disabled={isReadOnly} title={task.startDate ? "Manual Start Date" : "Planned Start Date (from Planner)"} />
                                     </td>
                                     <td className={`px-1 border-b border-slate-100 text-right align-middle ${taskCellBg}`}><div className="flex flex-col gap-0.5 justify-center h-full text-[9px]"><div className="flex items-center justify-between gap-1 text-slate-400"><span>Est:</span><span className="font-mono">{taskEstimatedEndDateStr ? new Date(taskEstimatedEndDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div><div className={`flex items-center justify-between gap-1 font-bold ${taskVarianceStatus === 'safe' ? 'text-green-700' : taskVarianceStatus === 'risk' ? 'text-red-700' : 'text-slate-600'}`}><span>Plan:</span><span className="font-mono">{taskPlannerDateStr ? new Date(taskPlannerDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div></div></td>
-                                    <td className={`px-1 border-b border-slate-100 text-center align-middle border-r border-slate-200 ${taskCellBg}`}><span className={`text-[10px] font-mono ${taskVarianceClass}`}>{taskVarianceText}</span></td>
-                                </tr>
-                            )})}
-                            {isLastOfType && <SubtotalRow />}
-                        </React.Fragment>
-                    );
-                })}
-            </tbody>
-        </table>
-      </div>
-      {contextMenu && (
-        <div style={{ top: contextMenu.y, left: contextMenu.x }} className="absolute z-50 bg-white shadow-xl rounded-md border border-slate-200 p-1 animate-in fade-in">
-          <button
-            onClick={() => {
-              if (window.confirm('Are you sure you want to delete this module?')) {
-                onDeleteModule(selectedProjectId, contextMenu.moduleId);
-              }
-              setContextMenu(null);
-            }}
-            className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"
-          >
-            <Trash2 size={12} /> Delete Module
-          </button>
-        </div>
-      )}
-      <div className="bg-slate-50 border-t border-slate-200 p-2 text-[10px] text-slate-400 text-center flex justify-between items-center px-4"><span>* FE/BE in parallel</span><div className="flex gap-4"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Saved Days (Negative)</span><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Delays (Positive)</span></div></div>
-    </div>
-  );
-};
+                                    <td className={`px-1 border-b border-slate-100 text-center align-

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Holiday } from '../types';
 import { GOV_HOLIDAYS_DB } from '../constants';
-import { Globe, Download, Trash2, CalendarDays, CheckCircle, Plus, Building } from 'lucide-react';
+import { Globe, Download, Trash2, CalendarDays, CheckCircle, Plus, Building, Clock } from 'lucide-react';
 
 interface AdminSettingsProps {
   holidays: Holiday[];
@@ -20,6 +20,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
   const [newHolidayStartDate, setNewHolidayStartDate] = useState('');
   const [newHolidayEndDate, setNewHolidayEndDate] = useState('');
   const [newHolidayName, setNewHolidayName] = useState('');
+  const [newHolidayDuration, setNewHolidayDuration] = useState<number>(1); // 1 = Full, 0.5 = Half
 
   const countries = [
     { code: 'CE', name: 'Central Europe' },
@@ -41,7 +42,10 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
     /* Guard against sync in read-only mode */
     if (isReadOnly) return;
     setIsSyncing(true);
-    const holidaysToSync = sourceHolidays.filter(sh => !holidays.some(h => h.date === sh.date && h.country === sh.country));
+    // When syncing public holidays, default to Full Day (1.0)
+    const holidaysToSync = sourceHolidays.filter(sh => !holidays.some(h => h.date === sh.date && h.country === sh.country))
+      .map(h => ({ ...h, duration: 1 }));
+      
     if (holidaysToSync.length > 0) {
       await onAddHolidays(holidaysToSync);
     }
@@ -66,6 +70,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
             date: current.toISOString().split('T')[0],
             name: newHolidayName.trim(),
             country: selectedCountryCode,
+            duration: newHolidayDuration
         });
         current.setUTCDate(current.getUTCDate() + 1);
     }
@@ -77,6 +82,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
     setNewHolidayStartDate('');
     setNewHolidayEndDate('');
     setNewHolidayName('');
+    setNewHolidayDuration(1);
     setIsAdding(false);
   };
 
@@ -174,7 +180,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
                  <h3 className="text-sm font-semibold text-slate-600 mb-2 flex items-center gap-2">
                    <Building size={14} /> Add Company Holiday to {selectedCountryName}
                  </h3>
-                 <form onSubmit={handleAddCustomHoliday} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+                 <form onSubmit={handleAddCustomHoliday} className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end">
                    <div className="flex flex-col gap-1">
                       <label className="text-[10px] font-bold text-slate-500 uppercase">From</label>
                       <input 
@@ -193,6 +199,17 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
                       onChange={e => setNewHolidayEndDate(e.target.value)}
                       className="p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
                       />
+                   </div>
+                   <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Duration</label>
+                      <select 
+                        value={newHolidayDuration} 
+                        onChange={(e) => setNewHolidayDuration(parseFloat(e.target.value))}
+                        className="p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                      >
+                        <option value={1}>Full Day</option>
+                        <option value={0.5}>Half Day</option>
+                      </select>
                    </div>
                    <div className="flex flex-col gap-1 md:col-span-2">
                       <label className="text-[10px] font-bold text-slate-500 uppercase">Holiday Name</label>
@@ -263,6 +280,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
                    <th className="p-3 font-semibold border-b w-32 pl-6">Date</th>
                    <th className="p-3 font-semibold border-b">Holiday Name</th>
                    <th className="p-3 font-semibold border-b w-24">Region</th>
+                   <th className="p-3 font-semibold border-b w-24">Duration</th>
                    <th className="p-3 font-semibold border-b w-24">Type</th>
                    <th className="p-3 font-semibold border-b w-16 text-right pr-6">Action</th>
                  </tr>
@@ -270,7 +288,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
                <tbody className="divide-y divide-slate-100">
                  {holidays.length === 0 && (
                    <tr>
-                     <td colSpan={5} className="p-8 text-center text-slate-400">
+                     <td colSpan={6} className="p-8 text-center text-slate-400">
                        No active holidays. Sync from a region or add a custom one above.
                      </td>
                    </tr>
@@ -278,7 +296,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
                  {sortedCountryCodes.map(countryCode => (
                     <React.Fragment key={countryCode}>
                         <tr className="bg-slate-50 border-y border-slate-200 sticky top-10 z-0">
-                            <td colSpan={5} className="px-4 py-2 text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50">
+                            <td colSpan={6} className="px-4 py-2 text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50">
                                 {countries.find(c => c.code === countryCode)?.name || countryCode} ({countryCode})
                             </td>
                         </tr>
@@ -290,6 +308,15 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${h.country === selectedCountryCode ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-600'}`}>
                                  {h.country}
                                </span>
+                             </td>
+                             <td className="p-3">
+                                {h.duration === 0.5 ? (
+                                    <span className="inline-flex items-center gap-1 text-xs font-medium text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                                        <Clock size={10} /> Half Day
+                                    </span>
+                                ) : (
+                                    <span className="text-xs text-slate-500">Full Day</span>
+                                )}
                              </td>
                              <td className="p-3">
                                 {isGovHoliday(h) ? (

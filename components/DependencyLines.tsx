@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { TaskAssignment, TimelineColumn } from '../types';
-import { formatDateForInput } from '../constants';
+import { formatDateForInput, getWeekIdFromDate } from '../constants';
 
 interface DependencyLinesProps {
   allAssignmentsMap: Map<string, TaskAssignment>;
@@ -25,15 +25,28 @@ export const DependencyLines: React.FC<DependencyLinesProps> = ({
   sidebarWidth,
 }) => {
 
-  const timelineDateMap = useMemo(() => {
-    const map = new Map<string, number>();
-    timeline.forEach((col, index) => {
-        if (col.date) {
-            map.set(formatDateForInput(col.date), index);
-        }
-    });
-    return map;
-  }, [timeline]);
+  // Robust column index finder that works for Day, Week, and Month views
+  const getColumnIndex = (dateStr: string): number => {
+    if (!dateStr || timeline.length === 0) return -1;
+    
+    // 1. Try exact date match (Day View)
+    // We check date string match to handle potential timezone/time component diffs
+    const dayIndex = timeline.findIndex(col => col.date && formatDateForInput(col.date) === dateStr);
+    if (dayIndex !== -1) return dayIndex;
+
+    const date = new Date(dateStr.replace(/-/g, '/'));
+    const weekId = getWeekIdFromDate(date);
+
+    // 2. Try Week match (Week View)
+    const weekIndex = timeline.findIndex(col => col.id === weekId);
+    if (weekIndex !== -1) return weekIndex;
+
+    // 3. Try Month match (Month View) - check if the column includes this week
+    const monthIndex = timeline.findIndex(col => col.weekIds?.includes(weekId));
+    if (monthIndex !== -1) return monthIndex;
+
+    return -1;
+  };
 
   const paths = useMemo(() => {
     const generatedPaths: { id: string, d: string }[] = [];
@@ -47,32 +60,43 @@ export const DependencyLines: React.FC<DependencyLinesProps> = ({
 
       if (!parent || !childInfo || !parentInfo || !childInfo.startDate) continue;
 
-      const parentEndIndex = timelineDateMap.get(parentInfo.endDate);
-      const childStartIndex = timelineDateMap.get(childInfo.startDate);
+      const parentEndIndex = getColumnIndex(parentInfo.endDate);
+      const childStartIndex = getColumnIndex(childInfo.startDate);
 
-      if (parentEndIndex === undefined || childStartIndex === undefined) continue;
+      if (parentEndIndex === -1 || childStartIndex === -1) continue;
 
-      const startX = (parentEndIndex + 1) * colWidth - 2;
+      // Coordinates relative to SVG origin (which is at sidebarWidth)
+      const startX = (parentEndIndex + 1) * colWidth; // Right edge of parent column
       const startY = parentInfo.y;
-      const endX = childStartIndex * colWidth + 8;
+      const endX = childStartIndex * colWidth; // Left edge of child column
       const endY = childInfo.y;
 
-      // Don't draw if tasks are visually far apart or inverted
-      if (endX < startX - 10 || Math.abs(startY - endY) > 800) continue;
+      const gap = 10; // elbow room
 
-      const midX = endX - 15;
-      
-      const d = `M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX} ${endY}`;
+      let d = '';
+
+      // Standard Finish-to-Start Path Routing
+      if (endX > startX + gap * 2) {
+          // Enough space for a standard S-curve
+          // Path: Start -> Right(gap) -> Vertical -> Left(gap from end) -> End
+          const turn2X = endX - gap;
+          d = `M ${startX} ${startY} L ${turn2X} ${startY} L ${turn2X} ${endY} L ${endX} ${endY}`;
+      } else {
+          // Close or Overlapping (Backwards dependency visual)
+          // Go right, then down, then back left
+          const turnX = Math.max(startX, endX) + gap;
+          d = `M ${startX} ${startY} L ${turnX} ${startY} L ${turnX} ${endY} L ${endX} ${endY}`;
+      }
 
       generatedPaths.push({ id: `${parent.id}-${child.id}`, d });
     }
     return generatedPaths;
-  }, [allAssignmentsMap, assignmentRenderInfo, timelineDateMap, colWidth]);
+  }, [allAssignmentsMap, assignmentRenderInfo, timeline, colWidth]);
 
   return (
     <svg 
       className="absolute top-0 left-0 pointer-events-none z-20"
-      width={timeline.length * colWidth + sidebarWidth}
+      width={timeline.length * colWidth + sidebarWidth} // Ensure width covers full area
       height={totalHeight}
       style={{ left: sidebarWidth }}
     >
@@ -85,18 +109,20 @@ export const DependencyLines: React.FC<DependencyLinesProps> = ({
           refY="1.75"
           orient="auto"
         >
-          <polygon points="0 0, 5 1.75, 0 3.5" fill="#4f46e5" />
+          <polygon points="0 0, 5 1.75, 0 3.5" fill="#6366f1" /> {/* Indigo-500 */}
         </marker>
       </defs>
       {paths.map(path => (
         <path
           key={path.id}
           d={path.d}
-          stroke="#4f46e5"
+          stroke="#6366f1" // Indigo-500
           strokeWidth="1.5"
           fill="none"
-          strokeOpacity="0.6"
+          strokeOpacity="0.8"
           markerEnd="url(#arrowhead)"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
       ))}
     </svg>

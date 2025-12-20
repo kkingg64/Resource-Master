@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType, ProjectRole, ProjectMember } from './types';
@@ -616,13 +617,17 @@ const App: React.FC = () => {
     }
   
     // Build holiday map for efficient lookup
-    const resourceHolidaysMap = new Map<string, Set<string>>();
-    const defaultHolidays = new Set(currentHolidays.filter(h => h.country === 'HK').map(h => h.date));
+    const resourceHolidaysMap = new Map<string, Map<string, number>>();
+    const defaultHolidays = new Map<string, number>();
+    currentHolidays.filter(h => h.country === 'HK').forEach(h => defaultHolidays.set(h.date, h.duration || 1));
     resourceHolidaysMap.set('Unassigned', defaultHolidays);
     currentResources.forEach(res => {
       const regional = currentHolidays.filter(h => h.country === res.holiday_region);
       const individual = res.individual_holidays || [];
-      resourceHolidaysMap.set(res.name, new Set([...regional, ...individual].map(h => h.date)));
+      const map = new Map<string, number>();
+      regional.forEach(h => map.set(h.date, h.duration || 1));
+      individual.forEach(h => map.set(h.date, h.duration || 1));
+      resourceHolidaysMap.set(res.name, map);
     });
   
     let minDate: Date | null = null;
@@ -647,8 +652,8 @@ const App: React.FC = () => {
                 if (!isNaN(startDate.getTime())) {
                   updateMinMax(startDate);
                   if (assignment.duration) {
-                    const holidaySet = resourceHolidaysMap.get(assignment.resourceName || 'Unassigned') || defaultHolidays;
-                    const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, holidaySet);
+                    const holidayMap = resourceHolidaysMap.get(assignment.resourceName || 'Unassigned') || defaultHolidays;
+                    const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, holidayMap);
                     const endDate = new Date(endDateStr.replace(/-/g, '/'));
                     if (!isNaN(endDate.getTime())) {
                       updateMinMax(endDate);
@@ -850,7 +855,10 @@ const App: React.FC = () => {
              // Default to HK if unassigned or no region, to be safe
              const regional = res?.holiday_region ? holidays.filter(h => h.country === res.holiday_region) : holidays.filter(h => h.country === 'HK');
              const individual = res?.individual_holidays || [];
-             return new Set([...regional, ...individual].map(h => h.date));
+             const map = new Map<string, number>();
+             regional.forEach(h => map.set(h.date, h.duration || 1));
+             individual.forEach(h => map.set(h.date, h.duration || 1));
+             return map;
         };
 
         const parentHolidays = getHolidays(parent.resourceName || 'Unassigned');
@@ -1104,7 +1112,10 @@ const App: React.FC = () => {
                      const res = resources.find(r => r.name === resName);
                      const regional = res?.holiday_region ? holidays.filter(h => h.country === res.holiday_region) : holidays.filter(h => h.country === 'HK');
                      const individual = res?.individual_holidays || [];
-                     return new Set([...regional, ...individual].map(h => h.date));
+                     const map = new Map<string, number>();
+                     regional.forEach(h => map.set(h.date, h.duration || 1));
+                     individual.forEach(h => map.set(h.date, h.duration || 1));
+                     return map;
                  };
                  const parentEndDate = calculateEndDate(parentAssignment.startDate, parentAssignment.duration || 1, getHolidays(parentAssignment.resourceName || 'Unassigned'));
                  const myHolidays = getHolidays(targetAssignment.resourceName || 'Unassigned');

@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from './types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from './constants';
@@ -164,13 +165,13 @@ interface GridNumberInputProps {
   rowIndex: number;
   colIndex: number;
   width: number;
-  isHoliday: boolean;
+  holidayDuration: number;
   isCurrent: boolean;
   holidayName?: string | any;
   disabled?: boolean;
 }
 
-const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNavigate, rowIndex, colIndex, width, isHoliday, isCurrent, holidayName, disabled }) => {
+const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNavigate, rowIndex, colIndex, width, holidayDuration, isCurrent, holidayName, disabled }) => {
   const [localValue, setLocalValue] = useState(value === 0 ? '' : String(value));
   const [isEditing, setIsEditing] = useState(false);
 
@@ -201,37 +202,54 @@ const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNa
       }
   };
 
+  let bgClass = '';
+  if (holidayDuration === 1) {
+      bgClass = 'bg-[repeating-linear-gradient(45deg,theme(colors.red.50),theme(colors.red.50)_5px,theme(colors.red.100)_5px,theme(colors.red.100)_10px)]';
+  } else if (holidayDuration === 0.5) {
+      bgClass = 'bg-[repeating-linear-gradient(45deg,theme(colors.orange.50),theme(colors.orange.50)_5px,theme(colors.orange.100)_5px,theme(colors.orange.100)_10px)]';
+  } else if (isCurrent) {
+      bgClass = 'bg-amber-100 ring-1 ring-inset ring-amber-300';
+  }
+
   return (
       <div 
-          className={`flex-shrink-0 border-r border-slate-100 relative ${isHoliday ? 'bg-[repeating-linear-gradient(45deg,theme(colors.red.50),theme(colors.red.50)_5px,theme(colors.red.100)_5px,theme(colors.red.100)_10px)]' : isCurrent ? 'bg-amber-100 ring-1 ring-inset ring-amber-300' : ''}`} 
+          className={`flex-shrink-0 border-r border-slate-100 relative ${bgClass}`} 
           style={{ width: `${width}px` }}
           title={typeof holidayName === 'string' ? holidayName : holidayName?.name}
       >
-          {isHoliday && holidayName ? (
+          {holidayDuration === 1 && holidayName ? (
               <div className="flex items-center justify-center h-full text-[10px] font-bold text-red-700 select-none">
                 {'country' in (holidayName as any) ? (holidayName as any).country : 'AL'}
               </div>
-          ) : disabled ? (
-              <div className="w-full h-full flex items-center justify-center text-[10px] text-slate-500 font-medium">
-                {localValue}
+          ) : holidayDuration === 0.5 && holidayName ? (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                 <div className="text-[8px] font-bold text-orange-700">0.5</div>
               </div>
-          ) : (
-              <input 
-                  type="text"
-                  data-r={rowIndex}
-                  data-c={colIndex}
-                  data-grid="planner"
-                  className={`w-full h-full text-center text-[10px] focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors
-                      ${(localValue && localValue !== '0') ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50/50'}
-                  `}
-                  value={localValue}
-                  placeholder="-"
-                  onChange={handleChange}
-                  onBlur={commit}
-                  onFocus={(e) => { setIsEditing(true); e.target.select(); }}
-                  onKeyDown={handleKeyDown}
-                  disabled={disabled}
-              />
+          ) : null}
+          
+          {(holidayDuration !== 1 || !holidayName) && (
+              disabled ? (
+                  <div className="w-full h-full flex items-center justify-center text-[10px] text-slate-500 font-medium relative z-10">
+                    {localValue}
+                  </div>
+              ) : (
+                  <input 
+                      type="text"
+                      data-r={rowIndex}
+                      data-c={colIndex}
+                      data-grid="planner"
+                      className={`w-full h-full text-center text-[10px] focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-10 relative transition-colors
+                          ${(localValue && localValue !== '0') ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50/50'}
+                      `}
+                      value={localValue}
+                      placeholder="-"
+                      onChange={handleChange}
+                      onBlur={commit}
+                      onFocus={(e) => { setIsEditing(true); e.target.select(); }}
+                      onKeyDown={handleKeyDown}
+                      disabled={disabled}
+                  />
+              )
           )}
       </div>
   );
@@ -430,9 +448,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const resizeData = useRef({ col: '', startX: 0, startWidth: 0 });
 
   // Use a consistent project-level holiday calendar (HK) for duration calculations.
-  const projectHolidaySet = useMemo(() => new Set(
-    holidays.filter(h => h.country === 'HK').map(h => h.date)
-  ), [holidays]);
+  const projectHolidayMap = useMemo(() => {
+    const map = new Map<string, number>();
+    holidays.filter(h => h.country === 'HK').forEach(h => {
+        map.set(h.date, h.duration || 1);
+    });
+    return map;
+  }, [holidays]);
 
   // Auto-fit sidebar width based on longest text
   useEffect(() => {
@@ -580,15 +602,18 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
 
   const resourceHolidaysMap = useMemo(() => {
-    const map = new Map<string, { holidays: (Omit<Holiday, 'id'> | IndividualHoliday)[], dateSet: Set<string> }>();
+    const map = new Map<string, { holidays: (Omit<Holiday, 'id'> | IndividualHoliday)[], holidayMap: Map<string, number> }>();
     
     const availableRegions = Array.from(new Set(holidays.map(h => h.country)));
     const defaultRegion = availableRegions.includes('HK') ? 'HK' : availableRegions[0];
     const defaultHolidays = defaultRegion ? holidays.filter(h => h.country === defaultRegion) : [];
     
+    const defaultHolidayMap = new Map<string, number>();
+    defaultHolidays.forEach(h => defaultHolidayMap.set(h.date, h.duration || 1));
+
     map.set('Unassigned', {
         holidays: defaultHolidays,
-        dateSet: new Set(defaultHolidays.map(h => h.date))
+        holidayMap: defaultHolidayMap
     });
 
     resources.forEach(resource => {
@@ -598,9 +623,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             
         const individual = resource.individual_holidays || [];
         const allHolidays = [...regional, ...individual];
+        const resHolidayMap = new Map<string, number>();
+        allHolidays.forEach(h => resHolidayMap.set(h.date, h.duration || 1));
+
         map.set(resource.name, {
             holidays: allHolidays,
-            dateSet: new Set(allHolidays.map(h => h.date))
+            holidayMap: resHolidayMap
         });
     });
     return map;
@@ -797,7 +825,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     if (viewMode === 'day') {
         if (!col.date) return 0;
         const dateStr = formatDateForInput(col.date);
-        if (resourceHolidayData?.dateSet.has(dateStr)) return 0;
+        const holDuration = resourceHolidayData?.holidayMap.get(dateStr) || 0;
+        if (holDuration === 1) return 0;
     }
 
     if (viewMode === 'week') {
@@ -998,8 +1027,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             task.assignments.forEach(assignment => {
                                 if (assignment.startDate && assignment.duration) {
                                     const resourceName = assignment.resourceName || 'Unassigned';
-                                    const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>();
-                                    const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, assignmentHolidays);
+                                    const assignmentHolidaysMap = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
+                                    const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, assignmentHolidaysMap);
                                     
                                     map.set(assignment.id, {
                                         rowIndex,
@@ -1210,8 +1239,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 earliestDateObj = startDate;
                             }
                             const resourceName = assignment.resourceName || 'Unassigned';
-                            const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>();
-                            const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidays);
+                            const assignmentHolidaysMap = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
+                            const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidaysMap);
                             const endDate = new Date(endDateStr.replace(/-/g, '/'));
                             if (!moduleLatestEndDate || endDate > moduleLatestEndDate) {
                                 moduleLatestEndDate = endDate;
@@ -1220,7 +1249,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         
                         if (earliestDateObj && moduleLatestEndDate) {
                             moduleEarliestStartDate = formatDateForInput(earliestDateObj);
-                            moduleTotalDuration = calculateWorkingDaysBetween(moduleEarliestStartDate, formatDateForInput(moduleLatestEndDate), projectHolidaySet);
+                            moduleTotalDuration = calculateWorkingDaysBetween(moduleEarliestStartDate, formatDateForInput(moduleLatestEndDate), projectHolidayMap);
                         }
                     }
 
@@ -1321,8 +1350,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                       earliestDateObj = startDate;
                                   }
                                   const resourceName = assignment.resourceName || 'Unassigned';
-                                  const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>();
-                                  const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidays);
+                                  const assignmentHolidaysMap = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
+                                  const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidaysMap);
                                   const endDate = new Date(endDateStr.replace(/-/g, '/'));
                                   if (!latestEndDate || endDate > latestEndDate) {
                                       latestEndDate = endDate;
@@ -1330,7 +1359,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               });
                               if (earliestDateObj && latestEndDate) {
                                   earliestStartDate = formatDateForInput(earliestDateObj);
-                                  totalDuration = calculateWorkingDaysBetween(earliestStartDate, formatDateForInput(latestEndDate), projectHolidaySet);
+                                  totalDuration = calculateWorkingDaysBetween(earliestStartDate, formatDateForInput(latestEndDate), projectHolidayMap);
                               }
                           }
                           
@@ -1407,8 +1436,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   assignmentStartDate = new Date(assignment.startDate!.replace(/-/g, '/'));
                                   const resourceName = assignment.resourceName || 'Unassigned'; 
                                   const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'); 
-                                  const assignmentHolidays = resourceHolidayData?.dateSet || new Set<string>();
-                                  endDateStr = calculateEndDate(assignment.startDate!, assignment.duration!, assignmentHolidays);
+                                  const assignmentHolidaysMap = resourceHolidayData?.holidayMap || new Map<string, number>();
+                                  endDateStr = calculateEndDate(assignment.startDate!, assignment.duration!, assignmentHolidaysMap);
                                   assignmentEndDate = new Date(endDateStr.replace(/-/g, '/'));
                                 } else {
                                   // Fallback for display if no schedule
@@ -1457,121 +1486,4 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   
                                   {/* Assignment Details Columns */}
                                   <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
-                                      {!isReadOnly && <div className="cursor-grab text-slate-300 hover:text-slate-500 mr-1" title="Drag to reorder assignment"><GripVertical size={14} /></div>}
-                                      <div className="relative w-full">
-                                        <button
-                                            data-datepicker-trigger
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                if(isReadOnly || !!assignment.parentAssignmentId) return;
-                                                setDatePickerState(prev => ({ assignmentId: prev.assignmentId === assignment.id ? null : assignment.id }))
-                                            }}
-                                            title="Start Date"
-                                            disabled={isReadOnly || !!assignment.parentAssignmentId}
-                                            className={`text-[11px] text-left w-full py-0.5 px-1 rounded-md bg-transparent hover:bg-slate-100 focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-transparent text-slate-600`}
-                                        >
-                                          {hasSchedule ? formatDateForInput(assignmentStartDate!) : 'No date'}
-                                        </button>
-                                        {datePickerState.assignmentId === assignment.id && (
-                                            <div className="absolute top-full left-0 z-50 mt-1" ref={datePickerContainerRef}>
-                                                <DatePicker 
-                                                    value={assignmentStartDate!}
-                                                    onChange={(newDate) => {
-                                                        handleAssignmentStartDateChange(assignment, formatDateForInput(newDate));
-                                                        setDatePickerState({ assignmentId: null });
-                                                    }}
-                                                    onClose={() => setDatePickerState({ assignmentId: null })}
-                                                />
-                                            </div>
-                                        )}
-                                      </div>
-                                  </div>
-                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
-                                      <input type="number" min="1" title="Duration (days)" disabled={isReadOnly} value={isEditingDuration ? editValue : (assignment.duration || '')} onFocus={() => { setEditingId(`duration::${assignment.id}`); setEditValue((assignment.duration || 1).toString()); }} onChange={(e) => setEditValue(e.target.value)} onBlur={() => saveDuration(assignment)} onKeyDown={(e) => { if (e.key === 'Enter') { saveDuration(assignment); (e.target as HTMLInputElement).blur(); } else if (e.key === 'Escape') { setEditingId(null); (e.target as HTMLInputElement).blur(); } }} ref={isEditingDuration ? editInputRef : undefined} className="text-[11px] py-0.5 px-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center hover:bg-slate-100 disabled:hover:bg-transparent" />
-                                  </div>
-                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-center px-1 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
-                                      <div className="relative w-full h-full flex items-center justify-center">
-                                           <select disabled={isReadOnly} value={assignment.parentAssignmentId || ''} onChange={(e) => onUpdateAssignmentDependency(assignment.id, e.target.value || null)} title="Task Dependency" className="absolute inset-0 w-full h-full text-transparent bg-transparent border-none appearance-none cursor-pointer focus:ring-1 focus:ring-indigo-500 rounded-md disabled:cursor-default">
-                                                <option value="" className="text-black">- No Dependency -</option>
-                                                {Object.entries(groupedParents).map(([label, group]) => ( <optgroup label={label} key={label}>{group.map(parent => ( <option key={parent.id} value={parent.id} className="text-black">{parent.name}</option> ))}</optgroup> ))}
-                                            </select>
-                                            {assignment.parentAssignmentId ? <Link size={14} className="text-indigo-600 pointer-events-none" /> : <Link2 size={14} className="text-slate-400 pointer-events-none" />}
-                                      </div>
-                                  </div>
-                                  
-                                  <div className="flex relative">
-                                    {displayMode === 'gantt' && hasSchedule && startIndex > -1 && endIndex > -1 && (
-                                        <div
-                                            className={`absolute top-1/2 -translate-y-1/2 h-4 z-10 ${roleStyle.bar} rounded-md flex items-center overflow-hidden`}
-                                            style={{
-                                                left: `${startIndex * colWidth + 2}px`,
-                                                width: `${(endIndex - startIndex + 1) * colWidth - 4}px`,
-                                            }}
-                                            title={`${assignment.role} - ${assignment.resourceName || 'Unassigned'} (${assignment.progress || 0}%)`}
-                                        >
-                                            <div className={`h-full opacity-30 ${roleStyle.fill}`} style={{ width: `${assignment.progress || 0}%` }}></div>
-                                            <span className="absolute left-2 text-[9px] font-bold text-slate-700 whitespace-nowrap truncate z-20 pointer-events-none">{assignment.resourceName || 'Unassigned'}</span>
-                                            {(assignment.progress || 0) > 0 && (
-                                                <span className="absolute right-2 text-[8px] font-bold text-slate-600 z-20 pointer-events-none bg-white/50 px-0.5 rounded">{assignment.progress}%</span>
-                                            )}
-                                        </div>
-                                    )}
-                                    {timeline.map((col, colIndex) => {
-                                        if (displayMode === 'allocation') {
-                                            const resourceName = assignment.resourceName || 'Unassigned';
-                                            const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned');
-                                            const dateStr = col.date ? formatDateForInput(col.date) : '';
-                                            const isHol = viewMode === 'day' && !!(resourceHolidayData && resourceHolidayData.dateSet.has(dateStr));
-                                            const holidayInfo = isHol ? resourceHolidayData!.holidays.find(h => h.date === dateStr) : undefined;
-                                            const raw = getRawCellValue(assignment, col);
-                                            return (
-                                                <GridNumberInput
-                                                    key={`${assignment.id}-${col.id}`}
-                                                    value={raw}
-                                                    onChange={(val) => handleCellUpdate(project.id, module.id, task.id, assignment.id, col, val)}
-                                                    onNavigate={handleNavigate}
-                                                    rowIndex={currentRowIndex}
-                                                    colIndex={colIndex}
-                                                    width={colWidth}
-                                                    isHoliday={isHol}
-                                                    holidayName={holidayInfo}
-                                                    isCurrent={false}
-                                                    disabled={isReadOnly}
-                                                />
-                                            );
-                                        } else {
-                                            return (
-                                                <div key={`${assignment.id}-${col.id}`} className="flex-shrink-0 border-r border-slate-100" style={{ width: `${colWidth}px` }} />
-                                            );
-                                        }
-                                    })}
-                                  </div>
-                                </div>
-                              )})}
-                            </React.Fragment>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </React.Fragment>
-              );
-            })}
-            
-            <div className="flex bg-slate-800 text-white border-t border-slate-700 sticky bottom-0 z-30 shadow-[0_-4px_10px_rgba(0,0,0,0.2)] mt-0.5">
-              <div className="flex-shrink-0 px-3 py-1.5 border-r border-slate-700 sticky left-0 bg-slate-800 z-50 font-bold text-xs shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)] flex items-center" style={stickyStyle}>GRAND TOTAL</div>
-              
-              <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
-              <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
-              <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
-
-              {timeline.map(col => { const total = projects.reduce((acc, p) => acc + getProjectTotal(p, col), 0); return ( <div key={`total-${col.id}`} className={`flex-shrink-0 border-r border-slate-700 flex items-center justify-center text-[10px] font-mono font-bold`} style={{ width: `${colWidth}px` }}>{total > 0 && displayMode === 'allocation' ? formatValue(total) : ''}</div> ); })}
-            </div>
-          </div>
-        </div>
-      </div>
-      {contextMenu && (
-        <div style={{ top: contextMenu.y, left: contextMenu.x }} className="absolute z-50 bg-white shadow-xl rounded-md border border-slate-200 p-1 animate-in fade-in">
-          {contextMenu.type === 'project' && ( <> <button onClick={() => { onAddModule(contextMenu.projectId); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"><Plus size={12} /> Add New Module</button> <div className="h-px bg-slate-100 my-1"></div> <button onClick={() => { onDeleteProject(contextMenu.projectId); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Project</button> </> )}
-          {contextMenu.type === 'module' && contextMenu.moduleId && ( <> <button onClick={() => { handleAddTaskClick(contextMenu.projectId, contextMenu.moduleId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"><Plus size={12} /> Add New Task</button> <div className="h-px bg-slate-100 my-1"></div> <button onClick={() => { onDeleteModule(contextMenu.projectId, contextMenu.moduleId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Module</button> </> )}
-          {contextMenu.type === 'task' && contextMenu.moduleId && contextMenu.taskId && ( <> <button onClick={() => { onAddAssignment(contextMenu.projectId, contextMenu.moduleId!,
+                               

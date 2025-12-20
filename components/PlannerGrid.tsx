@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween, calculateTimeBasedProgress } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server, Filter, X } from 'lucide-react';
+import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server, Filter, X } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { DependencyLines } from './DependencyLines';
 
 // --- Custom DatePicker Component ---
@@ -163,13 +164,13 @@ interface GridNumberInputProps {
   rowIndex: number;
   colIndex: number;
   width: number;
-  isHoliday: boolean;
+  holidayDuration: number;
   isCurrent: boolean;
   holidayName?: string | any;
   disabled?: boolean;
 }
 
-const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNavigate, rowIndex, colIndex, width, isHoliday, isCurrent, holidayName, disabled }) => {
+const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNavigate, rowIndex, colIndex, width, holidayDuration, isCurrent, holidayName, disabled }) => {
   const [localValue, setLocalValue] = useState(value === 0 ? '' : String(value));
   const [isEditing, setIsEditing] = useState(false);
 
@@ -200,37 +201,54 @@ const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNa
       }
   };
 
+  let bgClass = '';
+  if (holidayDuration === 1) {
+      bgClass = 'bg-[repeating-linear-gradient(45deg,theme(colors.red.50),theme(colors.red.50)_5px,theme(colors.red.100)_5px,theme(colors.red.100)_10px)]';
+  } else if (holidayDuration === 0.5) {
+      bgClass = 'bg-[repeating-linear-gradient(45deg,theme(colors.orange.50),theme(colors.orange.50)_5px,theme(colors.orange.100)_5px,theme(colors.orange.100)_10px)]';
+  } else if (isCurrent) {
+      bgClass = 'bg-amber-100 ring-1 ring-inset ring-amber-300';
+  }
+
   return (
       <div 
-          className={`flex-shrink-0 border-r border-slate-100 relative ${isHoliday ? 'bg-[repeating-linear-gradient(45deg,theme(colors.red.50),theme(colors.red.50)_5px,theme(colors.red.100)_5px,theme(colors.red.100)_10px)]' : isCurrent ? 'bg-amber-100 ring-1 ring-inset ring-amber-300' : ''}`} 
+          className={`flex-shrink-0 border-r border-slate-100 relative ${bgClass}`} 
           style={{ width: `${width}px` }}
           title={typeof holidayName === 'string' ? holidayName : holidayName?.name}
       >
-          {isHoliday && holidayName ? (
+          {holidayDuration === 1 && holidayName ? (
               <div className="flex items-center justify-center h-full text-[10px] font-bold text-red-700 select-none">
                 {'country' in (holidayName as any) ? (holidayName as any).country : 'AL'}
               </div>
-          ) : disabled ? (
-              <div className="w-full h-full flex items-center justify-center text-[10px] text-slate-500 font-medium">
-                {localValue}
+          ) : holidayDuration === 0.5 && holidayName ? (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                 <div className="text-[8px] font-bold text-orange-700">0.5</div>
               </div>
-          ) : (
-              <input 
-                  type="text"
-                  data-r={rowIndex}
-                  data-c={colIndex}
-                  data-grid="planner"
-                  className={`w-full h-full text-center text-[10px] focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-0 transition-colors
-                      ${(localValue && localValue !== '0') ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50/50'}
-                  `}
-                  value={localValue}
-                  placeholder="-"
-                  onChange={handleChange}
-                  onBlur={commit}
-                  onFocus={(e) => { setIsEditing(true); e.target.select(); }}
-                  onKeyDown={handleKeyDown}
-                  disabled={disabled}
-              />
+          ) : null}
+          
+          {(holidayDuration !== 1 || !holidayName) && (
+              disabled ? (
+                  <div className="w-full h-full flex items-center justify-center text-[10px] text-slate-500 font-medium relative z-10">
+                    {localValue}
+                  </div>
+              ) : (
+                  <input 
+                      type="text"
+                      data-r={rowIndex}
+                      data-c={colIndex}
+                      data-grid="planner"
+                      className={`w-full h-full text-center text-[10px] focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-indigo-500 z-10 relative transition-colors
+                          ${(localValue && localValue !== '0') ? 'bg-indigo-50 font-medium text-indigo-700' : 'bg-transparent text-slate-400 hover:bg-slate-50/50'}
+                      `}
+                      value={localValue}
+                      placeholder="-"
+                      onChange={handleChange}
+                      onBlur={commit}
+                      onFocus={(e) => { setIsEditing(true); e.target.select(); }}
+                      onKeyDown={handleKeyDown}
+                      disabled={disabled}
+                  />
+              )
           )}
       </div>
   );
@@ -423,6 +441,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const [datePickerState, setDatePickerState] = useState<{ assignmentId: string | null }>({ assignmentId: null });
   
+  const importInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const toggleButtonRef = useRef<HTMLButtonElement>(null);
   const datePickerContainerRef = useRef<HTMLDivElement>(null);
@@ -433,9 +452,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const resizeData = useRef({ col: '', startX: 0, startWidth: 0 });
 
   // Use a consistent project-level holiday calendar (HK) for duration calculations.
-  const projectHolidaySet = useMemo(() => new Set(
-    holidays.filter(h => h.country === 'HK').map(h => h.date)
-  ), [holidays]);
+  const projectHolidayMap = useMemo(() => {
+    const map = new Map<string, number>();
+    holidays.filter(h => h.country === 'HK').forEach(h => {
+        map.set(h.date, h.duration || 1);
+    });
+    return map;
+  }, [holidays]);
 
   // Auto-fit sidebar width based on longest text
   useEffect(() => {
@@ -608,15 +631,18 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   };
 
   const resourceHolidaysMap = useMemo(() => {
-    const map = new Map<string, { holidays: (Omit<Holiday, 'id'> | IndividualHoliday)[], dateSet: Set<string> }>();
+    const map = new Map<string, { holidays: (Omit<Holiday, 'id'> | IndividualHoliday)[], holidayMap: Map<string, number> }>();
     
     const availableRegions = Array.from(new Set(holidays.map(h => h.country)));
     const defaultRegion = availableRegions.includes('HK') ? 'HK' : availableRegions[0];
     const defaultHolidays = defaultRegion ? holidays.filter(h => h.country === defaultRegion) : [];
     
+    const defaultHolidayMap = new Map<string, number>();
+    defaultHolidays.forEach(h => defaultHolidayMap.set(h.date, h.duration || 1));
+
     map.set('Unassigned', {
         holidays: defaultHolidays,
-        dateSet: new Set(defaultHolidays.map(h => h.date))
+        holidayMap: defaultHolidayMap
     });
 
     resources.forEach(resource => {
@@ -626,9 +652,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             
         const individual = resource.individual_holidays || [];
         const allHolidays = [...regional, ...individual];
+        const resHolidayMap = new Map<string, number>();
+        allHolidays.forEach(h => resHolidayMap.set(h.date, h.duration || 1));
+
         map.set(resource.name, {
             holidays: allHolidays,
-            dateSet: new Set(allHolidays.map(h => h.date))
+            holidayMap: resHolidayMap
         });
     });
     return map;
@@ -721,6 +750,63 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }
   };
 
+  const handleExportExcel = () => {
+    const planData: any[] = [];
+    const weekHeaders = getTimeline('week', timelineStart, timelineEnd).map(w => w.id);
+    projects.forEach(p => {
+      p.modules.forEach(m => {
+        m.tasks.forEach(t => {
+          t.assignments.forEach(a => {
+            const row: any = { 'Project': p.name, 'Module': m.name, 'Task': t.name, 'Role': a.role, 'Resource': a.resourceName || 'Unassigned' };
+            a.allocations.forEach(alloc => { if (weekHeaders.includes(alloc.weekId)) { row[alloc.weekId] = alloc.count; } });
+            planData.push(row);
+          });
+        });
+      });
+    });
+    const wb = XLSX.utils.book_new();
+    const planWs = XLSX.utils.json_to_sheet(planData, { header: ['Project', 'Module', 'Task', 'Role', 'Resource', ...weekHeaders] });
+    XLSX.utils.book_append_sheet(wb, planWs, 'Resource Plan');
+    XLSX.writeFile(wb, `oms-resource-plan-${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const handleImportExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (isReadOnly) return;
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'array' });
+        const planSheet = workbook.Sheets['Resource Plan'];
+        if (!planSheet) throw new Error('Resource Plan sheet not found');
+        const planJson = XLSX.utils.sheet_to_json<any>(planSheet);
+        const importedProjects: Project[] = [];
+        let currentProject: Project | null = null;
+        let currentModule: ProjectModule | null = null;
+        let currentTask: ProjectTask | null = null;
+        planJson.forEach((row, index) => {
+            /* Added missing user_id property to correctly satisfy the Project interface during import */
+            if (row.Project && row.Project !== currentProject?.name) { currentProject = { id: `p-${index}`, name: row.Project, modules: [], user_id: 'imported' }; importedProjects.push(currentProject); currentModule = null; currentTask = null; }
+            if (!currentProject) return;
+            if (row.Module && row.Module !== currentModule?.name) { currentModule = { id: `m-${index}`, name: row.Module, tasks: [], functionPoints: 0, legacyFunctionPoints: 0 }; currentProject.modules.push(currentModule); currentTask = null; }
+            if (!currentModule) return;
+            if (row.Task && row.Task !== currentTask?.name) { currentTask = { id: `t-${index}`, name: row.Task, assignments: [] }; currentModule.tasks.push(currentTask); }
+            if (!currentProject) return; // redundant but for TS safety
+            if (!currentTask) return;
+            const allocations: { weekId: string, count: number }[] = [];
+            Object.keys(row).forEach(key => { if (/^\d{4}-\d{2}$/.test(key)) { allocations.push({ weekId: key, count: Number(row[key]) }); } });
+            const assignment: TaskAssignment = { id: `a-${index}`, role: row.Role as Role, resourceName: row.Resource, allocations };
+            currentTask.assignments.push(assignment);
+        });
+        if (window.confirm('This will overwrite your current plan. Are you sure?')) { onImportPlan(importedProjects, []); }
+      } catch (error: any) { alert(`Failed to import plan: ${error.message}`); }
+    };
+    reader.readAsArrayBuffer(file);
+    event.target.value = '';
+  };
+
   const timeline = useMemo(() => getTimeline(viewMode, timelineStart, timelineEnd), [viewMode, timelineStart, timelineEnd]);
 
   const today = new Date();
@@ -768,7 +854,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     if (viewMode === 'day') {
         if (!col.date) return 0;
         const dateStr = formatDateForInput(col.date);
-        if (resourceHolidayData?.dateSet.has(dateStr)) return 0;
+        const holDuration = resourceHolidayData?.holidayMap.get(dateStr) || 0;
+        if (holDuration === 1) return 0;
     }
 
     if (viewMode === 'week') {
@@ -805,11 +892,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     return Number.isInteger(val) ? val.toString() : val.toFixed(1);
   };
 
-  // Updated to respect filter
-  const getTaskTotal = (task: ProjectTask, col: TimelineColumn) => task.assignments
-    .filter(isAssignmentVisible)
-    .reduce((sum, assign) => sum + getRawCellValue(assign, col), 0);
-    
+  const getTaskTotal = (task: ProjectTask, col: TimelineColumn) => task.assignments.reduce((sum, assign) => sum + getRawCellValue(assign, col), 0);
   const getModuleTotal = (module: ProjectModule, col: TimelineColumn) => module.tasks.reduce((sum, task) => sum + getTaskTotal(task, col), 0);
   const getProjectTotal = (project: Project, col: TimelineColumn) => project.modules.reduce((sum, module) => sum + getModuleTotal(module, col), 0);
 
@@ -962,23 +1045,19 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     const ROW_HEIGHT = 33;
 
     projects.forEach(project => {
-        if (!isProjectVisible(project)) return;
         rowIndex++; // Project header
         if (!collapsedProjects[project.id]) {
             project.modules.forEach(module => {
-                if (!isModuleVisible(module)) return;
                 rowIndex++; // Module header
                 if (!collapsedModules[module.id]) {
                     module.tasks.forEach(task => {
-                        if (!isTaskVisible(task)) return;
                         rowIndex++; // Task header
                         if (!collapsedTasks[task.id]) {
                             task.assignments.forEach(assignment => {
-                                if (!isAssignmentVisible(assignment)) return;
                                 if (assignment.startDate && assignment.duration) {
                                     const resourceName = assignment.resourceName || 'Unassigned';
-                                    const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>();
-                                    const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, assignmentHolidays);
+                                    const assignmentHolidaysMap = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
+                                    const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, assignmentHolidaysMap);
                                     
                                     map.set(assignment.id, {
                                         rowIndex,
@@ -996,7 +1075,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         }
     });
     return { map, totalHeight: HEADER_HEIGHT + rowIndex * ROW_HEIGHT };
-  }, [projects, collapsedProjects, collapsedModules, collapsedTasks, holidays, resources, showMonthRow, showYearRow, resourceFilter]);
+  }, [projects, collapsedProjects, collapsedModules, collapsedTasks, holidays, resources, showMonthRow, showYearRow, resourceHolidaysMap]);
 
   return (
     <>
@@ -1076,6 +1155,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     )}
                 </div>
             </div>
+            <div className="w-px h-4 bg-slate-300"></div>
+            {!isReadOnly && <button onClick={onShowHistory} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="View and restore saved versions"><History size={12} /></button>}
+            <button onClick={handleExportExcel} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Export the current plan as an Excel file"><Download size={12} /></button>
+            {!isReadOnly && <button onClick={() => importInputRef.current?.click()} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Import a plan from an Excel file"><Upload size={12} /></button>}
+            <input type="file" ref={importInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
             <div className="w-px h-4 bg-slate-300"></div>
             {!isReadOnly && <button onClick={onAddProject} className="text-xs flex items-center gap-1 bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 transition-colors"><Plus size={12} /> Add Project</button>}
             <div className="flex bg-slate-200 p-1 rounded-lg">
@@ -1221,8 +1305,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 earliestDateObj = startDate;
                             }
                             const resourceName = assignment.resourceName || 'Unassigned';
-                            const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>();
-                            const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidays);
+                            const assignmentHolidaysMap = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
+                            const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidaysMap);
                             const endDate = new Date(endDateStr.replace(/-/g, '/'));
                             if (!moduleLatestEndDate || endDate > moduleLatestEndDate) {
                                 moduleLatestEndDate = endDate;
@@ -1231,7 +1315,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         
                         if (earliestDateObj && moduleLatestEndDate) {
                             moduleEarliestStartDate = formatDateForInput(earliestDateObj);
-                            moduleTotalDuration = calculateWorkingDaysBetween(moduleEarliestStartDate, formatDateForInput(moduleLatestEndDate), projectHolidaySet);
+                            moduleTotalDuration = calculateWorkingDaysBetween(moduleEarliestStartDate, formatDateForInput(moduleLatestEndDate), projectHolidayMap);
                         }
                     }
 
@@ -1344,8 +1428,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                       earliestDateObj = startDate;
                                   }
                                   const resourceName = assignment.resourceName || 'Unassigned';
-                                  const assignmentHolidays = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.dateSet || new Set<string>();
-                                  const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidays);
+                                  const assignmentHolidaysMap = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
+                                  const endDateStr = calculateEndDate(assignment.startDate!, assignment.duration, assignmentHolidaysMap);
                                   const endDate = new Date(endDateStr.replace(/-/g, '/'));
                                   if (!latestEndDate || endDate > latestEndDate) {
                                       latestEndDate = endDate;
@@ -1353,7 +1437,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               });
                               if (earliestDateObj && latestEndDate) {
                                   earliestStartDate = formatDateForInput(earliestDateObj);
-                                  totalDuration = calculateWorkingDaysBetween(earliestStartDate, formatDateForInput(latestEndDate), projectHolidaySet);
+                                  totalDuration = calculateWorkingDaysBetween(earliestStartDate, formatDateForInput(latestEndDate), projectHolidayMap);
                               }
                           }
 
@@ -1442,8 +1526,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   assignmentStartDate = new Date(assignment.startDate!.replace(/-/g, '/'));
                                   const resourceName = assignment.resourceName || 'Unassigned'; 
                                   const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'); 
-                                  const assignmentHolidays = resourceHolidayData?.dateSet || new Set<string>();
-                                  endDateStr = calculateEndDate(assignment.startDate!, assignment.duration!, assignmentHolidays);
+                                  const assignmentHolidaysMap = resourceHolidayData?.holidayMap || new Map<string, number>();
+                                  endDateStr = calculateEndDate(assignment.startDate!, assignment.duration!, assignmentHolidaysMap);
                                   assignmentEndDate = new Date(endDateStr.replace(/-/g, '/'));
                                   
                                   // NEW: Calculate progress based on current day
@@ -1559,8 +1643,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             const resourceName = assignment.resourceName || 'Unassigned';
                                             const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned');
                                             const dateStr = col.date ? formatDateForInput(col.date) : '';
-                                            const isHol = viewMode === 'day' && !!(resourceHolidayData && resourceHolidayData.dateSet.has(dateStr));
-                                            const holidayInfo = isHol ? resourceHolidayData!.holidays.find(h => h.date === dateStr) : undefined;
+                                            
+                                            // Check for holiday duration on this date (0 = none, 1 = full, 0.5 = half)
+                                            const holDuration = viewMode === 'day' ? (resourceHolidayData?.holidayMap.get(dateStr) || 0) : 0;
+                                            
+                                            const holidayInfo = holDuration > 0 ? resourceHolidayData!.holidays.find(h => h.date === dateStr) : undefined;
                                             const raw = getRawCellValue(assignment, col);
                                             return (
                                                 <GridNumberInput
@@ -1571,7 +1658,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                                     rowIndex={currentRowIndex}
                                                     colIndex={colIndex}
                                                     width={colWidth}
-                                                    isHoliday={isHol}
+                                                    holidayDuration={holDuration}
                                                     holidayName={holidayInfo}
                                                     isCurrent={false}
                                                     disabled={isReadOnly}

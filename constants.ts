@@ -317,44 +317,67 @@ export const getWeekdaysForWeekId = (weekId: string): string[] => {
   return weekdays;
 };
 
-export const calculateEndDate = (startDate: string, duration: number, holidays: Set<string>): string => {
+// Holidays Map: Key = Date String (YYYY-MM-DD), Value = Deduction (1 for full day, 0.5 for half day)
+export const calculateEndDate = (startDate: string, duration: number, holidays: Map<string, number>): string => {
   if (!startDate || duration <= 0) return startDate;
 
   let currentDate = new Date(startDate.replace(/-/g, '/'));
   let workingDaysCounted = 0;
 
-  while (workingDaysCounted < duration) {
+  // Safety break to prevent infinite loops in extreme cases
+  let loopLimit = duration * 10 + 365; 
+  let loopCount = 0;
+
+  while (workingDaysCounted < duration && loopCount < loopLimit) {
     const dayOfWeek = currentDate.getDay();
     const dateStr = formatDateForInput(currentDate);
 
-    if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidays.has(dateStr)) {
-      workingDaysCounted++;
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      // Check holiday deduction. Default is 0 (working day). 
+      // If full holiday, value is 1. If half day, value is 0.5.
+      const holidayDeduction = holidays.get(dateStr) || 0;
+      const capacity = Math.max(0, 1 - holidayDeduction);
+      
+      workingDaysCounted += capacity;
     }
     
+    // Only advance if we haven't met the duration yet
+    // For half-day starts, we might finish on the same day if duration is 0.5
+    // But this logic simply advances. 
+    // To be precise: if we finish exactly at the end of this day, we stop.
+    // If we need more, we go to next day.
     if (workingDaysCounted < duration) {
       currentDate.setDate(currentDate.getDate() + 1);
     }
+    loopCount++;
   }
 
   return formatDateForInput(currentDate);
 };
 
-export const findNextWorkingDay = (dateStr: string, holidays: Set<string>): string => {
+export const findNextWorkingDay = (dateStr: string, holidays: Map<string, number>): string => {
   let currentDate = new Date(dateStr.replace(/-/g, '/'));
   currentDate.setDate(currentDate.getDate() + 1); // Start from the next day
 
-  while (true) {
+  let loopLimit = 365; 
+  let loopCount = 0;
+
+  while (loopCount < loopLimit) {
     const dayOfWeek = currentDate.getDay();
     const currentDayStr = formatDateForInput(currentDate);
 
-    if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidays.has(currentDayStr)) {
+    // If it's a weekday and has capacity > 0 (not a full holiday)
+    const holidayDeduction = holidays.get(currentDayStr) || 0;
+    if (dayOfWeek !== 0 && dayOfWeek !== 6 && holidayDeduction < 1) {
       return currentDayStr;
     }
     currentDate.setDate(currentDate.getDate() + 1);
+    loopCount++;
   }
+  return dateStr; // Fallback
 };
 
-export const calculateWorkingDaysBetween = (startDateStr: string, endDateStr: string, holidays: Set<string>): number => {
+export const calculateWorkingDaysBetween = (startDateStr: string, endDateStr: string, holidays: Map<string, number>): number => {
   if (!startDateStr || !endDateStr) return 0;
   
   let currentDate = new Date(startDateStr.replace(/-/g, '/'));
@@ -368,8 +391,9 @@ export const calculateWorkingDaysBetween = (startDateStr: string, endDateStr: st
     const dayOfWeek = currentDate.getDay();
     const dateStr = formatDateForInput(currentDate);
 
-    if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidays.has(dateStr)) {
-      workingDays++;
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+       const holidayDeduction = holidays.get(dateStr) || 0;
+       workingDays += Math.max(0, 1 - holidayDeduction);
     }
     
     currentDate.setDate(currentDate.getDate() + 1);
