@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, ProjectModule, ComplexityLevel, Holiday, Role, ProjectTask, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
-import { Calculator, GripVertical, ChevronRight, ChevronDown, Calendar as CalendarIcon, Link2, AlertCircle, CheckCircle2, Layers, Gem, ShieldCheck, Dot, Rocket, Server, Trash2 } from 'lucide-react';
+import { Calculator, GripVertical, ChevronRight, ChevronDown, Calendar as CalendarIcon, Link2, AlertCircle, CheckCircle2, Layers, Gem, ShieldCheck, Rocket, Server } from 'lucide-react';
 import { calculateEndDate, formatDateForInput, calculateWorkingDaysBetween, getTaskBaseName } from '../constants';
 
 interface EstimatorProps {
@@ -61,7 +61,6 @@ const ComplexitySelect: React.FC<{ value: ComplexityLevel, onChange: (val: Compl
     );
 };
 
-// --- Improved Input Component ---
 interface EstimatorNumberInputProps {
     value?: number | null;
     onChange: (val: number) => void;
@@ -90,7 +89,7 @@ const EstimatorNumberInput: React.FC<EstimatorNumberInputProps> = ({ value, onCh
         const trimmed = localValue.trim();
         if (trimmed === '') {
             if (value != null) {
-                onChange(0); // Explicitly clear if user deletes input, treat as override
+                onChange(0); 
             }
             return;
         }
@@ -420,34 +419,32 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
 
       <div className="flex-1 overflow-auto bg-white relative">
         <table className="w-full text-left border-collapse table-fixed">
-            {/* ... (Keep existing layout) ... */}
             <colgroup>
-                <col className="w-8" />   {/* Drag */}
-                <col className="w-48" />  {/* Module Name */}
-                <col className="w-14" />  {/* Ref FP */}
-                <col className="w-10" />  {/* Vel */}
-                <col className="w-10" />  {/* Team */}
-                <col className="w-12" />  {/* Cpx */}
-                <col className="w-12" />  {/* MD */}
-                <col className="w-12" />  {/* Wks */}
-                <col className="w-14" />  {/* FE FP */}
-                <col className="w-10" />  {/* Vel */}
-                <col className="w-10" />  {/* Team */}
-                <col className="w-12" />  {/* Diff */}
-                <col className="w-12" />  {/* MD */}
-                <col className="w-12" />  {/* Wks */}
-                <col className="w-14" />  {/* BE FP */}
-                <col className="w-10" />  {/* Vel */}
-                <col className="w-10" />  {/* Team */}
-                <col className="w-12" />  {/* Diff */}
-                <col className="w-12" />  {/* MD */}
-                <col className="w-12" />  {/* Wks */}
-                <col className="w-24" />  {/* Start */}
-                <col className="w-28" />  {/* ETA / Delivery Task */}
-                <col className="w-20" />  {/* Variance */}
+                <col className="w-8" />
+                <col className="w-48" />
+                <col className="w-14" />
+                <col className="w-10" />
+                <col className="w-10" />
+                <col className="w-12" />
+                <col className="w-12" />
+                <col className="w-12" />
+                <col className="w-14" />
+                <col className="w-10" />
+                <col className="w-10" />
+                <col className="w-12" />
+                <col className="w-12" />
+                <col className="w-12" />
+                <col className="w-14" />
+                <col className="w-10" />
+                <col className="w-10" />
+                <col className="w-12" />
+                <col className="w-12" />
+                <col className="w-12" />
+                <col className="w-24" />
+                <col className="w-28" />
+                <col className="w-20" />
             </colgroup>
             <thead className="bg-slate-50 text-slate-600 text-[10px] uppercase tracking-wider sticky top-0 z-20 shadow-sm font-semibold">
-                {/* ... (Keep existing Header) ... */}
                 <tr>
                     <th className="py-2 border-b border-slate-200 bg-slate-50"></th>
                     <th className="py-2 px-2 border-b border-slate-200 border-r text-left truncate bg-slate-50">Module / Task</th>
@@ -553,7 +550,6 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                     return (
                         <React.Fragment key={m.id}>
                             <tr draggable={!isReadOnly} onDragStart={(e) => handleDragStart(e, index)} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, index)} className={`hover:bg-slate-50 transition-colors group ${draggedIndex === index ? 'opacity-40' : ''} ${typeStyle.rowBg}`} onContextMenu={(e) => { if (isReadOnly) return; e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.pageX, y: e.pageY, moduleId: m.id }); }}>
-                                {/* ... (Keep existing Module Row) ... */}
                                 <td className="text-center text-slate-300 cursor-grab active:cursor-grabbing border-b border-slate-100"><div className="flex justify-center group-hover:text-slate-500">{!isReadOnly && <GripVertical size={12} />}</div></td>
                                 <td className="px-2 py-1.5 border-b border-slate-100 border-r border-slate-200"><div className="flex items-center gap-1.5">{m.tasks.length > 0 && <button onClick={() => toggleModuleExpansion(m.id)} className="p-0.5 rounded hover:bg-black/5">{isExpanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}</button>}<Icon size={14} className="text-slate-400" title={MODULE_TYPE_DISPLAY_NAMES[moduleType]} /><span className="font-medium text-slate-700 truncate block w-full" title={m.name}>{m.name}</span></div></td>
                                 
@@ -642,4 +638,17 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                                         <input type="date" className="w-full h-full bg-transparent text-center text-xs border-none focus:ring-1 focus:ring-inset focus:ring-indigo-500 disabled:bg-slate-50/50" value={task.startDate || plannerTaskStartDate || ''} onChange={e => onUpdateTaskEstimates(selectedProjectId, m.id, task.id, { startDate: e.target.value || undefined })} disabled={isReadOnly} title={task.startDate ? "Manual Start Date" : "Planned Start Date (from Planner)"} />
                                     </td>
                                     <td className={`px-1 border-b border-slate-100 text-right align-middle ${taskCellBg}`}><div className="flex flex-col gap-0.5 justify-center h-full text-[9px]"><div className="flex items-center justify-between gap-1 text-slate-400"><span>Est:</span><span className="font-mono">{taskEstimatedEndDateStr ? new Date(taskEstimatedEndDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div><div className={`flex items-center justify-between gap-1 font-bold ${taskVarianceStatus === 'safe' ? 'text-green-700' : taskVarianceStatus === 'risk' ? 'text-red-700' : 'text-slate-600'}`}><span>Plan:</span><span className="font-mono">{taskPlannerDateStr ? new Date(taskPlannerDateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '-'}</span></div></div></td>
-                                    <td className={`px-1 border-b border-slate-100 text-center align-
+                                    <td className={`px-1 border-b border-slate-100 text-center align-middle border-r border-slate-200 ${taskCellBg}`}><span className={`text-[10px] font-mono ${taskVarianceClass}`}>{taskVarianceText}</span></td>
+                                </tr>
+                                );
+                            })}
+                            {isLastOfType && <SubtotalRow />}
+                        </React.Fragment>
+                    );
+                })}
+            </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
