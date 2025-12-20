@@ -339,16 +339,26 @@ const ShareModal: React.FC<{ onClose: () => void, projectId: string, session: an
   };
 
   const updateMemberRole = async (memberId: string, role: ProjectRole) => {
+      // Optimistic Update
+      setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role } : m));
+      
       const { error } = await supabase.from('project_members').update({ role }).eq('id', memberId);
-      if (error) alert('Failed to update role');
-      else fetchMembers();
+      if (error) {
+          alert('Failed to update role');
+          fetchMembers(); // Revert on failure
+      }
   };
 
   const removeMember = async (memberId: string) => {
       if (!confirm("Remove this member?")) return;
+      // Optimistic Remove
+      setMembers(prev => prev.filter(m => m.id !== memberId));
+      
       const { error } = await supabase.from('project_members').delete().eq('id', memberId);
-      if (error) alert('Failed to remove member');
-      else fetchMembers();
+      if (error) {
+          alert('Failed to remove member');
+          fetchMembers(); // Revert on failure
+      }
   };
 
   const copyToClipboard = () => {
@@ -1930,6 +1940,26 @@ const App: React.FC = () => {
           </nav>
           
           <div className="p-2 border-t border-slate-800">
+             {/* User Avatar Section */}
+             <div className={`mb-2 ${isSidebarCollapsed ? 'flex justify-center' : ''}`}>
+                <div className={`flex items-center gap-3 p-2 rounded-lg bg-slate-800/50 border border-slate-700/50 transition-all ${isSidebarCollapsed ? 'justify-center w-10 h-10 p-0 rounded-full' : 'w-full'}`}>
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs flex-shrink-0 shadow-sm border border-white/10" title={session?.user?.email}>
+                        {session?.user?.email?.substring(0, 2).toUpperCase() || 'U'}
+                    </div>
+                    {!isSidebarCollapsed && (
+                        <div className="overflow-hidden flex-1 min-w-0">
+                            <p className="text-xs font-medium text-white truncate" title={session?.user?.email}>
+                                {session?.user?.email}
+                            </p>
+                            <p className="text-[10px] text-slate-400 truncate capitalize flex items-center gap-1">
+                                <span className={`w-1.5 h-1.5 rounded-full ${isOwner ? 'bg-green-500' : 'bg-amber-500'}`}></span>
+                                {currentRole}
+                            </p>
+                        </div>
+                    )}
+                </div>
+             </div>
+
              <button onClick={() => setShowShareModal(true)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 hover:text-white text-slate-400 mb-1" title="Share">
                 <Share2 size={18} /> {!isSidebarCollapsed && <span className="text-sm">Share</span>}
              </button>
