@@ -265,17 +265,17 @@ const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNa
 
 // Explicit Color Map to prevent Tailwind purging
 const ROLE_STYLES: Record<string, { border: string, bg: string, bar: string, fill: string }> = {
-  [Role.DEV]: { border: 'border-l-blue-500', bg: 'bg-blue-50', bar: 'bg-blue-200', fill: 'bg-blue-600' },
-  [Role.BRAND_SOLUTIONS]: { border: 'border-l-orange-500', bg: 'bg-orange-50', bar: 'bg-orange-200', fill: 'bg-orange-600' },
-  [Role.PLM_D365]: { border: 'border-l-green-500', bg: 'bg-green-50', bar: 'bg-green-200', fill: 'bg-green-600' },
-  [Role.BA]: { border: 'border-l-purple-500', bg: 'bg-purple-50', bar: 'bg-purple-200', fill: 'bg-purple-600' },
-  [Role.APP_SUPPORT]: { border: 'border-l-red-500', bg: 'bg-red-50', bar: 'bg-red-200', fill: 'bg-red-600' },
-  [Role.DM]: { border: 'border-l-yellow-500', bg: 'bg-yellow-50', bar: 'bg-yellow-200', fill: 'bg-yellow-600' },
-  [Role.COE]: { border: 'border-l-cyan-500', bg: 'bg-cyan-50', bar: 'bg-cyan-200', fill: 'bg-cyan-600' },
-  [Role.EA]: { border: 'border-l-pink-500', bg: 'bg-pink-50', bar: 'bg-pink-200', fill: 'bg-pink-600' },
-  [Role.PREP_DEV]: { border: 'border-l-teal-500', bg: 'bg-teal-50', bar: 'bg-teal-200', fill: 'bg-teal-600' },
-  [Role.CNF]: { border: 'border-l-slate-500', bg: 'bg-slate-50', bar: 'bg-slate-200', fill: 'bg-slate-600' },
-  'default': { border: 'border-l-slate-400', bg: 'bg-slate-50', bar: 'bg-slate-200', fill: 'bg-slate-500' }
+  [Role.DEV]: { border: 'border-l-blue-500', bg: 'bg-blue-50', bar: 'bg-blue-400', fill: 'bg-blue-600' },
+  [Role.BRAND_SOLUTIONS]: { border: 'border-l-orange-500', bg: 'bg-orange-50', bar: 'bg-orange-400', fill: 'bg-orange-600' },
+  [Role.PLM_D365]: { border: 'border-l-green-500', bg: 'bg-green-50', bar: 'bg-green-400', fill: 'bg-green-600' },
+  [Role.BA]: { border: 'border-l-purple-500', bg: 'bg-purple-50', bar: 'bg-purple-400', fill: 'bg-purple-600' },
+  [Role.APP_SUPPORT]: { border: 'border-l-red-500', bg: 'bg-red-50', bar: 'bg-red-400', fill: 'bg-red-600' },
+  [Role.DM]: { border: 'border-l-yellow-500', bg: 'bg-yellow-50', bar: 'bg-yellow-400', fill: 'bg-yellow-600' },
+  [Role.COE]: { border: 'border-l-cyan-500', bg: 'bg-cyan-50', bar: 'bg-cyan-400', fill: 'bg-cyan-600' },
+  [Role.EA]: { border: 'border-l-pink-500', bg: 'bg-pink-50', bar: 'bg-pink-400', fill: 'bg-pink-600' },
+  [Role.PREP_DEV]: { border: 'border-l-teal-500', bg: 'bg-teal-50', bar: 'bg-teal-400', fill: 'bg-teal-600' },
+  [Role.CNF]: { border: 'border-l-slate-500', bg: 'bg-slate-50', bar: 'bg-slate-400', fill: 'bg-slate-600' },
+  'default': { border: 'border-l-slate-400', bg: 'bg-slate-50', bar: 'bg-slate-400', fill: 'bg-slate-500' }
 };
 
 const getRoleStyle = (role: Role) => ROLE_STYLES[role] || ROLE_STYLES['default'];
@@ -1143,7 +1143,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             style={{ display: 'none' }}
         ></div>
 
-        <div className="px-4 py-3 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+        <div className="px-4 py-3 border-b border-slate-200 flex justify-between items-center bg-slate-50 relative z-[60]">
           <div className="flex items-center gap-4">
              <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-500" /><span className="text-sm font-semibold text-slate-700">Timeline</span></div>
              <div className="relative">
@@ -1700,14 +1700,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     {/* Gantt Bar - Rendered AFTER cells with higher Z-index */}
                                     {displayMode === 'gantt' && startIndex > -1 && endIndex > -1 && (
                                         <div 
-                                            className={`absolute top-1/2 -translate-y-1/2 h-3.5 z-30 ${roleStyle.bar} ${roleStyle.border} border rounded-sm flex items-center justify-between px-1 overflow-hidden pointer-events-none opacity-80`}
+                                            className={`absolute top-1/2 -translate-y-1/2 h-4 z-30 ${roleStyle.bar} rounded flex items-center justify-between px-1 overflow-hidden pointer-events-none shadow-sm`}
                                             style={{
                                                 left: `${startIndex * colWidth + 2}px`,
                                                 width: `${(endIndex - startIndex + 1) * colWidth - 4}px`,
                                             }}
                                         >
                                            {assignment.progress !== undefined && assignment.progress > 0 && (
-                                                <div className={`absolute top-0 bottom-0 left-0 ${roleStyle.fill} opacity-30`} style={{ width: `${assignment.progress}%` }}></div>
+                                                <div className={`absolute top-0 bottom-0 left-0 ${roleStyle.fill} opacity-50`} style={{ width: `${assignment.progress}%` }}></div>
                                            )}
                                         </div>
                                     )}
