@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation, Resource, Holiday } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
@@ -495,9 +496,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                                 <td className="px-6 py-3">
                                     <div className="flex items-center gap-2">
                                         <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden w-24">
-                                            <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${t.progress}%` }}></div>
+                                            <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${t.progress}%` }}></div>
                                         </div>
-                                        <span className="text-xs font-bold text-slate-600 w-8 text-right">{t.progress}%</span>
+                                        <span className={`text-xs font-bold w-8 text-right ${t.progress > 0 ? 'text-slate-600' : 'text-slate-300'}`}>{t.progress}%</span>
                                     </div>
                                 </td>
                             </tr>
