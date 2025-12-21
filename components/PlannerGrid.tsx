@@ -418,7 +418,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [userHasResizedSidebar, setUserHasResizedSidebar] = useState(false);
   const [startColWidth, setStartColWidth] = useState(95);
   const [durationColWidth, setDurationColWidth] = useState(50);
-  const [progressColWidth, setProgressColWidth] = useState(45); // Added Progress Col Width
   const [dependencyColWidth, setDependencyColWidth] = useState(50);
 
   const [colWidthBase, setColWidthBase] = useState(20);
@@ -456,6 +455,39 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     });
     return map;
   }, [holidays]);
+
+  // Visibility Logic for Filters
+  const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const [filterText, setFilterText] = useState('');
+  const filterMenuRef = useRef<HTMLDivElement>(null);
+  const filterInputRef = useRef<HTMLInputElement>(null);
+
+  const isAssignmentVisible = (assignment: TaskAssignment) => {
+    if (!filterText) return true;
+    const search = filterText.toLowerCase();
+    return (assignment.resourceName || '').toLowerCase().includes(search) || (assignment.role || '').toLowerCase().includes(search);
+  };
+
+  const isTaskVisible = (task: ProjectTask) => {
+    if (!filterText) return true;
+    const search = filterText.toLowerCase();
+    if (task.name.toLowerCase().includes(search)) return true;
+    return task.assignments.some(isAssignmentVisible);
+  };
+
+  const isModuleVisible = (module: ProjectModule) => {
+    if (!filterText) return true;
+    const search = filterText.toLowerCase();
+    if (module.name.toLowerCase().includes(search)) return true;
+    return module.tasks.some(isTaskVisible);
+  };
+
+  const isProjectVisible = (project: Project) => {
+    if (!filterText) return true;
+    const search = filterText.toLowerCase();
+    if (project.name.toLowerCase().includes(search)) return true;
+    return project.modules.some(isModuleVisible);
+  };
 
   // Auto-fit sidebar width based on longest text
   useEffect(() => {
@@ -517,6 +549,16 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     };
     window.addEventListener('click', handleClick);
     return () => window.removeEventListener('click', handleClick);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) {
+            setShowFilterMenu(false);
+        }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   useEffect(() => {
@@ -594,7 +636,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
       }
       if (col === 'start') setStartColWidth(Math.max(80, Math.min(200, newWidth)));
       if (col === 'duration') setDurationColWidth(Math.max(40, Math.min(150, newWidth)));
-      if (col === 'progress') setProgressColWidth(Math.max(30, Math.min(100, newWidth)));
       if (col === 'dependency') setDependencyColWidth(Math.max(40, Math.min(400, newWidth)));
 
       if (resizeGhostRef.current) resizeGhostRef.current.style.display = 'none';
@@ -999,8 +1040,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   
   const startColLeft = sidebarWidth;
   const durationColLeft = sidebarWidth + startColWidth;
-  const progressColLeft = sidebarWidth + startColWidth + durationColWidth;
-  const dependencyColLeft = sidebarWidth + startColWidth + durationColWidth + progressColWidth;
+  const dependencyColLeft = sidebarWidth + startColWidth + durationColWidth;
 
   const showYearRow = viewMode === 'day' || viewMode === 'week' || viewMode === 'month';
   const showMonthRow = viewMode === 'day' || viewMode === 'week';
@@ -1010,7 +1050,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   // --- Calculate Current Column for Overlay ---
   const currentColumnIndex = timeline.findIndex(c => isCurrentColumn(c));
-  const stickyLeftOffset = sidebarWidth + startColWidth + durationColWidth + progressColWidth + dependencyColWidth;
+  const stickyLeftOffset = sidebarWidth + startColWidth + durationColWidth + dependencyColWidth;
 
   const assignmentRenderInfo = useMemo(() => {
     const map = new Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>();
@@ -1021,35 +1061,43 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     projects.forEach(project => {
         rowIndex++; // Project header
         if (!collapsedProjects[project.id]) {
-            project.modules.forEach(module => {
-                rowIndex++; // Module header
-                if (!collapsedModules[module.id]) {
-                    module.tasks.forEach(task => {
-                        rowIndex++; // Task header
-                        if (!collapsedTasks[task.id]) {
-                            task.assignments.forEach(assignment => {
-                                if (assignment.startDate && assignment.duration) {
-                                    const resourceName = assignment.resourceName || 'Unassigned';
-                                    const assignmentHolidaysMap = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
-                                    const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, assignmentHolidaysMap);
-                                    
-                                    map.set(assignment.id, {
-                                        rowIndex,
-                                        y: HEADER_HEIGHT + (rowIndex * ROW_HEIGHT) + (ROW_HEIGHT / 2),
-                                        startDate: assignment.startDate,
-                                        endDate: endDateStr,
-                                    });
+            if (isProjectVisible(project)) { // Ensure filtering is respected for row calculation
+              project.modules.forEach(module => {
+                  rowIndex++; // Module header
+                  if (!collapsedModules[module.id]) {
+                      if (isModuleVisible(module)) {
+                        module.tasks.forEach(task => {
+                            rowIndex++; // Task header
+                            if (!collapsedTasks[task.id]) {
+                                if (isTaskVisible(task)) {
+                                  task.assignments.forEach(assignment => {
+                                      if (isAssignmentVisible(assignment)) {
+                                        if (assignment.startDate && assignment.duration) {
+                                            const resourceName = assignment.resourceName || 'Unassigned';
+                                            const assignmentHolidaysMap = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
+                                            const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, assignmentHolidaysMap);
+                                            
+                                            map.set(assignment.id, {
+                                                rowIndex,
+                                                y: HEADER_HEIGHT + (rowIndex * ROW_HEIGHT) + (ROW_HEIGHT / 2),
+                                                startDate: assignment.startDate,
+                                                endDate: endDateStr,
+                                            });
+                                        }
+                                        rowIndex++; // Assignment row
+                                      }
+                                  });
                                 }
-                                rowIndex++; // Assignment row
-                            });
-                        }
-                    });
-                }
-            });
+                            }
+                        });
+                      }
+                  }
+              });
+            }
         }
     });
     return { map, totalHeight: HEADER_HEIGHT + rowIndex * ROW_HEIGHT };
-  }, [projects, collapsedProjects, collapsedModules, collapsedTasks, holidays, resources, showMonthRow, showYearRow]);
+  }, [projects, collapsedProjects, collapsedModules, collapsedTasks, holidays, resources, showMonthRow, showYearRow, filterText]);
 
   return (
     <>
@@ -1075,6 +1123,32 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   </div>
                 )}
             </div>
+            
+            <div className="relative" ref={filterMenuRef}>
+                <button onClick={() => { setShowFilterMenu(!showFilterMenu); setTimeout(() => filterInputRef.current?.focus(), 0); }} className={`text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors ${showFilterMenu || filterText ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'}`} title="Filter">
+                  <CheckCircle size={14} /> {filterText ? 'Filtered' : 'Filter'}
+                </button>
+                {showFilterMenu && (
+                  <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50 p-3 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="flex items-center gap-2 mb-2">
+                        <CheckCircle size={14} className="text-slate-400"/>
+                        <span className="text-xs font-semibold text-slate-700">Filter Items</span>
+                    </div>
+                    <div className="relative">
+                        <input 
+                            ref={filterInputRef}
+                            type="text" 
+                            value={filterText}
+                            onChange={(e) => setFilterText(e.target.value)}
+                            placeholder="Search projects, tasks, resources..." 
+                            className="w-full text-xs border border-slate-300 rounded px-2 py-1.5 pr-6 focus:ring-2 focus:ring-indigo-500 outline-none"
+                        />
+                        {filterText && <button onClick={() => setFilterText('')} className="absolute right-1.5 top-1.5 text-slate-400 hover:text-slate-600"><Percent size={12}/></button>}
+                    </div>
+                  </div>
+                )}
+            </div>
+
             <div className="flex items-center gap-2 bg-slate-200 rounded-lg p-1">
                 <button onClick={() => setDisplayMode('allocation')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'allocation' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Grid View (Allocations)"><LayoutList size={14} /> Grid</button>
                 <button onClick={() => setDisplayMode('gantt')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'gantt' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Gantt View (Timeline Bars)"><CalendarRange size={14} /> Gantt</button>
@@ -1145,12 +1219,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={(e) => handleResizeStart('duration', durationColWidth, e)}></div>
                   </div>
 
-                  {/* Progress Column Header */}
-                  <div className={`flex-shrink-0 flex items-center justify-center px-2 text-[11px] font-semibold text-slate-600 border-r border-slate-200 relative h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: progressColWidth, minWidth: progressColWidth, maxWidth: progressColWidth, left: isDetailsFrozen ? progressColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}>
-                    <span>%</span>
-                    <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={(e) => handleResizeStart('progress', progressColWidth, e)}></div>
-                  </div>
-
                   {/* Dependency Column Header */}
                   <div title="Dependency" className={`flex-shrink-0 flex items-center justify-center px-2 text-[11px] font-semibold text-slate-600 border-r border-slate-200 relative h-full bg-slate-100 ${isDetailsFrozen ? 'sticky shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}>
                     <Link2 size={14} className="text-slate-600" />
@@ -1164,7 +1232,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-100 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
-                    <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: progressColWidth, minWidth: progressColWidth, maxWidth: progressColWidth, left: isDetailsFrozen ? progressColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
                     {Object.values(monthHeaders).map((group, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-600 border-r border-slate-200 uppercase h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                   </div>
@@ -1173,7 +1240,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   <div className="flex-shrink-0 border-r border-slate-200 sticky left-0 bg-slate-50 z-50 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}></div>
                   <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
                   <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
-                  <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: progressColWidth, minWidth: progressColWidth, maxWidth: progressColWidth, left: isDetailsFrozen ? progressColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
                   <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
                   {timeline.map(col => {
                       const isCurrent = isCurrentColumn(col);
@@ -1204,6 +1270,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             )}
 
             {projects.map((project) => {
+              if (!isProjectVisible(project)) return null;
               const isProjectCollapsed = collapsedProjects[project.id];
               const isEditingProject = editingId === `project::${project.id}`;
 
@@ -1220,7 +1287,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     {/* Project Row Spacers */}
                     <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 39 : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 39 : undefined }}></div>
-                    <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: progressColWidth, minWidth: progressColWidth, maxWidth: progressColWidth, left: isDetailsFrozen ? progressColLeft : undefined, zIndex: isDetailsFrozen ? 39 : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 39 : undefined }}></div>
                     
                     <div className="flex relative">
@@ -1229,6 +1295,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   </div>
 
                   {!isProjectCollapsed && project.modules.map((module, index) => {
+                    if (!isModuleVisible(module)) return null;
                     const isModuleCollapsed = collapsedModules[module.id];
                     const moduleEditId = `module::${project.id}::${module.id}`;
                     const isEditingModule = editingId === moduleEditId;
@@ -1245,6 +1312,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         let earliestDateObj: Date | null = null;
                         
                         allAssignments.forEach(assignment => {
+                            if (!isAssignmentVisible(assignment)) return;
                             if (!assignment.startDate || !assignment.duration) return;
                             const startDate = new Date(assignment.startDate.replace(/-/g, '/'));
                             if (!earliestDateObj || startDate < earliestDateObj) {
@@ -1330,21 +1398,23 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           <div className={`flex-shrink-0 text-[10px] font-bold ${style.totalTextColor}/80 border-r border-slate-200 flex items-center justify-center ${style.bgColor} ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 29 : undefined }}>
                             {isModuleCollapsed && moduleTotalDuration > 0 && <span title="Total Duration" className={`${style.ganttGridColor} rounded p-1`}>{moduleTotalDuration}d</span>}
                           </div>
-                          <div className={`flex-shrink-0 text-[10px] font-bold ${style.totalTextColor}/80 border-r border-slate-200 flex items-center justify-center ${style.bgColor} ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: progressColWidth, minWidth: progressColWidth, maxWidth: progressColWidth, left: isDetailsFrozen ? progressColLeft : undefined, zIndex: isDetailsFrozen ? 29 : undefined }}>
-                            {moduleTimeProgress > 0 && <span title="Aggregated Progress">{moduleTimeProgress}%</span>}
-                          </div>
                           <div className={`flex-shrink-0 border-r border-slate-200 ${style.bgColor} ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 29 : undefined }}></div>
 
                           <div className="flex relative">
                              {isModuleCollapsed && displayMode === 'gantt' && moduleStartIndex > -1 && moduleEndIndex > -1 && (
                                 <div
-                                    className={`absolute top-1/2 -translate-y-1/2 h-4 z-10 ${style.ganttBarColor} rounded-md flex items-center overflow-hidden`}
+                                    className={`absolute top-1/2 -translate-y-1/2 h-4 z-20 ${style.ganttBarColor} rounded-md flex items-center shadow-sm`}
                                     style={{
                                         left: `${moduleStartIndex * colWidth + 2}px`,
                                         width: `${(moduleEndIndex - moduleStartIndex + 1) * colWidth - 4}px`,
                                     }}
-                                    title={`Duration: ${moduleTotalDuration} working days`}
-                                />
+                                    title={`Duration: ${moduleTotalDuration} working days (${moduleTimeProgress.toFixed(0)}%)`}
+                                >
+                                    <div className={`h-full opacity-30 bg-black/25 rounded-md`} style={{ width: `${moduleTimeProgress}%` }}></div>
+                                    {moduleTimeProgress > 0 && (
+                                        <span className="absolute right-1 text-[9px] font-bold text-white/90 z-30 mix-blend-overlay pr-1">{Math.round(moduleTimeProgress)}%</span>
+                                    )}
+                                </div>
                              )}
                             {timeline.map(col => {
                                 const total = getModuleTotal(module, col);
@@ -1357,6 +1427,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         </div>
 
                         {!isModuleCollapsed && module.tasks.map((task, taskIndex) => {
+                          if (!isTaskVisible(task)) return null;
                           const taskEditId = `task::${project.id}::${module.id}::${task.id}`;
                           const isTaskCollapsed = collapsedTasks[task.id];
                           const isEditingTask = editingId === taskEditId;
@@ -1367,6 +1438,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           if (task.assignments.length > 0) {
                               let earliestDateObj: Date | null = null;
                               task.assignments.forEach(assignment => {
+                                  if (!isAssignmentVisible(assignment)) return;
                                   if (!assignment.startDate || !assignment.duration) return;
                                   const startDate = new Date(assignment.startDate.replace(/-/g, '/'));
                                   if (!earliestDateObj || startDate < earliestDateObj) {
@@ -1435,21 +1507,23 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 <div className={`flex-shrink-0 text-[10px] font-medium text-slate-500 border-r border-slate-200 flex items-center justify-center bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 19 : undefined }}>
                                   {isTaskCollapsed && totalDuration > 0 && <span title="Total Duration" className="bg-slate-200/50 rounded p-1">{totalDuration}d</span>}
                                 </div>
-                                <div className={`flex-shrink-0 text-[10px] font-medium text-slate-500 border-r border-slate-200 flex items-center justify-center bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: progressColWidth, minWidth: progressColWidth, maxWidth: progressColWidth, left: isDetailsFrozen ? 19 : undefined, zIndex: isDetailsFrozen ? 19 : undefined }}>
-                                  {taskTimeProgress > 0 && <span title="Aggregated Progress">{taskTimeProgress}%</span>}
-                                </div>
                                 <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-50 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 19 : undefined }}></div>
 
                                 <div className="flex relative">
                                     {isTaskCollapsed && displayMode === 'gantt' && taskStartIndex > -1 && taskEndIndex > -1 && (
                                         <div
-                                            className="absolute top-1/2 -translate-y-1/2 h-4 z-10 bg-slate-400 rounded-md flex items-center overflow-hidden"
+                                            className="absolute top-1/2 -translate-y-1/2 h-4 z-20 bg-slate-400 rounded-md flex items-center shadow-sm"
                                             style={{
                                                 left: `${taskStartIndex * colWidth + 2}px`,
                                                 width: `${(taskEndIndex - taskStartIndex + 1) * colWidth - 4}px`,
                                             }}
-                                            title={`Duration: ${totalDuration} working days`}
-                                        />
+                                            title={`Duration: ${totalDuration} working days (${taskTimeProgress.toFixed(0)}%)`}
+                                        >
+                                            <div className="h-full bg-slate-600/30 rounded-md" style={{ width: `${taskTimeProgress}%` }}></div>
+                                            {taskTimeProgress > 0 && (
+                                                <span className="absolute right-1 text-[9px] font-bold text-white z-30 drop-shadow-md pr-1 pointer-events-none">{Math.round(taskTimeProgress)}%</span>
+                                            )}
+                                        </div>
                                     )}
                                     {timeline.map(col => {
                                       const total = getTaskTotal(task, col);
@@ -1461,6 +1535,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               </div>
 
                               {!isTaskCollapsed && task.assignments.map((assignment, assignmentIndex) => {
+                                if (!isAssignmentVisible(assignment)) return null;
                                 const hasSchedule = assignment.startDate && assignment.duration && assignment.duration > 0;
                                 let assignmentStartDate: Date | null = null;
                                 let assignmentEndDate: Date | null = null;
@@ -1554,9 +1629,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
                                       <input type="number" min="1" title="Duration (days)" disabled={isReadOnly} value={isEditingDuration ? editValue : (assignment.duration || '')} onFocus={() => { setEditingId(`duration::${assignment.id}`); setEditValue((assignment.duration || 1).toString()); }} onChange={(e) => setEditValue(e.target.value)} onBlur={() => saveDuration(assignment)} onKeyDown={(e) => { if (e.key === 'Enter') { saveDuration(assignment); (e.target as HTMLInputElement).blur(); } else if (e.key === 'Escape') { setEditingId(null); (e.target as HTMLInputElement).blur(); } }} ref={isEditingDuration ? editInputRef : undefined} className="text-[11px] py-0.5 px-1 rounded-md bg-transparent border-none text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 w-full text-center hover:bg-slate-100 disabled:hover:bg-transparent" />
                                   </div>
-                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: progressColWidth, minWidth: progressColWidth, maxWidth: progressColWidth, left: isDetailsFrozen ? progressColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
-                                      <span className={`text-[10px] font-semibold ${timeProgress === 100 ? 'text-green-600' : timeProgress > 0 ? 'text-indigo-600' : 'text-slate-400'}`}>{timeProgress > 0 ? `${timeProgress}%` : '-'}</span>
-                                  </div>
                                   <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-center px-1 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
                                       <div className="relative w-full h-full flex items-center justify-center">
                                            <select disabled={isReadOnly} value={assignment.parentAssignmentId || ''} onChange={(e) => onUpdateAssignmentDependency(assignment.id, e.target.value || null)} title="Task Dependency" className="absolute inset-0 w-full h-full text-transparent bg-transparent border-none appearance-none cursor-pointer focus:ring-1 focus:ring-indigo-500 rounded-md disabled:cursor-default">
@@ -1570,17 +1642,17 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   <div className="flex relative">
                                     {displayMode === 'gantt' && hasSchedule && startIndex > -1 && endIndex > -1 && (
                                         <div
-                                            className={`absolute top-1/2 -translate-y-1/2 h-4 z-10 ${roleStyle.bar} rounded-md flex items-center overflow-hidden`}
+                                            className={`absolute top-1/2 -translate-y-1/2 h-4 z-20 ${roleStyle.bar} rounded-md flex items-center shadow-sm`}
                                             style={{
                                                 left: `${startIndex * colWidth + 2}px`,
                                                 width: `${(endIndex - startIndex + 1) * colWidth - 4}px`,
                                             }}
                                             title={`${assignment.role} - ${assignment.resourceName || 'Unassigned'} (${timeProgress}%)`}
                                         >
-                                            <div className={`h-full opacity-30 ${roleStyle.fill}`} style={{ width: `${timeProgress}%` }}></div>
-                                            <span className="absolute left-2 text-[9px] font-bold text-slate-700 whitespace-nowrap truncate z-20 pointer-events-none">{assignment.resourceName || 'Unassigned'}</span>
+                                            <div className={`h-full opacity-30 ${roleStyle.fill} rounded-md`} style={{ width: `${timeProgress}%` }}></div>
+                                            <span className="absolute left-2 text-[9px] font-bold text-slate-700 whitespace-nowrap truncate z-30 pointer-events-none">{assignment.resourceName || 'Unassigned'}</span>
                                             {((timeProgress) > 0) && (
-                                                <span className="absolute right-2 text-[8px] font-bold text-slate-600 z-20 pointer-events-none bg-white/50 px-0.5 rounded">{timeProgress}%</span>
+                                                <span className="absolute right-1 text-[8px] font-bold text-slate-700 z-30 pointer-events-none bg-white/70 px-1 rounded shadow-sm">{timeProgress}%</span>
                                             )}
                                         </div>
                                     )}
@@ -1634,7 +1706,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
               
               <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
               <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
-              <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: progressColWidth, minWidth: progressColWidth, maxWidth: progressColWidth, left: isDetailsFrozen ? progressColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
               <div className={`flex-shrink-0 border-r border-slate-700 bg-slate-800 ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 49 : undefined }}></div>
 
               {timeline.map(col => { const total = projects.reduce((acc, p) => acc + getProjectTotal(p, col), 0); return ( <div key={`total-${col.id}`} className={`flex-shrink-0 border-r border-slate-700 flex items-center justify-center text-[10px] font-mono font-bold`} style={{ width: `${colWidth}px` }}>{total > 0 && displayMode === 'allocation' ? formatValue(total) : ''}</div> ); })}
