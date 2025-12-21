@@ -472,7 +472,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const isTaskVisible = (task: ProjectTask) => {
     if (!filterText) return true;
     const search = filterText.toLowerCase();
+    // If task name matches, show all assignments
     if (task.name.toLowerCase().includes(search)) return true;
+    // Otherwise check if any assignment matches
     return task.assignments.some(isAssignmentVisible);
   };
 
