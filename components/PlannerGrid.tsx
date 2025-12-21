@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween, calculateTimeBasedProgress } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server, Filter, X } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server, Filter, X } from 'lucide-react';
 import { DependencyLines } from './DependencyLines';
 
 // --- Custom DatePicker Component ---
@@ -415,7 +414,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const [userHasResizedSidebar, setUserHasResizedSidebar] = useState(false);
-  const [startColWidth, setStartColWidth] = useState(95);
+  const [startColWidth, setStartColWidth] = useState(100);
   const [durationColWidth, setDurationColWidth] = useState(50);
   const [dependencyColWidth, setDependencyColWidth] = useState(50);
 
@@ -438,7 +437,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const [datePickerState, setDatePickerState] = useState<{ assignmentId: string | null }>({ assignmentId: null });
   
-  const importInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const toggleButtonRef = useRef<HTMLButtonElement>(null);
   const datePickerContainerRef = useRef<HTMLDivElement>(null);
@@ -806,63 +804,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }
   };
 
-  const handleExportExcel = () => {
-    const planData: any[] = [];
-    const weekHeaders = getTimeline('week', timelineStart, timelineEnd).map(w => w.id);
-    projects.forEach(p => {
-      p.modules.forEach(m => {
-        m.tasks.forEach(t => {
-          t.assignments.forEach(a => {
-            const row: any = { 'Project': p.name, 'Module': m.name, 'Task': t.name, 'Role': a.role, 'Resource': a.resourceName || 'Unassigned' };
-            a.allocations.forEach(alloc => { if (weekHeaders.includes(alloc.weekId)) { row[alloc.weekId] = alloc.count; } });
-            planData.push(row);
-          });
-        });
-      });
-    });
-    const wb = XLSX.utils.book_new();
-    const planWs = XLSX.utils.json_to_sheet(planData, { header: ['Project', 'Module', 'Task', 'Role', 'Resource', ...weekHeaders] });
-    XLSX.utils.book_append_sheet(wb, planWs, 'Resource Plan');
-    XLSX.writeFile(wb, `oms-resource-plan-${new Date().toISOString().split('T')[0]}.xlsx`);
-  };
-
-  const handleImportExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (isReadOnly) return;
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'array' });
-        const planSheet = workbook.Sheets['Resource Plan'];
-        if (!planSheet) throw new Error('Resource Plan sheet not found');
-        const planJson = XLSX.utils.sheet_to_json<any>(planSheet);
-        const importedProjects: Project[] = [];
-        let currentProject: Project | null = null;
-        let currentModule: ProjectModule | null = null;
-        let currentTask: ProjectTask | null = null;
-        planJson.forEach((row, index) => {
-            /* Added missing user_id property to correctly satisfy the Project interface during import */
-            if (row.Project && row.Project !== currentProject?.name) { currentProject = { id: `p-${index}`, name: row.Project, modules: [], user_id: 'imported' }; importedProjects.push(currentProject); currentModule = null; currentTask = null; }
-            if (!currentProject) return;
-            if (row.Module && row.Module !== currentModule?.name) { currentModule = { id: `m-${index}`, name: row.Module, tasks: [], functionPoints: 0, legacyFunctionPoints: 0 }; currentProject.modules.push(currentModule); currentTask = null; }
-            if (!currentModule) return;
-            if (row.Task && row.Task !== currentTask?.name) { currentTask = { id: `t-${index}`, name: row.Task, assignments: [] }; currentModule.tasks.push(currentTask); }
-            if (!currentProject) return; // redundant but for TS safety
-            if (!currentTask) return;
-            const allocations: { weekId: string, count: number }[] = [];
-            Object.keys(row).forEach(key => { if (/^\d{4}-\d{2}$/.test(key)) { allocations.push({ weekId: key, count: Number(row[key]) }); } });
-            const assignment: TaskAssignment = { id: `a-${index}`, role: row.Role as Role, resourceName: row.Resource, allocations };
-            currentTask.assignments.push(assignment);
-        });
-        if (window.confirm('This will overwrite your current plan. Are you sure?')) { onImportPlan(importedProjects, []); }
-      } catch (error: any) { alert(`Failed to import plan: ${error.message}`); }
-    };
-    reader.readAsArrayBuffer(file);
-    event.target.value = '';
-  };
-
   const timeline = useMemo(() => getTimeline(viewMode, timelineStart, timelineEnd), [viewMode, timelineStart, timelineEnd]);
 
   const today = new Date();
@@ -1210,11 +1151,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             <div className="flex items-center gap-2">
                 <button onClick={onRefresh} disabled={isRefreshing} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Refresh data from server"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh</button>
                 <SaveStatusIndicator status={saveStatus} />
-                <div className="w-px h-4 bg-slate-300"></div>
-                {!isReadOnly && <button onClick={onShowHistory} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="View and restore saved versions"><History size={12} /></button>}
-                <button onClick={handleExportExcel} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Export the current plan as an Excel file"><Download size={12} /></button>
-                {!isReadOnly && <button onClick={() => importInputRef.current?.click()} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Import a plan from an Excel file"><Upload size={12} /></button>}
-                <input type="file" ref={importInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
             </div>
             <div className="w-px h-4 bg-slate-300"></div>
             {!isReadOnly && <button onClick={onAddProject} className="text-xs flex items-center gap-1 bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 transition-colors"><Plus size={12} /> Add Project</button>}
@@ -1315,6 +1251,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
               if (!isProjectVisible(project)) return null;
               const isProjectCollapsed = collapsedProjects[project.id];
               const isEditingProject = editingId === `project::${project.id}`;
+              const projProgress = progressStats.get(project.id) || 0;
 
               return (
                 <React.Fragment key={project.id}>
@@ -1324,6 +1261,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         {isProjectCollapsed ? <ChevronRight className="w-4 h-4 text-slate-300" /> : <ChevronDown className="w-4 h-4 text-slate-300" />}
                         <Folder className="w-3.5 h-3.5 text-slate-200" />
                         {isEditingProject ? ( <input ref={editInputRef} value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown} className="bg-slate-600 text-white text-xs font-bold border border-slate-500 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500" /> ) : ( <span className="font-bold text-xs truncate select-none flex-1" onDoubleClick={(e) => startEditing(`project::${project.id}`, project.name, e)} title="Double click to rename">{project.name}</span> )}
+                        <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-1.5 rounded ml-2" title="Weighted Progress">{Math.round(projProgress)}%</span>
                       </div>
                     </div>
                     {/* Project Row Spacers */}
@@ -1344,6 +1282,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     const moduleType = module.type || ModuleType.Development;
                     const style = MODULE_TYPE_STYLES[moduleType];
                     const Icon = style.icon;
+                    const modProgress = progressStats.get(module.id) || 0;
 
                     let moduleEarliestStartDate: string | null = null;
                     let moduleLatestEndDate: Date | null = null;
@@ -1374,6 +1313,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             moduleTotalDuration = calculateWorkingDaysBetween(moduleEarliestStartDate, formatDateForInput(moduleLatestEndDate), projectHolidayMap);
                         }
                     }
+
+                    // --- NEW: Calculate Module Time-Based Progress ---
+                    let moduleTimeProgress = 0;
+                    if (moduleEarliestStartDate && moduleLatestEndDate) {
+                         const modEndDateStr = formatDateForInput(moduleLatestEndDate);
+                         moduleTimeProgress = calculateTimeBasedProgress(moduleEarliestStartDate, modEndDateStr);
+                    }
+                    // ------------------------------------------------
 
                     const { moduleStartIndex, moduleEndIndex } = (() => {
                         if (!moduleEarliestStartDate || !moduleLatestEndDate) return { moduleStartIndex: -1, moduleEndIndex: -1 };
@@ -1422,6 +1369,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               </button>
                               {isModuleCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className={`w-4 h-4 ${style.iconColor}`} />}
                               {isEditingModule ? ( <input ref={editInputRef} value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown} className="bg-white text-slate-800 text-xs font-semibold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500" onClick={(e) => e.stopPropagation()} /> ) : ( <span className={`font-semibold text-xs ${style.textColor} truncate select-none flex-1 ${style.hoverTextColor}`} onDoubleClick={(e) => startEditing(moduleEditId, module.name, e)} title="Double click to rename">{module.name}</span> )}
+                              <span className="text-[10px] font-bold text-slate-500 bg-white/50 px-1.5 rounded ml-2 border border-slate-200" title="Weighted Progress">{Math.round(modProgress)}%</span>
                             </div>
                           </div>
                           
@@ -1442,8 +1390,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                         left: `${moduleStartIndex * colWidth + 2}px`,
                                         width: `${(moduleEndIndex - moduleStartIndex + 1) * colWidth - 4}px`,
                                     }}
-                                    title={`Duration: ${moduleTotalDuration} working days`}
-                                />
+                                    title={`Duration: ${moduleTotalDuration} working days (${modProgress.toFixed(0)}%)`}
+                                >
+                                    <div className={`h-full opacity-30 bg-black/25`} style={{ width: `${modProgress}%` }}></div>
+                                    {modProgress > 0 && (
+                                        <span className="absolute right-1 text-[9px] font-bold text-white/90 z-20 mix-blend-overlay pr-1">{Math.round(modProgress)}%</span>
+                                    )}
+                                </div>
                              )}
                             {timeline.map(col => {
                                 const total = getModuleTotal(module, col);
@@ -1460,6 +1413,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           const taskEditId = `task::${project.id}::${module.id}::${task.id}`;
                           const isTaskCollapsed = collapsedTasks[task.id];
                           const isEditingTask = editingId === taskEditId;
+                          const taskProgress = progressStats.get(task.id) || 0;
+                          
                           let earliestStartDate: string | null = null;
                           let latestEndDate: Date | null = null;
                           let totalDuration = 0;
@@ -1486,6 +1441,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   totalDuration = calculateWorkingDaysBetween(earliestStartDate, formatDateForInput(latestEndDate), projectHolidayMap);
                               }
                           }
+
+                          // --- NEW: Calculate Task Time-Based Progress ---
+                          let taskTimeProgress = 0;
+                          if (earliestStartDate && latestEndDate) {
+                               const tEndDateStr = formatDateForInput(latestEndDate);
+                               taskTimeProgress = calculateTimeBasedProgress(earliestStartDate, tEndDateStr);
+                          }
+                          // ----------------------------------------------
                           
                           const { taskStartIndex, taskEndIndex } = (() => {
                                 if (!earliestStartDate || !latestEndDate) return { taskStartIndex: -1, taskEndIndex: -1 };
@@ -1511,12 +1474,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           return (
                             <React.Fragment key={task.id}>
                               <div draggable={!isReadOnly} onDragStart={(e) => handleTaskDragStart(e, project.id, module.id, taskIndex)} onDragOver={handleTaskDragOver} onDrop={(e) => handleTaskDrop(e, project.id, module.id, taskIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'task', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id }); }} className={`flex border-b border-slate-100 bg-slate-50 group/task ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>
+                                {/* ... (Keep existing Task Header) ... */}
                                 <div className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50 z-20 flex items-center justify-between pl-6 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}>
                                   <div className="flex items-center gap-2 overflow-hidden cursor-pointer flex-1" onClick={() => !isEditingTask && toggleTask(task.id)}>
                                     {!isReadOnly && <div className="cursor-grab text-slate-400 hover:text-slate-600" title="Drag to reorder task"><GripVertical size={14} /></div>}
                                     {isTaskCollapsed ? <ChevronRight size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
                                     <div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0"></div>
                                     {isEditingTask ? ( <input ref={editInputRef} value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={saveEdit} onKeyDown={handleKeyDown} className="bg-white text-slate-700 text-[11px] font-bold border border-indigo-300 rounded px-1 w-full focus:outline-none focus:ring-1 focus:ring-indigo-500" /> ) : ( <span className="text-[11px] text-slate-700 font-bold truncate select-none hover:text-indigo-600 flex-1" title="Double click to rename" onDoubleClick={(e) => startEditing(taskEditId, task.name, e)}>{task.name}</span> )}
+                                    <span className="text-[10px] text-slate-400 ml-2" title="Weighted Progress">{Math.round(taskProgress)}%</span>
                                   </div>
                                   {!isReadOnly && <div className="flex items-center gap-1 opacity-0 group-hover/task:opacity-100 transition-opacity"><button onClick={() => onAddAssignment(project.id, module.id, task.id, Role.EA)} className="text-slate-400 hover:text-indigo-600 p-0.5 rounded hover:bg-slate-200" title="Add another resource to this task"><UserPlus size={14} /></button></div>}
                                 </div>
@@ -1538,8 +1503,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                                 left: `${taskStartIndex * colWidth + 2}px`,
                                                 width: `${(taskEndIndex - taskStartIndex + 1) * colWidth - 4}px`,
                                             }}
-                                            title={`Duration: ${totalDuration} working days`}
-                                        />
+                                            title={`Duration: ${totalDuration} working days (${taskProgress.toFixed(0)}%)`}
+                                        >
+                                            <div className="h-full bg-slate-600/30" style={{ width: `${taskProgress}%` }}></div>
+                                            {taskProgress > 0 && (
+                                                <span className="absolute right-1 text-[9px] font-bold text-white z-20 pr-1">{Math.round(taskProgress)}%</span>
+                                            )}
+                                        </div>
                                     )}
                                     {timeline.map(col => {
                                       const total = getTaskTotal(task, col);
@@ -1556,6 +1526,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 let assignmentStartDate: Date | null = null;
                                 let assignmentEndDate: Date | null = null;
                                 let endDateStr = '';
+                                let timeProgress = 0;
                                 
                                 if (hasSchedule) {
                                   assignmentStartDate = new Date(assignment.startDate!.replace(/-/g, '/'));
@@ -1564,6 +1535,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   const assignmentHolidaysMap = resourceHolidayData?.holidayMap || new Map<string, number>();
                                   endDateStr = calculateEndDate(assignment.startDate!, assignment.duration!, assignmentHolidaysMap);
                                   assignmentEndDate = new Date(endDateStr.replace(/-/g, '/'));
+                                  
+                                  // NEW: Calculate progress based on current day
+                                  timeProgress = calculateTimeBasedProgress(assignment.startDate!, endDateStr);
                                 } else {
                                   // Fallback for display if no schedule
                                   assignmentStartDate = new Date();
@@ -1661,10 +1635,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                                 left: `${startIndex * colWidth + 2}px`,
                                                 width: `${(endIndex - startIndex + 1) * colWidth - 4}px`,
                                             }}
-                                            title={`${assignment.role} - ${assignment.resourceName || 'Unassigned'}`}
+                                            title={`${assignment.role} - ${assignment.resourceName || 'Unassigned'} (${assignment.progress || 0}%)`}
                                         >
-                                            <div className={`h-full opacity-30 ${roleStyle.fill}`}></div>
+                                            <div className={`h-full opacity-30 ${roleStyle.fill}`} style={{ width: `${assignment.progress || 0}%` }}></div>
                                             <span className="absolute left-2 text-[9px] font-bold text-slate-700 whitespace-nowrap truncate z-20 pointer-events-none">{assignment.resourceName || 'Unassigned'}</span>
+                                            {((assignment.progress || 0) > 0) && (
+                                                <span className="absolute right-2 text-[8px] font-bold text-slate-600 z-20 pointer-events-none bg-white/50 px-0.5 rounded">{assignment.progress}%</span>
+                                            )}
                                         </div>
                                     )}
                                     {timeline.map((col, colIndex) => {
