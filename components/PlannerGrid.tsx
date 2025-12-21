@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server, Search, X } from 'lucide-react';
+import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server, Search, X, Filter, CheckSquare, Square } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { DependencyLines } from './DependencyLines';
 
@@ -416,8 +416,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [displayMode, setDisplayMode] = useState<'allocation' | 'gantt'>('allocation');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
   
+  // Resource Filter State
+  const [selectedResourceFilters, setSelectedResourceFilters] = useState<string[]>([]);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+
   const [draggedModuleIndex, setDraggedModuleIndex] = useState<number | null>(null);
   const [draggedTask, setDraggedTask] = useState<{ moduleId: string, index: number } | null>(null);
   const [draggedAssignment, setDraggedAssignment] = useState<{ taskId: string, index: number } | null>(null);
@@ -464,65 +468,78 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     return map;
   }, [holidays]);
 
+  // Click outside handler for filter menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    };
+    if (isFilterOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isFilterOpen]);
+
+  // Get all unique resource names including "Unassigned"
+  const allResourceNames = useMemo(() => {
+      const names = resources.map(r => r.name).sort((a, b) => a.localeCompare(b));
+      return ['Unassigned', ...names];
+  }, [resources]);
+
+  const toggleResourceFilter = (name: string) => {
+      setSelectedResourceFilters(prev => 
+          prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
+      );
+  };
+
   // Filtering Logic
   const filteredProjects = useMemo(() => {
-    if (!searchQuery.trim()) return projects;
-    
-    const lowerQuery = searchQuery.toLowerCase();
+    if (selectedResourceFilters.length === 0) return projects;
     
     return projects.map(p => {
-        // Check if project name matches
-        const projectMatches = p.name.toLowerCase().includes(lowerQuery);
-        
         // Filter Modules
         const matchingModules = p.modules.map(m => {
-            const moduleMatches = m.name.toLowerCase().includes(lowerQuery);
-            
             // Filter Tasks
             const matchingTasks = m.tasks.map(t => {
-                const taskMatches = t.name.toLowerCase().includes(lowerQuery);
-                
                 // Filter Assignments
                 const matchingAssignments = t.assignments.filter(a => 
-                    (a.resourceName || '').toLowerCase().includes(lowerQuery)
+                    selectedResourceFilters.includes(a.resourceName || 'Unassigned')
                 );
                 
-                // If task matches, keep all assignments. If assignment matches, keep task.
-                if (taskMatches || matchingAssignments.length > 0) {
+                if (matchingAssignments.length > 0) {
                     return { 
                         ...t, 
-                        // If only resource matched, technically we show the task. 
-                        // To be less destructive visually, we keep all assignments for context if the task matched, 
-                        // otherwise we might just show relevant resources. 
-                        // For simplicity, let's keep all assignments if the task is kept.
-                        assignments: t.assignments 
+                        assignments: matchingAssignments 
                     };
                 }
                 return null;
             }).filter(Boolean) as ProjectTask[];
 
-            if (moduleMatches || matchingTasks.length > 0) {
-                return { ...m, tasks: matchingTasks.length > 0 ? matchingTasks : m.tasks };
+            if (matchingTasks.length > 0) {
+                return { ...m, tasks: matchingTasks };
             }
             return null;
         }).filter(Boolean) as ProjectModule[];
 
-        if (projectMatches || matchingModules.length > 0) {
-            return { ...p, modules: matchingModules.length > 0 ? matchingModules : p.modules };
+        if (matchingModules.length > 0) {
+            return { ...p, modules: matchingModules };
         }
         return null;
     }).filter(Boolean) as Project[];
-  }, [projects, searchQuery]);
+  }, [projects, selectedResourceFilters]);
 
-  // Auto-expand on search
+  // Auto-expand on filter
   useEffect(() => {
-      if (searchQuery.trim()) {
+      if (selectedResourceFilters.length > 0) {
           // Reset collapse states to show results
           setCollapsedProjects({});
           setCollapsedModules({});
           setCollapsedTasks({});
       }
-  }, [searchQuery]);
+  }, [selectedResourceFilters]);
 
   // Auto-fit sidebar width based on longest text
   useEffect(() => {
@@ -1084,16 +1101,35 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                 )}
             </div>
             
-            <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1 border border-slate-200 ml-2">
-                <Search size={14} className="text-slate-400 ml-1" />
-                <input 
-                    type="text" 
-                    value={searchQuery} 
-                    onChange={(e) => setSearchQuery(e.target.value)} 
-                    placeholder="Filter..." 
-                    className="bg-transparent border-none text-xs focus:ring-0 w-32 placeholder:text-slate-400 text-slate-700"
-                />
-                {searchQuery && <button onClick={() => setSearchQuery('')} className="text-slate-400 hover:text-slate-600 p-0.5"><X size={12} /></button>}
+            <div className="relative" ref={filterRef}>
+                <button 
+                    onClick={() => setIsFilterOpen(!isFilterOpen)} 
+                    className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors ${selectedResourceFilters.length > 0 ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                >
+                    <Filter size={14} /> 
+                    Filter Resources 
+                    {selectedResourceFilters.length > 0 && <span className="bg-indigo-200 text-indigo-800 text-[9px] px-1.5 rounded-full">{selectedResourceFilters.length}</span>}
+                </button>
+                {isFilterOpen && (
+                    <div className="absolute top-full left-0 mt-1 w-56 max-h-64 bg-white border border-slate-200 rounded-lg shadow-xl z-50 flex flex-col animate-in fade-in zoom-in-95">
+                        <div className="p-2 border-b border-slate-100 bg-slate-50 rounded-t-lg flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-500 uppercase">Select Resources</span>
+                            {selectedResourceFilters.length > 0 && <button onClick={() => setSelectedResourceFilters([])} className="text-[10px] text-red-500 hover:text-red-700">Clear</button>}
+                        </div>
+                        <div className="overflow-y-auto custom-scrollbar p-1">
+                            {allResourceNames.map(name => (
+                                <button 
+                                    key={name}
+                                    onClick={() => toggleResourceFilter(name)}
+                                    className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 rounded-md flex items-center gap-2 ${selectedResourceFilters.includes(name) ? 'text-indigo-700 bg-indigo-50 font-medium' : 'text-slate-600'}`}
+                                >
+                                    {selectedResourceFilters.includes(name) ? <CheckSquare size={14} className="text-indigo-600"/> : <Square size={14} className="text-slate-300"/>}
+                                    {name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="flex items-center gap-2 bg-slate-200 rounded-lg p-1 ml-2">
@@ -1598,10 +1634,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             />
                                         );
                                     })}
-                                    {/* Gantt Bar - Rendered AFTER cells to be on top in DOM order */}
+                                    {/* Gantt Bar - Rendered AFTER cells with higher Z-index */}
                                     {displayMode === 'gantt' && startIndex > -1 && endIndex > -1 && (
                                         <div 
-                                            className={`absolute top-1/2 -translate-y-1/2 h-3.5 z-10 ${roleStyle.bar} ${roleStyle.border} border rounded-sm flex items-center justify-between px-1 overflow-hidden pointer-events-none opacity-80`}
+                                            className={`absolute top-1/2 -translate-y-1/2 h-3.5 z-30 ${roleStyle.bar} ${roleStyle.border} border rounded-sm flex items-center justify-between px-1 overflow-hidden pointer-events-none opacity-80`}
                                             style={{
                                                 left: `${startIndex * colWidth + 2}px`,
                                                 width: `${(endIndex - startIndex + 1) * colWidth - 4}px`,
