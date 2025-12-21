@@ -842,19 +842,41 @@ const App: React.FC = () => {
 
   const addTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
       if (isReadOnlyMode) return;
+      
+      // Default new tasks to start today for 5 days
+      const today = formatDateForInput(new Date());
+      const defaultDuration = 5;
+
       await callSupabase('CREATE task', { taskId, taskName },
           supabase.from('tasks').insert({ id: taskId, module_id: moduleId, name: taskName })
       );
       await callSupabase('CREATE assignment', { taskId, role },
-          supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned' })
+          supabase.from('task_assignments').insert({ 
+              task_id: taskId, 
+              role, 
+              resource_name: 'Unassigned',
+              start_date: today,
+              duration: defaultDuration
+          })
       );
       fetchData(true);
   };
 
   const addAssignment = async (projectId: string, moduleId: string, taskId: string, role: Role) => {
       if (isReadOnlyMode) return;
+      
+      // Default new assignments to start today for 5 days
+      const today = formatDateForInput(new Date());
+      const defaultDuration = 5;
+
       await callSupabase('ADD assignment', { taskId, role },
-          supabase.from('task_assignments').insert({ task_id: taskId, role, resource_name: 'Unassigned' })
+          supabase.from('task_assignments').insert({ 
+              task_id: taskId, 
+              role, 
+              resource_name: 'Unassigned',
+              start_date: today,
+              duration: defaultDuration
+          })
       );
       fetchData(true);
   };
