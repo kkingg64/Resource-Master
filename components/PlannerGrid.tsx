@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
-import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
+import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween, calculateTimeBasedProgress } from '../constants';
 import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server, Search, X, Filter, CheckSquare, Square, History, Download, Upload } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { DependencyLines } from './DependencyLines';
@@ -1590,6 +1590,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 const roleStyle = getRoleStyle(assignment.role);
                                 const currentRowIndex = gridRowIndex++;
 
+                                let displayProgress = assignment.progress || 0;
+                                if (hasSchedule && endDateStr && assignment.startDate) {
+                                    const timeProgress = calculateTimeBasedProgress(assignment.startDate, endDateStr);
+                                    if (displayProgress === 0) displayProgress = timeProgress;
+                                }
+
                                 return (
                                 <div key={assignment.id} className={`flex border-b border-slate-100 group/assign ${draggedAssignment?.taskId === task.id && draggedAssignment?.index === assignmentIndex ? 'opacity-30' : ''} ${datePickerState.assignmentId === assignment.id ? 'relative z-40' : ''}`} draggable={!isReadOnly} onDragStart={(e) => handleAssignmentDragStart(e, task.id, assignmentIndex)} onDragOver={handleAssignmentDragOver} onDrop={(e) => handleAssignmentDrop(e, project.id, module.id, task.id, assignmentIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'assignment', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id, assignmentId: assignment.id }); }}>
                                   <div className={`flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-10 flex items-center justify-between border-l-[3px] ${roleStyle.border} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`} style={stickyStyle}>
@@ -1706,11 +1712,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                                 width: `${(endIndex - startIndex + 1) * colWidth - 4}px`,
                                             }}
                                         >
-                                           {assignment.progress !== undefined && assignment.progress > 0 && (
-                                                <div className={`absolute top-0 bottom-0 left-0 ${roleStyle.fill} opacity-50`} style={{ width: `${assignment.progress}%` }}></div>
+                                           {displayProgress > 0 && (
+                                                <div className={`absolute top-0 bottom-0 left-0 ${roleStyle.fill} opacity-50`} style={{ width: `${displayProgress}%` }}></div>
                                            )}
                                            <span className="relative z-10 text-[10px] font-bold text-white drop-shadow-md">
-                                                {assignment.progress !== undefined ? `${assignment.progress}%` : ''}
+                                                {displayProgress > 0 ? `${displayProgress}%` : '0%'}
                                            </span>
                                         </div>
                                     )}
