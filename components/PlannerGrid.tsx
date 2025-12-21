@@ -1288,7 +1288,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                       if (viewMode === 'day' && col.date) {
                           const dateStr = formatDateForInput(col.date);
                           const holiday = holidays.find(h => h.country === 'HK' && h.date === dateStr);
-                          if (holiday) { isHKHoliday = true; holidayName = holiday.name; }
+                          if (holiday && (holiday.duration === undefined || holiday.duration === 1)) { isHKHoliday = true; holidayName = holiday.name; }
                       }
                       let className = `flex-shrink-0 text-center text-[10px] border-r border-slate-200 font-medium flex flex-col items-center justify-center relative group/col h-full`;
                       if (isHKHoliday) { className += ' bg-red-50 text-red-700'; } else if (isCurrent) { className += ' bg-amber-100 text-amber-800 border-b-4 border-b-amber-500'; } else { className += ' text-slate-500'; }
@@ -1700,7 +1700,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     {/* Gantt Bar - Rendered AFTER cells with higher Z-index */}
                                     {displayMode === 'gantt' && startIndex > -1 && endIndex > -1 && (
                                         <div 
-                                            className={`absolute top-1/2 -translate-y-1/2 h-4 z-30 ${roleStyle.bar} rounded flex items-center justify-center px-1 overflow-hidden pointer-events-none shadow-sm`}
+                                            className={`absolute top-1/2 -translate-y-1/2 h-4 z-30 ${roleStyle.bar} rounded flex items-center justify-center px-1 pointer-events-none shadow-sm overflow-hidden`}
                                             style={{
                                                 left: `${startIndex * colWidth + 2}px`,
                                                 width: `${(endIndex - startIndex + 1) * colWidth - 4}px`,
@@ -1709,8 +1709,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                            {assignment.progress !== undefined && assignment.progress > 0 && (
                                                 <div className={`absolute top-0 bottom-0 left-0 ${roleStyle.fill} opacity-50`} style={{ width: `${assignment.progress}%` }}></div>
                                            )}
-                                           <span className="relative z-10 text-[9px] font-bold text-white/90 drop-shadow-[0_1px_1px_rgba(0,0,0,0.3)]">
-                                                {assignment.progress ? `${assignment.progress}%` : ''}
+                                           <span className="relative z-10 text-[10px] font-bold text-white drop-shadow-md">
+                                                {assignment.progress !== undefined ? `${assignment.progress}%` : ''}
                                            </span>
                                         </div>
                                     )}
