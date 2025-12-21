@@ -212,10 +212,14 @@ const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNa
 
   // Display label logic
   let displayLabel = null;
-  if (holidayDuration === 1 && holidayName) {
-      displayLabel = 'country' in (holidayName as any) ? (holidayName as any).country : 'AL';
-  } else if (holidayDuration === 0.5 && holidayName) {
-      displayLabel = 'country' in (holidayName as any) ? (holidayName as any).country : '0.5';
+  if (holidayDuration > 0 && holidayName) {
+      const country = 'country' in (holidayName as any) ? (holidayName as any).country : null;
+      if (country) {
+          displayLabel = country;
+      } else {
+          // Fallback for individual holidays (no country)
+          displayLabel = holidayDuration === 1 ? 'AL' : '0.5'; 
+      }
   }
 
   return (
@@ -1489,8 +1493,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 const currentRowIndex = gridRowIndex++;
 
                                 return (
-                                <div key={assignment.id} className={`flex border-b border-slate-100 group/assign ${draggedAssignment?.taskId === task.id && draggedAssignment?.index === assignmentIndex ? 'opacity-30' : ''} ${datePickerState.assignmentId === assignment.id ? 'relative z-[60]' : ''}`} draggable={!isReadOnly} onDragStart={(e) => handleAssignmentDragStart(e, task.id, assignmentIndex)} onDragOver={handleAssignmentDragOver} onDrop={(e) => handleAssignmentDrop(e, project.id, module.id, task.id, assignmentIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'assignment', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id, assignmentId: assignment.id }); }}>
-                                  <div className={`flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-[40] flex items-center justify-between border-l-[3px] ${roleStyle.border} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`} style={stickyStyle}>
+                                <div key={assignment.id} className={`flex border-b border-slate-100 group/assign ${draggedAssignment?.taskId === task.id && draggedAssignment?.index === assignmentIndex ? 'opacity-30' : ''} ${datePickerState.assignmentId === assignment.id ? 'relative z-[90]' : ''}`} draggable={!isReadOnly} onDragStart={(e) => handleAssignmentDragStart(e, task.id, assignmentIndex)} onDragOver={handleAssignmentDragOver} onDrop={(e) => handleAssignmentDrop(e, project.id, module.id, task.id, assignmentIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'assignment', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id, assignmentId: assignment.id }); }}>
+                                  <div className={`flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-[80] flex items-center justify-between border-l-[3px] ${roleStyle.border} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`} style={stickyStyle}>
                                     <div className="flex-1 overflow-hidden flex items-center gap-2 pl-12">
                                       <select disabled={isReadOnly} value={assignment.resourceName || 'Unassigned'} onChange={(e) => onUpdateAssignmentResourceName(project.id, module.id, task.id, assignment.id, e.target.value)} className="w-full text-[11px] text-slate-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer hover:text-indigo-600 disabled:cursor-default disabled:hover:text-slate-600">
                                           <option value="Unassigned">Unassigned</option>
@@ -1500,7 +1504,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   </div>
                                   
                                   {/* Assignment Details Columns */}
-                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky z-[39] shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined }}>
+                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky z-[79] shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined }}>
                                     <div className="flex-1 text-center relative">
                                         <button 
                                             onClick={() => !isReadOnly && setDatePickerState({ assignmentId: assignment.id })} 
@@ -1510,7 +1514,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             {assignment.startDate || 'Set Date'}
                                         </button>
                                         {datePickerState.assignmentId === assignment.id && (
-                                            <div ref={datePickerContainerRef} className="absolute top-full left-0 mt-1 z-[70]">
+                                            <div ref={datePickerContainerRef} className="absolute top-full left-0 mt-1 z-[100]">
                                                 <DatePicker 
                                                     value={assignment.startDate ? new Date(assignment.startDate.replace(/-/g, '/')) : new Date()} 
                                                     onChange={(d) => { handleAssignmentStartDateChange(assignment, formatDateForInput(d)); setDatePickerState({ assignmentId: null }); }} 
@@ -1521,7 +1525,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     </div>
                                   </div>
 
-                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky z-[39] shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined }}>
+                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky z-[79] shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined }}>
                                     {isEditingDuration ? (
                                         <input 
                                             ref={editInputRef} 
@@ -1543,7 +1547,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     )}
                                   </div>
 
-                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky z-[39] shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined }}>
+                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky z-[79] shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined }}>
                                      <select 
                                         disabled={isReadOnly}
                                         value={assignment.parentAssignmentId || ''} 
@@ -1562,7 +1566,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                      </select>
                                   </div>
 
-                                  <div className="flex relative">
+                                  <div className="flex relative z-0">
                                     {timeline.map((col, colIdx) => {
                                         const value = getRawCellValue(assignment, col);
                                         const isCurrent = isCurrentColumn(col);
@@ -1615,41 +1619,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             </React.Fragment>
                           );
                         })}
-
-                        {/* Add Task Button Row */}
-                        {!isModuleCollapsed && !isReadOnly && (
-                            <div className="flex border-b border-slate-100 bg-white hover:bg-slate-50 transition-colors">
-                                <div className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-white z-[40] shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] group-hover:bg-slate-50" style={stickyStyle}>
-                                    <button onClick={() => handleAddTaskClick(project.id, module.id)} className="flex items-center gap-2 text-xs text-slate-500 hover:text-indigo-600 font-medium pl-6 py-0.5 transition-colors">
-                                        <Plus size={14} /> Add Task
-                                    </button>
-                                </div>
-                                {/* Spacers */}
-                                <div className={`flex-shrink-0 border-r border-slate-200 bg-white group-hover:bg-slate-50 ${isDetailsFrozen ? 'sticky z-[39]' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined }}></div>
-                                <div className={`flex-shrink-0 border-r border-slate-200 bg-white group-hover:bg-slate-50 ${isDetailsFrozen ? 'sticky z-[39]' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined }}></div>
-                                <div className={`flex-shrink-0 border-r border-slate-200 bg-white group-hover:bg-slate-50 ${isDetailsFrozen ? 'sticky z-[39]' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined }}></div>
-                                <div className="flex-1"></div>
-                            </div>
-                        )}
                       </div>
                     );
                   })}
-                  
-                  {/* Add Module Button Row */}
-                  {!isProjectCollapsed && !isReadOnly && (
-                    <div className="flex bg-slate-100 border-b border-slate-200">
-                        <div className="flex-shrink-0 py-2 px-3 border-r border-slate-200 sticky left-0 bg-slate-100 z-[40] shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}>
-                             <button onClick={() => onAddModule(project.id)} className="flex items-center gap-2 text-xs text-slate-600 hover:text-indigo-600 font-bold pl-2 transition-colors">
-                                <Plus size={14} /> Add Module
-                             </button>
-                        </div>
-                         {/* Spacers */}
-                        <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-100 ${isDetailsFrozen ? 'sticky z-[39]' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined }}></div>
-                        <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-100 ${isDetailsFrozen ? 'sticky z-[39]' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined }}></div>
-                        <div className={`flex-shrink-0 border-r border-slate-200 bg-slate-100 ${isDetailsFrozen ? 'sticky z-[39]' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined }}></div>
-                        <div className="flex-1"></div>
-                    </div>
-                  )}
                 </React.Fragment>
               );
             })}
