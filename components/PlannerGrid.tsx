@@ -1344,6 +1344,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     let moduleEarliestStartDate: string | null = null;
                     let moduleLatestEndDate: Date | null = null;
                     let moduleTotalDuration = 0;
+                    let moduleProgress = 0;
                     
                     const allAssignments = module.tasks.flatMap(t => t.assignments);
                     if (allAssignments.length > 0) {
@@ -1367,6 +1368,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         if (earliestDateObj && moduleLatestEndDate) {
                             moduleEarliestStartDate = formatDateForInput(earliestDateObj);
                             moduleTotalDuration = calculateWorkingDaysBetween(moduleEarliestStartDate, formatDateForInput(moduleLatestEndDate), projectHolidayMap);
+                            
+                            // Calculate module progress
+                            moduleProgress = calculateTimeBasedProgress(moduleEarliestStartDate, formatDateForInput(moduleLatestEndDate));
                         }
                     }
 
@@ -1432,13 +1436,20 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           <div className="flex relative">
                              {isModuleCollapsed && displayMode === 'gantt' && moduleStartIndex > -1 && moduleEndIndex > -1 && (
                                 <div
-                                    className={`absolute top-1/2 -translate-y-1/2 h-4 z-10 ${style.ganttBarColor} rounded-md flex items-center overflow-hidden`}
+                                    className={`absolute top-1/2 -translate-y-1/2 h-4 z-10 ${style.ganttBarColor} rounded-md flex items-center justify-center overflow-hidden`}
                                     style={{
                                         left: `${moduleStartIndex * colWidth + 2}px`,
                                         width: `${(moduleEndIndex - moduleStartIndex + 1) * colWidth - 4}px`,
                                     }}
                                     title={`Duration: ${moduleTotalDuration} working days`}
-                                />
+                                >
+                                    {moduleProgress > 0 && (
+                                        <div className="absolute top-0 bottom-0 left-0 bg-black/20" style={{ width: `${moduleProgress}%` }}></div>
+                                    )}
+                                    <span className="relative z-10 text-[9px] font-bold text-white/90 drop-shadow-sm px-1">
+                                        {moduleProgress > 0 ? `${moduleProgress}%` : ''}
+                                    </span>
+                                </div>
                              )}
                             {timeline.map(col => {
                                 const total = getModuleTotal(module, col);
@@ -1457,6 +1468,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           let earliestStartDate: string | null = null;
                           let latestEndDate: Date | null = null;
                           let totalDuration = 0;
+                          let taskProgress = 0;
 
                           if (task.assignments.length > 0) {
                               let earliestDateObj: Date | null = null;
@@ -1477,6 +1489,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               if (earliestDateObj && latestEndDate) {
                                   earliestStartDate = formatDateForInput(earliestDateObj);
                                   totalDuration = calculateWorkingDaysBetween(earliestStartDate, formatDateForInput(latestEndDate), projectHolidayMap);
+                                  taskProgress = calculateTimeBasedProgress(earliestStartDate, formatDateForInput(latestEndDate));
                               }
                           }
                           
@@ -1526,13 +1539,20 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 <div className="flex relative">
                                     {isTaskCollapsed && displayMode === 'gantt' && taskStartIndex > -1 && taskEndIndex > -1 && (
                                         <div
-                                            className="absolute top-1/2 -translate-y-1/2 h-4 z-10 bg-slate-400 rounded-md flex items-center overflow-hidden"
+                                            className="absolute top-1/2 -translate-y-1/2 h-4 z-10 bg-slate-400 rounded-md flex items-center justify-center overflow-hidden"
                                             style={{
                                                 left: `${taskStartIndex * colWidth + 2}px`,
                                                 width: `${(taskEndIndex - taskStartIndex + 1) * colWidth - 4}px`,
                                             }}
                                             title={`Duration: ${totalDuration} working days`}
-                                        />
+                                        >
+                                            {taskProgress > 0 && (
+                                                <div className="absolute top-0 bottom-0 left-0 bg-slate-600" style={{ width: `${taskProgress}%` }}></div>
+                                            )}
+                                            <span className="relative z-10 text-[9px] font-bold text-white/90 drop-shadow-sm px-1">
+                                                {taskProgress > 0 ? `${taskProgress}%` : ''}
+                                            </span>
+                                        </div>
                                     )}
                                     {timeline.map(col => {
                                       const total = getTaskTotal(task, col);
