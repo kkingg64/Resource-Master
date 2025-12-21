@@ -2,7 +2,7 @@
 import React, { useMemo } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation, Resource, Holiday } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
-import { getTimeline, DEFAULT_START, DEFAULT_END, calculateWorkingDaysBetween, formatDateForInput, getWeekIdFromDate, getWeekdaysForWeekId, calculateEndDate } from '../constants';
+import { getTimeline, DEFAULT_START, DEFAULT_END, calculateWorkingDaysBetween, formatDateForInput, getWeekIdFromDate, getWeekdaysForWeekId, calculateEndDate, calculateTimeBasedProgress } from '../constants';
 import { AlertCircle, CheckCircle2, Clock, Users, Briefcase, ChevronRight, AlertTriangle, AlertOctagon, CalendarDays, Activity, CalendarOff, ArrowRight } from 'lucide-react';
 
 interface DashboardProps {
@@ -346,7 +346,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                         if (!earliestStart || start < earliestStart) earliestStart = start;
                         if (!latestEnd || end > latestEnd) latestEnd = end;
                         
-                        totalProgress += (a.progress || 0);
+                        // Auto-calculate progress based on time
+                        const progress = calculateTimeBasedProgress(start, end);
+                        totalProgress += progress;
                         assignmentCount++;
                     }
                 });
@@ -459,7 +461,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                         <th className="px-6 py-3 w-1/4">Context</th>
                         <th className="px-6 py-3 w-24">Status</th>
                         <th className="px-6 py-3 w-48">Schedule</th>
-                        <th className="px-6 py-3">Progress</th>
+                        <th className="px-6 py-3">Progress (Time)</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
