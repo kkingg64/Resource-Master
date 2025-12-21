@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Holiday } from '../types';
 import { GOV_HOLIDAYS_DB } from '../constants';
@@ -8,11 +9,12 @@ interface AdminSettingsProps {
   onAddHolidays: (holidays: Omit<Holiday, 'id'>[]) => Promise<void>;
   onDeleteHoliday: (id: string) => Promise<void>;
   onDeleteHolidaysByCountry: (country: string) => Promise<void>;
+  onUpdateHolidayDuration: (id: string, duration: number) => Promise<void>;
   /* Added isReadOnly property to AdminSettingsProps to fix assignment error in App.tsx */
   isReadOnly?: boolean;
 }
 
-export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHolidays, onDeleteHoliday, onDeleteHolidaysByCountry, isReadOnly = false }) => {
+export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHolidays, onDeleteHoliday, onDeleteHolidaysByCountry, onUpdateHolidayDuration, isReadOnly = false }) => {
   const [selectedCountryCode, setSelectedCountryCode] = useState<string>('HK');
   const [isSyncing, setIsSyncing] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -280,7 +282,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
                    <th className="p-3 font-semibold border-b w-32 pl-6">Date</th>
                    <th className="p-3 font-semibold border-b">Holiday Name</th>
                    <th className="p-3 font-semibold border-b w-24">Region</th>
-                   <th className="p-3 font-semibold border-b w-24">Duration</th>
+                   <th className="p-3 font-semibold border-b w-32">Duration</th>
                    <th className="p-3 font-semibold border-b w-24">Type</th>
                    <th className="p-3 font-semibold border-b w-16 text-right pr-6">Action</th>
                  </tr>
@@ -310,13 +312,15 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
                                </span>
                              </td>
                              <td className="p-3">
-                                {h.duration === 0.5 ? (
-                                    <span className="inline-flex items-center gap-1 text-xs font-medium text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
-                                        <Clock size={10} /> Half Day
-                                    </span>
-                                ) : (
-                                    <span className="text-xs text-slate-500">Full Day</span>
-                                )}
+                                <select 
+                                    value={h.duration || 1} 
+                                    onChange={(e) => onUpdateHolidayDuration(h.id, parseFloat(e.target.value))}
+                                    disabled={isReadOnly}
+                                    className={`text-xs border-slate-200 rounded px-2 py-1 bg-white focus:ring-indigo-500 focus:border-indigo-500 ${h.duration === 0.5 ? 'text-orange-600 font-semibold' : 'text-slate-600'}`}
+                                >
+                                    <option value={1}>Full Day</option>
+                                    <option value={0.5}>Half Day</option>
+                                </select>
                              </td>
                              <td className="p-3">
                                 {isGovHoliday(h) ? (

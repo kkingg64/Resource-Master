@@ -812,6 +812,16 @@ const App: React.FC = () => {
   // ... (Keep existing update functions: propagateScheduleChanges, updateAssignmentSchedule, etc.)
   // ... Ensure they check `isReadOnlyMode` at the start.
 
+  const updateHolidayDuration = async (id: string, duration: number) => {
+      /* Permissions: Global edit allowed for authenticated users per new policies */
+      if (isReadOnlyMode) return;
+      const { error } = await callSupabase('UPDATE holiday duration', { id, duration },
+          supabase.from('holidays').update({ duration }).eq('id', id)
+      );
+      if (error) alert("Failed to update holiday duration.");
+      else fetchData(true);
+  };
+
   const propagateScheduleChanges = async (currentProjects: Project[], startAssignmentId: string) => {
     // ... propagateScheduleChanges implementation ...
     if (isReadOnlyMode) return;
@@ -2018,7 +2028,6 @@ const App: React.FC = () => {
               onDeleteModule={deleteModule}
               onDeleteTask={deleteTask}
               onDeleteAssignment={deleteAssignment}
-              onImportPlan={(p, h) => { setProjects(p); setHolidays(h); calculateTimelineBounds(p, resources, h); }}
               onShowHistory={() => setShowHistory(true)}
               onRefresh={() => fetchData(true)}
               saveStatus={saveStatus}
@@ -2066,6 +2075,7 @@ const App: React.FC = () => {
               onAddHolidays={addHoliday}
               onDeleteHoliday={deleteHoliday}
               onDeleteHolidaysByCountry={deleteHolidaysByCountry}
+              onUpdateHolidayDuration={updateHolidayDuration}
               isReadOnly={false}
             />}
           </div>

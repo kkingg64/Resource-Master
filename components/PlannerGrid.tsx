@@ -2,8 +2,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween, calculateTimeBasedProgress } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server } from 'lucide-react';
 import { DependencyLines } from './DependencyLines';
 
 // --- Custom DatePicker Component ---
@@ -131,8 +130,8 @@ interface PlannerGridProps {
   onDeleteModule: (projectId: string, moduleId: string) => void;
   onDeleteTask: (projectId: string, moduleId: string, taskId: string) => void;
   onDeleteAssignment: (projectId: string, moduleId: string, taskId: string, assignmentId: string) => void;
-  onImportPlan: (projects: Project[], holidays: Holiday[]) => void;
-  onShowHistory: () => void;
+  /* Removed unused props: onImportPlan, onShowHistory */
+  onShowHistory?: () => void; // Keeping as optional for strict types but removing usage
   onRefresh: () => void;
   saveStatus: 'idle' | 'saving' | 'success' | 'error';
   isRefreshing: boolean;
@@ -362,8 +361,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   onDeleteModule,
   onDeleteTask,
   onDeleteAssignment,
-  onImportPlan,
-  onShowHistory,
   onRefresh,
   saveStatus,
   isRefreshing,
@@ -406,7 +403,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
 
   const [viewMode, setViewMode] = useState<ViewMode>('day');
-  const [displayMode, setDisplayMode] = useState<'allocation' | 'gantt'>('allocation');
+  /* Set default displayMode to 'gantt' */
+  const [displayMode, setDisplayMode] = useState<'allocation' | 'gantt'>('gantt');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   
@@ -416,7 +414,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const [userHasResizedSidebar, setUserHasResizedSidebar] = useState(false);
-  const [startColWidth, setStartColWidth] = useState(95);
+  /* Set default startColWidth to 100 */
+  const [startColWidth, setStartColWidth] = useState(100);
   const [durationColWidth, setDurationColWidth] = useState(50);
   const [dependencyColWidth, setDependencyColWidth] = useState(50);
 
@@ -437,7 +436,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const [datePickerState, setDatePickerState] = useState<{ assignmentId: string | null }>({ assignmentId: null });
   
-  const importInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const toggleButtonRef = useRef<HTMLButtonElement>(null);
   const datePickerContainerRef = useRef<HTMLDivElement>(null);
@@ -762,63 +760,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     } else if (e.key === 'Escape') {
       setEditingId(null);
     }
-  };
-
-  const handleExportExcel = () => {
-    const planData: any[] = [];
-    const weekHeaders = getTimeline('week', timelineStart, timelineEnd).map(w => w.id);
-    projects.forEach(p => {
-      p.modules.forEach(m => {
-        m.tasks.forEach(t => {
-          t.assignments.forEach(a => {
-            const row: any = { 'Project': p.name, 'Module': m.name, 'Task': t.name, 'Role': a.role, 'Resource': a.resourceName || 'Unassigned' };
-            a.allocations.forEach(alloc => { if (weekHeaders.includes(alloc.weekId)) { row[alloc.weekId] = alloc.count; } });
-            planData.push(row);
-          });
-        });
-      });
-    });
-    const wb = XLSX.utils.book_new();
-    const planWs = XLSX.utils.json_to_sheet(planData, { header: ['Project', 'Module', 'Task', 'Role', 'Resource', ...weekHeaders] });
-    XLSX.utils.book_append_sheet(wb, planWs, 'Resource Plan');
-    XLSX.writeFile(wb, `oms-resource-plan-${new Date().toISOString().split('T')[0]}.xlsx`);
-  };
-
-  const handleImportExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (isReadOnly) return;
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'array' });
-        const planSheet = workbook.Sheets['Resource Plan'];
-        if (!planSheet) throw new Error('Resource Plan sheet not found');
-        const planJson = XLSX.utils.sheet_to_json<any>(planSheet);
-        const importedProjects: Project[] = [];
-        let currentProject: Project | null = null;
-        let currentModule: ProjectModule | null = null;
-        let currentTask: ProjectTask | null = null;
-        planJson.forEach((row, index) => {
-            /* Added missing user_id property to correctly satisfy the Project interface during import */
-            if (row.Project && row.Project !== currentProject?.name) { currentProject = { id: `p-${index}`, name: row.Project, modules: [], user_id: 'imported' }; importedProjects.push(currentProject); currentModule = null; currentTask = null; }
-            if (!currentProject) return;
-            if (row.Module && row.Module !== currentModule?.name) { currentModule = { id: `m-${index}`, name: row.Module, tasks: [], functionPoints: 0, legacyFunctionPoints: 0 }; currentProject.modules.push(currentModule); currentTask = null; }
-            if (!currentModule) return;
-            if (row.Task && row.Task !== currentTask?.name) { currentTask = { id: `t-${index}`, name: row.Task, assignments: [] }; currentModule.tasks.push(currentTask); }
-            if (!currentProject) return; // redundant but for TS safety
-            if (!currentTask) return;
-            const allocations: { weekId: string, count: number }[] = [];
-            Object.keys(row).forEach(key => { if (/^\d{4}-\d{2}$/.test(key)) { allocations.push({ weekId: key, count: Number(row[key]) }); } });
-            const assignment: TaskAssignment = { id: `a-${index}`, role: row.Role as Role, resourceName: row.Resource, allocations };
-            currentTask.assignments.push(assignment);
-        });
-        if (window.confirm('This will overwrite your current plan. Are you sure?')) { onImportPlan(importedProjects, []); }
-      } catch (error: any) { alert(`Failed to import plan: ${error.message}`); }
-    };
-    reader.readAsArrayBuffer(file);
-    event.target.value = '';
   };
 
   const timeline = useMemo(() => getTimeline(viewMode, timelineStart, timelineEnd), [viewMode, timelineStart, timelineEnd]);
@@ -1150,8 +1091,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             </div>
 
             <div className="flex items-center gap-2 bg-slate-200 rounded-lg p-1">
-                <button onClick={() => setDisplayMode('allocation')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'allocation' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Grid View (Allocations)"><LayoutList size={14} /> Grid</button>
+                {/* Swapped order: Gantt first, Grid second */}
                 <button onClick={() => setDisplayMode('gantt')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'gantt' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Gantt View (Timeline Bars)"><CalendarRange size={14} /> Gantt</button>
+                <button onClick={() => setDisplayMode('allocation')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'allocation' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Grid View (Allocations)"><LayoutList size={14} /> Grid</button>
             </div>
             <div className="h-4 w-px bg-slate-300"></div>
             <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden">
@@ -1168,11 +1110,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             <div className="flex items-center gap-2">
                 <button onClick={onRefresh} disabled={isRefreshing} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Refresh data from server"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh</button>
                 <SaveStatusIndicator status={saveStatus} />
-                <div className="w-px h-4 bg-slate-300"></div>
-                {!isReadOnly && <button onClick={onShowHistory} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="View and restore saved versions"><History size={12} /></button>}
-                <button onClick={handleExportExcel} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Export the current plan as an Excel file"><Download size={12} /></button>
-                {!isReadOnly && <button onClick={() => importInputRef.current?.click()} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Import a plan from an Excel file"><Upload size={12} /></button>}
-                <input type="file" ref={importInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
+                {/* Removed Version History, Export, Import buttons */}
             </div>
             <div className="w-px h-4 bg-slate-300"></div>
             {!isReadOnly && <button onClick={onAddProject} className="text-xs flex items-center gap-1 bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 transition-colors"><Plus size={12} /> Add Project</button>}
@@ -1192,7 +1130,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
               timeline={timeline}
               colWidth={colWidth}
               totalHeight={assignmentRenderInfo.totalHeight}
-              sidebarWidth={stickyLeftOffset}
+              sidebarWidth={sidebarWidth + startColWidth + durationColWidth + dependencyColWidth}
             />
           )}
           <div className="min-w-max relative">
