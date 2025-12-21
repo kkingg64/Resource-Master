@@ -2,7 +2,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween, calculateTimeBasedProgress } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server } from 'lucide-react';
+import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server, Download, Upload, History } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { DependencyLines } from './DependencyLines';
 
 // --- Custom DatePicker Component ---
@@ -130,7 +131,7 @@ interface PlannerGridProps {
   onDeleteModule: (projectId: string, moduleId: string) => void;
   onDeleteTask: (projectId: string, moduleId: string, taskId: string) => void;
   onDeleteAssignment: (projectId: string, moduleId: string, taskId: string, assignmentId: string) => void;
-  /* Removed unused props: onImportPlan, onShowHistory */
+  onImportPlan?: (projects: Project[], holidays: Holiday[]) => void;
   onShowHistory?: () => void; // Keeping as optional for strict types but removing usage
   onRefresh: () => void;
   saveStatus: 'idle' | 'saving' | 'success' | 'error';
@@ -361,6 +362,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   onDeleteModule,
   onDeleteTask,
   onDeleteAssignment,
+  onImportPlan,
+  onShowHistory,
   onRefresh,
   saveStatus,
   isRefreshing,
@@ -403,8 +406,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
 
   const [viewMode, setViewMode] = useState<ViewMode>('day');
-  /* Set default displayMode to 'gantt' */
-  const [displayMode, setDisplayMode] = useState<'allocation' | 'gantt'>('gantt');
+  const [displayMode, setDisplayMode] = useState<'allocation' | 'gantt'>('allocation');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   
@@ -414,7 +416,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const [userHasResizedSidebar, setUserHasResizedSidebar] = useState(false);
-  /* Set default startColWidth to 100 */
   const [startColWidth, setStartColWidth] = useState(100);
   const [durationColWidth, setDurationColWidth] = useState(50);
   const [dependencyColWidth, setDependencyColWidth] = useState(50);
@@ -437,6 +438,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [datePickerState, setDatePickerState] = useState<{ assignmentId: string | null }>({ assignmentId: null });
   
   const editInputRef = useRef<HTMLInputElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const toggleButtonRef = useRef<HTMLButtonElement>(null);
   const datePickerContainerRef = useRef<HTMLDivElement>(null);
 
@@ -453,39 +455,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     });
     return map;
   }, [holidays]);
-
-  // Visibility Logic for Filters
-  const [showFilterMenu, setShowFilterMenu] = useState(false);
-  const [filterText, setFilterText] = useState('');
-  const filterMenuRef = useRef<HTMLDivElement>(null);
-  const filterInputRef = useRef<HTMLInputElement>(null);
-
-  const isAssignmentVisible = (assignment: TaskAssignment) => {
-    if (!filterText) return true;
-    const search = filterText.toLowerCase();
-    return (assignment.resourceName || '').toLowerCase().includes(search) || (assignment.role || '').toLowerCase().includes(search);
-  };
-
-  const isTaskVisible = (task: ProjectTask) => {
-    if (!filterText) return true;
-    const search = filterText.toLowerCase();
-    if (task.name.toLowerCase().includes(search)) return true;
-    return task.assignments.some(isAssignmentVisible);
-  };
-
-  const isModuleVisible = (module: ProjectModule) => {
-    if (!filterText) return true;
-    const search = filterText.toLowerCase();
-    if (module.name.toLowerCase().includes(search)) return true;
-    return module.tasks.some(isTaskVisible);
-  };
-
-  const isProjectVisible = (project: Project) => {
-    if (!filterText) return true;
-    const search = filterText.toLowerCase();
-    if (project.name.toLowerCase().includes(search)) return true;
-    return project.modules.some(isModuleVisible);
-  };
 
   // Auto-fit sidebar width based on longest text
   useEffect(() => {
@@ -762,6 +731,69 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }
   };
 
+  const handleExportExcel = () => {
+    const planData: any[] = [];
+    const weekHeaders = getTimeline('week', timelineStart, timelineEnd).map(w => w.id);
+    projects.forEach(p => {
+      p.modules.forEach(m => {
+        m.tasks.forEach(t => {
+          t.assignments.forEach(a => {
+            const row: any = { 'Project': p.name, 'Module': m.name, 'Task': t.name, 'Role': a.role, 'Resource': a.resourceName || 'Unassigned' };
+            a.allocations.forEach(alloc => { if (weekHeaders.includes(alloc.weekId)) { row[alloc.weekId] = alloc.count; } });
+            planData.push(row);
+          });
+        });
+      });
+    });
+    const wb = XLSX.utils.book_new();
+    const planWs = XLSX.utils.json_to_sheet(planData, { header: ['Project', 'Module', 'Task', 'Role', 'Resource', ...weekHeaders] });
+    XLSX.utils.book_append_sheet(wb, planWs, 'Resource Plan');
+    XLSX.writeFile(wb, `oms-resource-plan-${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const handleImportExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (isReadOnly) return;
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'array' });
+        const planSheet = workbook.Sheets['Resource Plan'];
+        if (!planSheet) throw new Error('Resource Plan sheet not found');
+        const planJson = XLSX.utils.sheet_to_json<any>(planSheet);
+        const importedProjects: Project[] = [];
+        let currentProject: Project | null = null;
+        let currentModule: ProjectModule | null = null;
+        let currentTask: ProjectTask | null = null;
+        planJson.forEach((row, index) => {
+            /* Added missing user_id property to correctly satisfy the Project interface during import */
+            if (row.Project && row.Project !== currentProject?.name) { currentProject = { id: `p-${index}`, name: row.Project, modules: [], user_id: 'imported' }; importedProjects.push(currentProject); currentModule = null; currentTask = null; }
+            if (!currentProject) return;
+            if (row.Module && row.Module !== currentModule?.name) { currentModule = { id: `m-${index}`, name: row.Module, tasks: [], functionPoints: 0, legacyFunctionPoints: 0 }; currentProject.modules.push(currentModule); currentTask = null; }
+            if (!currentModule) return;
+            if (row.Task && row.Task !== currentTask?.name) { currentTask = { id: `t-${index}`, name: row.Task, assignments: [] }; currentModule.tasks.push(currentTask); }
+            if (!currentProject) return; // redundant but for TS safety
+            if (!currentTask) return;
+            const allocations: { weekId: string, count: number }[] = [];
+            Object.keys(row).forEach(key => { if (/^\d{4}-\d{2}$/.test(key)) { allocations.push({ weekId: key, count: Number(row[key]) }); } });
+            const assignment: TaskAssignment = { id: `a-${index}`, role: row.Role as Role, resourceName: row.Resource, allocations };
+            currentTask.assignments.push(assignment);
+        });
+        if (window.confirm('This will overwrite your current plan. Are you sure?')) { 
+            if (onImportPlan) {
+                onImportPlan(importedProjects, []); 
+            } else {
+                alert("Import function not connected.");
+            }
+        }
+      } catch (error: any) { alert(`Failed to import plan: ${error.message}`); }
+    };
+    reader.readAsArrayBuffer(file);
+    event.target.value = '';
+  };
+
   const timeline = useMemo(() => getTimeline(viewMode, timelineStart, timelineEnd), [viewMode, timelineStart, timelineEnd]);
 
   const today = new Date();
@@ -997,44 +1029,44 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     const map = new Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>();
     let rowIndex = 0;
     const HEADER_HEIGHT = (showYearRow ? 32 : 0) + (showMonthRow ? 32 : 0) + 32;
-    const ROW_HEIGHT = 33;
+    const ROW_HEIGHT = 34; // Corrected row height to match visual appearance (34px)
 
     projects.forEach(project => {
+        if (!isProjectVisible(project)) return;
+        
         rowIndex++; // Project header
         if (!collapsedProjects[project.id]) {
-            if (isProjectVisible(project)) { // Ensure filtering is respected for row calculation
-              project.modules.forEach(module => {
-                  rowIndex++; // Module header
-                  if (!collapsedModules[module.id]) {
-                      if (isModuleVisible(module)) {
-                        module.tasks.forEach(task => {
-                            rowIndex++; // Task header
-                            if (!collapsedTasks[task.id]) {
-                                if (isTaskVisible(task)) {
-                                  task.assignments.forEach(assignment => {
-                                      if (isAssignmentVisible(assignment)) {
-                                        if (assignment.startDate && assignment.duration) {
-                                            const resourceName = assignment.resourceName || 'Unassigned';
-                                            const assignmentHolidaysMap = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
-                                            const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, assignmentHolidaysMap);
-                                            
-                                            map.set(assignment.id, {
-                                                rowIndex,
-                                                y: HEADER_HEIGHT + (rowIndex * ROW_HEIGHT) + (ROW_HEIGHT / 2),
-                                                startDate: assignment.startDate,
-                                                endDate: endDateStr,
-                                            });
-                                        }
-                                        rowIndex++; // Assignment row
-                                      }
-                                  });
+            project.modules.forEach(module => {
+                if (!isModuleVisible(module)) return;
+                
+                rowIndex++; // Module header
+                if (!collapsedModules[module.id]) {
+                    module.tasks.forEach(task => {
+                        if (!isTaskVisible(task)) return;
+                        
+                        rowIndex++; // Task header
+                        if (!collapsedTasks[task.id]) {
+                            task.assignments.forEach(assignment => {
+                                if (isAssignmentVisible(assignment)) {
+                                    if (assignment.startDate && assignment.duration) {
+                                        const resourceName = assignment.resourceName || 'Unassigned';
+                                        const assignmentHolidaysMap = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
+                                        const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, assignmentHolidaysMap);
+                                        
+                                        map.set(assignment.id, {
+                                            rowIndex,
+                                            y: HEADER_HEIGHT + (rowIndex * ROW_HEIGHT) + (ROW_HEIGHT / 2),
+                                            startDate: assignment.startDate,
+                                            endDate: endDateStr,
+                                        });
+                                    }
+                                    rowIndex++; // Assignment row
                                 }
-                            }
-                        });
-                      }
-                  }
-              });
-            }
+                            });
+                        }
+                    });
+                }
+            });
         }
     });
     return { map, totalHeight: HEADER_HEIGHT + rowIndex * ROW_HEIGHT };
@@ -1110,7 +1142,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             <div className="flex items-center gap-2">
                 <button onClick={onRefresh} disabled={isRefreshing} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Refresh data from server"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh</button>
                 <SaveStatusIndicator status={saveStatus} />
-                {/* Removed Version History, Export, Import buttons */}
+                <div className="w-px h-4 bg-slate-300"></div>
+                {!isReadOnly && <button onClick={onShowHistory} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="View and restore saved versions"><History size={12} /></button>}
+                <button onClick={handleExportExcel} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Export the current plan as an Excel file"><Download size={12} /></button>
+                {!isReadOnly && <button onClick={() => importInputRef.current?.click()} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Import a plan from an Excel file"><Upload size={12} /></button>}
+                <input type="file" ref={importInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
             </div>
             <div className="w-px h-4 bg-slate-300"></div>
             {!isReadOnly && <button onClick={onAddProject} className="text-xs flex items-center gap-1 bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 transition-colors"><Plus size={12} /> Add Project</button>}
@@ -1130,7 +1166,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
               timeline={timeline}
               colWidth={colWidth}
               totalHeight={assignmentRenderInfo.totalHeight}
-              sidebarWidth={sidebarWidth + startColWidth + durationColWidth + dependencyColWidth}
+              sidebarWidth={stickyLeftOffset}
             />
           )}
           <div className="min-w-max relative">
@@ -1208,13 +1244,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             )}
 
             {projects.map((project) => {
-              if (!isProjectVisible(project)) return null;
               const isProjectCollapsed = collapsedProjects[project.id];
               const isEditingProject = editingId === `project::${project.id}`;
 
               return (
                 <React.Fragment key={project.id}>
-                  <div className="flex bg-slate-700 border-b border-slate-600 sticky z-30 group">
+                  <div className="flex bg-slate-700 border-b border-slate-600 sticky z-30 group h-[34px]">
                     <div className="flex-shrink-0 px-3 py-1.5 pr-2 border-r border-slate-600 sticky left-0 bg-slate-700 z-40 cursor-pointer flex items-center justify-between text-white shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]" style={stickyStyle} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'project', x: e.pageX, y: e.pageY, projectId: project.id }); }}>
                       <div className="flex items-center gap-2 overflow-hidden flex-1" onClick={() => !isEditingProject && toggleProject(project.id)}>
                         {isProjectCollapsed ? <ChevronRight className="w-4 h-4 text-slate-300" /> : <ChevronDown className="w-4 h-4 text-slate-300" />}
@@ -1233,7 +1268,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   </div>
 
                   {!isProjectCollapsed && project.modules.map((module, index) => {
-                    if (!isModuleVisible(module)) return null;
                     const isModuleCollapsed = collapsedModules[module.id];
                     const moduleEditId = `module::${project.id}::${module.id}`;
                     const isEditingModule = editingId === moduleEditId;
@@ -1250,7 +1284,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         let earliestDateObj: Date | null = null;
                         
                         allAssignments.forEach(assignment => {
-                            if (!isAssignmentVisible(assignment)) return;
                             if (!assignment.startDate || !assignment.duration) return;
                             const startDate = new Date(assignment.startDate.replace(/-/g, '/'));
                             if (!earliestDateObj || startDate < earliestDateObj) {
@@ -1305,7 +1338,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                     return (
                       <div key={module.id} draggable={!isReadOnly} onDragStart={(e) => handleModuleDragStart(e, index)} onDragOver={handleModuleDragOver} onDrop={(e) => handleModuleDrop(e, project.id, module.id, index)} className={`${draggedModuleIndex === index ? 'opacity-50' : 'opacity-100'}`} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'module', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id }); }}>
-                        <div className={`flex ${style.bgColor} border-b border-slate-100 ${style.hoverBgColor} transition-colors group`}>
+                        <div className={`flex ${style.bgColor} border-b border-slate-100 ${style.hoverBgColor} transition-colors group h-[34px]`}>
                           <div className={`flex-shrink-0 py-1.5 px-3 pl-6 border-r border-slate-200 sticky left-0 ${style.bgColor} z-30 flex items-center justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`} style={stickyStyle}>
                             <div className="flex items-center gap-2 flex-1 overflow-hidden cursor-pointer" onClick={() => !isEditingModule && toggleModule(module.id)}>
                               {!isReadOnly && <div className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500" title="Drag to reorder"><GripVertical className="w-4 h-4" /></div>}
@@ -1365,7 +1398,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                         </div>
 
                         {!isModuleCollapsed && module.tasks.map((task, taskIndex) => {
-                          if (!isTaskVisible(task)) return null;
                           const taskEditId = `task::${project.id}::${module.id}::${task.id}`;
                           const isTaskCollapsed = collapsedTasks[task.id];
                           const isEditingTask = editingId === taskEditId;
@@ -1376,7 +1408,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           if (task.assignments.length > 0) {
                               let earliestDateObj: Date | null = null;
                               task.assignments.forEach(assignment => {
-                                  if (!isAssignmentVisible(assignment)) return;
                                   if (!assignment.startDate || !assignment.duration) return;
                                   const startDate = new Date(assignment.startDate.replace(/-/g, '/'));
                                   if (!earliestDateObj || startDate < earliestDateObj) {
@@ -1395,14 +1426,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                   totalDuration = calculateWorkingDaysBetween(earliestStartDate, formatDateForInput(latestEndDate), projectHolidayMap);
                               }
                           }
-
-                          // --- Calculate Task Time-Based Progress ---
+                          
                           let taskTimeProgress = 0;
                           if (earliestStartDate && latestEndDate) {
-                               const tEndDateStr = formatDateForInput(latestEndDate);
-                               taskTimeProgress = calculateTimeBasedProgress(earliestStartDate, tEndDateStr);
+                                const tEndDateStr = formatDateForInput(latestEndDate);
+                                taskTimeProgress = calculateTimeBasedProgress(earliestStartDate, tEndDateStr);
                           }
-                          // ----------------------------------------------
                           
                           const { taskStartIndex, taskEndIndex } = (() => {
                                 if (!earliestStartDate || !latestEndDate) return { taskStartIndex: -1, taskEndIndex: -1 };
@@ -1427,7 +1456,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                           return (
                             <React.Fragment key={task.id}>
-                              <div draggable={!isReadOnly} onDragStart={(e) => handleTaskDragStart(e, project.id, module.id, taskIndex)} onDragOver={handleTaskDragOver} onDrop={(e) => handleTaskDrop(e, project.id, module.id, taskIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'task', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id }); }} className={`flex border-b border-slate-100 bg-slate-50 group/task ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>
+                              <div draggable={!isReadOnly} onDragStart={(e) => handleTaskDragStart(e, project.id, module.id, taskIndex)} onDragOver={handleTaskDragOver} onDrop={(e) => handleTaskDrop(e, project.id, module.id, taskIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'task', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id }); }} className={`flex border-b border-slate-100 bg-slate-50 group/task h-[34px] ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>
                                 <div className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50 z-20 flex items-center justify-between pl-6 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}>
                                   <div className="flex items-center gap-2 overflow-hidden cursor-pointer flex-1" onClick={() => !isEditingTask && toggleTask(task.id)}>
                                     {!isReadOnly && <div className="cursor-grab text-slate-400 hover:text-slate-600" title="Drag to reorder task"><GripVertical size={14} /></div>}
@@ -1473,7 +1502,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               </div>
 
                               {!isTaskCollapsed && task.assignments.map((assignment, assignmentIndex) => {
-                                if (!isAssignmentVisible(assignment)) return null;
                                 const hasSchedule = assignment.startDate && assignment.duration && assignment.duration > 0;
                                 let assignmentStartDate: Date | null = null;
                                 let assignmentEndDate: Date | null = null;
@@ -1523,7 +1551,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 const currentRowIndex = gridRowIndex++;
 
                                 return (
-                                <div key={assignment.id} className={`flex border-b border-slate-100 group/assign ${draggedAssignment?.taskId === task.id && draggedAssignment?.index === assignmentIndex ? 'opacity-30' : ''} ${datePickerState.assignmentId === assignment.id ? 'relative z-40' : ''}`} draggable={!isReadOnly} onDragStart={(e) => handleAssignmentDragStart(e, task.id, assignmentIndex)} onDragOver={handleAssignmentDragOver} onDrop={(e) => handleAssignmentDrop(e, project.id, module.id, task.id, assignmentIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'assignment', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id, assignmentId: assignment.id }); }}>
+                                <div key={assignment.id} className={`flex border-b border-slate-100 group/assign h-[34px] ${draggedAssignment?.taskId === task.id && draggedAssignment?.index === assignmentIndex ? 'opacity-30' : ''} ${datePickerState.assignmentId === assignment.id ? 'relative z-40' : ''}`} draggable={!isReadOnly} onDragStart={(e) => handleAssignmentDragStart(e, task.id, assignmentIndex)} onDragOver={handleAssignmentDragOver} onDrop={(e) => handleAssignmentDrop(e, project.id, module.id, task.id, assignmentIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'assignment', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id, assignmentId: assignment.id }); }}>
                                   <div className={`flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-10 flex items-center justify-between border-l-[3px] ${roleStyle.border} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`} style={stickyStyle}>
                                     <div className="flex-1 overflow-hidden flex items-center gap-2 pl-12">
                                       <select disabled={isReadOnly} value={assignment.resourceName || 'Unassigned'} onChange={(e) => onUpdateAssignmentResourceName(project.id, module.id, task.id, assignment.id, e.target.value)} className="w-full text-[11px] text-slate-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer hover:text-indigo-600 disabled:cursor-default disabled:hover:text-slate-600">
@@ -1657,16 +1685,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           {contextMenu.type === 'module' && contextMenu.moduleId && ( <> <button onClick={() => { handleAddTaskClick(contextMenu.projectId, contextMenu.moduleId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"><Plus size={12} /> Add New Task</button> <div className="h-px bg-slate-100 my-1"></div> <button onClick={() => { onDeleteModule(contextMenu.projectId, contextMenu.moduleId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Module</button> </> )}
           {contextMenu.type === 'task' && contextMenu.moduleId && contextMenu.taskId && ( <> <button onClick={() => { onAddAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, Role.EA); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"><UserPlus size={12} /> Add Resource</button> 
               <div className="h-px bg-slate-100 my-1"></div> 
-              <button onClick={() => { onDeleteTask(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Task</button> 
-            </> 
-          )}
-          {contextMenu.type === 'assignment' && contextMenu.moduleId && contextMenu.taskId && contextMenu.assignmentId && ( 
-            <> 
-              <button onClick={() => { onCopyAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"><Copy size={12} /> Duplicate Assignment</button> 
-              <div className="h-px bg-slate-100 my-1"></div> 
-              <button onClick={() => { onDeleteAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Assignment</button> 
-            </> 
-          )}
+              <button onClick={() => { onDeleteTask(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Task</button> </> )}
+          {contextMenu.type === 'assignment' && contextMenu.moduleId && contextMenu.taskId && contextMenu.assignmentId && ( <> <button onClick={() => { onCopyAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded flex items-center gap-2"><Copy size={12} /> Duplicate Assignment</button> <div className="h-px bg-slate-100 my-1"></div> <button onClick={() => { onDeleteAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }} className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 hover:text-red-700 rounded flex items-center gap-2 text-red-600"><Trash2 size={12} /> Delete Assignment</button> </> )}
         </div>
       )}
     </>
