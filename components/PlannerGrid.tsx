@@ -413,7 +413,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
 
   const [viewMode, setViewMode] = useState<ViewMode>('day');
-  const [displayMode, setDisplayMode] = useState<'allocation' | 'gantt'>('allocation');
+  const [displayMode, setDisplayMode] = useState<'allocation' | 'gantt'>('gantt');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   
@@ -1190,8 +1190,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             </div>
 
             <div className="flex items-center gap-2 bg-slate-200 rounded-lg p-1 ml-2">
-                <button onClick={() => setDisplayMode('allocation')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'allocation' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Grid View (Allocations)"><LayoutList size={14} /> Grid</button>
                 <button onClick={() => setDisplayMode('gantt')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'gantt' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Gantt View (Timeline Bars)"><CalendarRange size={14} /> Gantt</button>
+                <button onClick={() => setDisplayMode('allocation')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'allocation' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Grid View (Allocations)"><LayoutList size={14} /> Grid</button>
             </div>
             <div className="h-4 w-px bg-slate-300"></div>
             <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden">
@@ -1700,7 +1700,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     {/* Gantt Bar - Rendered AFTER cells with higher Z-index */}
                                     {displayMode === 'gantt' && startIndex > -1 && endIndex > -1 && (
                                         <div 
-                                            className={`absolute top-1/2 -translate-y-1/2 h-4 z-30 ${roleStyle.bar} rounded flex items-center justify-between px-1 overflow-hidden pointer-events-none shadow-sm`}
+                                            className={`absolute top-1/2 -translate-y-1/2 h-4 z-30 ${roleStyle.bar} rounded flex items-center justify-center px-1 overflow-hidden pointer-events-none shadow-sm`}
                                             style={{
                                                 left: `${startIndex * colWidth + 2}px`,
                                                 width: `${(endIndex - startIndex + 1) * colWidth - 4}px`,
@@ -1709,6 +1709,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                            {assignment.progress !== undefined && assignment.progress > 0 && (
                                                 <div className={`absolute top-0 bottom-0 left-0 ${roleStyle.fill} opacity-50`} style={{ width: `${assignment.progress}%` }}></div>
                                            )}
+                                           <span className="relative z-10 text-[9px] font-bold text-white/90 drop-shadow-[0_1px_1px_rgba(0,0,0,0.3)]">
+                                                {assignment.progress ? `${assignment.progress}%` : ''}
+                                           </span>
                                         </div>
                                     )}
                                   </div>
