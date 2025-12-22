@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server } from 'lucide-react';
 import { DependencyLines } from './DependencyLines';
 
 // --- Custom DatePicker Component ---
@@ -168,13 +167,13 @@ interface GridNumberInputProps {
   isCurrent: boolean;
   holidayName?: string | any;
   disabled?: boolean;
+  isGanttMode?: boolean;
 }
 
-const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNavigate, rowIndex, colIndex, width, holidayDuration, isCurrent, holidayName, disabled }) => {
+const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNavigate, rowIndex, colIndex, width, holidayDuration, isCurrent, holidayName, disabled, isGanttMode }) => {
   const [localValue, setLocalValue] = useState(value === 0 ? '' : String(value));
   const [isEditing, setIsEditing] = useState(false);
 
-  // Sync with prop value only when not editing to allow free typing
   useEffect(() => {
       if (!isEditing) {
           setLocalValue(value === 0 ? '' : String(value));
@@ -200,6 +199,12 @@ const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNa
           e.currentTarget.blur();
       }
   };
+
+  if (isGanttMode) {
+      return (
+          <div className="flex-shrink-0 border-r border-slate-100 bg-transparent relative" style={{ width: `${width}px` }}></div>
+      );
+  }
 
   let bgClass = '';
   if (holidayDuration === 1) {
@@ -267,6 +272,8 @@ const ROLE_STYLES: Record<string, { border: string, bg: string, bar: string, fil
   [Role.EA]: { border: 'border-l-pink-500', bg: 'bg-pink-50', bar: 'bg-pink-200', fill: 'bg-pink-600' },
   [Role.PREP_DEV]: { border: 'border-l-teal-500', bg: 'bg-teal-50', bar: 'bg-teal-200', fill: 'bg-teal-600' },
   [Role.CNF]: { border: 'border-l-slate-500', bg: 'bg-slate-50', bar: 'bg-slate-200', fill: 'bg-slate-600' },
+  [Role.CS]: { border: 'border-l-violet-500', bg: 'bg-violet-50', bar: 'bg-violet-200', fill: 'bg-violet-600' },
+  [Role.PRODUCTION]: { border: 'border-l-emerald-500', bg: 'bg-emerald-50', bar: 'bg-emerald-200', fill: 'bg-emerald-600' },
   'default': { border: 'border-l-slate-400', bg: 'bg-slate-50', bar: 'bg-slate-200', fill: 'bg-slate-500' }
 };
 
@@ -368,7 +375,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   isRefreshing,
   isReadOnly = false,
 }) => {
-  // --- Persistent State Initialization ---
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>(() => {
     try {
         const saved = localStorage.getItem('oms_collapsed_projects');
@@ -390,7 +396,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     } catch { return {}; }
   });
 
-  // --- Persistence Effects ---
   useEffect(() => {
     localStorage.setItem('oms_collapsed_projects', JSON.stringify(collapsedProjects));
   }, [collapsedProjects]);
@@ -436,17 +441,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const [datePickerState, setDatePickerState] = useState<{ assignmentId: string | null }>({ assignmentId: null });
   
-  const importInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const toggleButtonRef = useRef<HTMLButtonElement>(null);
   const datePickerContainerRef = useRef<HTMLDivElement>(null);
 
-  // --- Performance: Ghost Resize Refs ---
   const resizeGhostRef = useRef<HTMLDivElement>(null);
   const isResizing = useRef(false);
   const resizeData = useRef({ col: '', startX: 0, startWidth: 0 });
 
-  // Use a consistent project-level holiday calendar (HK) for duration calculations.
   const projectHolidayMap = useMemo(() => {
     const map = new Map<string, number>();
     holidays.filter(h => h.country === 'HK').forEach(h => {
@@ -455,7 +457,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     return map;
   }, [holidays]);
 
-  // Auto-fit sidebar width based on longest text
   useEffect(() => {
     if (userHasResizedSidebar) return;
     if (!projects || projects.length === 0) return;
@@ -463,35 +464,28 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     const calculateOptimalWidth = () => {
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
-        if (!context) return 350; // Fallback
+        if (!context) return 350; 
 
-        // Font settings matching UI (Inter, text-xs/12px)
         context.font = 'bold 12px Inter, ui-sans-serif, system-ui, sans-serif'; 
 
-        let maxPixelWidth = 200; // Minimum start width
+        let maxPixelWidth = 200; 
 
         projects.forEach(p => {
-            // Project row padding: ~60px (icons, gap, chevron)
             const pWidth = context.measureText(p.name).width + 60; 
             if (pWidth > maxPixelWidth) maxPixelWidth = pWidth;
 
             p.modules.forEach(m => {
-                // Module row padding: ~80px (indent, icons, gap)
                 const mWidth = context.measureText(m.name).width + 80; 
                 if (mWidth > maxPixelWidth) maxPixelWidth = mWidth;
 
                 m.tasks.forEach(t => {
-                    // Task row padding: ~100px (indent, icons, gap)
                     const tWidth = context.measureText(t.name).width + 100; 
                     if (tWidth > maxPixelWidth) maxPixelWidth = tWidth;
                 });
             });
         });
         
-        // Add a small breathing room
         maxPixelWidth += 20;
-
-        // Clamp values
         return Math.min(Math.max(250, maxPixelWidth), 600);
     };
 
@@ -501,7 +495,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   useEffect(() => {
     if (editingId && editInputRef.current) {
       editInputRef.current.focus();
-      // Only select content if it's a text input or the duration number input
       if (editInputRef.current.type === 'text' || editInputRef.current.type === 'number') {
         editInputRef.current.select();
       }
@@ -526,7 +519,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         }
     };
     
-    // Use timeout to avoid closing immediately on the same click that opened it
     setTimeout(() => {
         document.addEventListener('mousedown', handleClickOutside);
     }, 0);
@@ -554,7 +546,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     setCollapsedTasks(newCollapsedState);
   };
   
-  // --- Optimized Resize Handlers (Ghost Resize) ---
   const handleResizeStart = (col: string, currentWidth: number, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -718,63 +709,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     } else if (e.key === 'Escape') {
       setEditingId(null);
     }
-  };
-
-  const handleExportExcel = () => {
-    const planData: any[] = [];
-    const weekHeaders = getTimeline('week', timelineStart, timelineEnd).map(w => w.id);
-    projects.forEach(p => {
-      p.modules.forEach(m => {
-        m.tasks.forEach(t => {
-          t.assignments.forEach(a => {
-            const row: any = { 'Project': p.name, 'Module': m.name, 'Task': t.name, 'Role': a.role, 'Resource': a.resourceName || 'Unassigned' };
-            a.allocations.forEach(alloc => { if (weekHeaders.includes(alloc.weekId)) { row[alloc.weekId] = alloc.count; } });
-            planData.push(row);
-          });
-        });
-      });
-    });
-    const wb = XLSX.utils.book_new();
-    const planWs = XLSX.utils.json_to_sheet(planData, { header: ['Project', 'Module', 'Task', 'Role', 'Resource', ...weekHeaders] });
-    XLSX.utils.book_append_sheet(wb, planWs, 'Resource Plan');
-    XLSX.writeFile(wb, `oms-resource-plan-${new Date().toISOString().split('T')[0]}.xlsx`);
-  };
-
-  const handleImportExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (isReadOnly) return;
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'array' });
-        const planSheet = workbook.Sheets['Resource Plan'];
-        if (!planSheet) throw new Error('Resource Plan sheet not found');
-        const planJson = XLSX.utils.sheet_to_json<any>(planSheet);
-        const importedProjects: Project[] = [];
-        let currentProject: Project | null = null;
-        let currentModule: ProjectModule | null = null;
-        let currentTask: ProjectTask | null = null;
-        planJson.forEach((row, index) => {
-            /* Added missing user_id property to correctly satisfy the Project interface during import */
-            if (row.Project && row.Project !== currentProject?.name) { currentProject = { id: `p-${index}`, name: row.Project, modules: [], user_id: 'imported' }; importedProjects.push(currentProject); currentModule = null; currentTask = null; }
-            if (!currentProject) return;
-            if (row.Module && row.Module !== currentModule?.name) { currentModule = { id: `m-${index}`, name: row.Module, tasks: [], functionPoints: 0, legacyFunctionPoints: 0 }; currentProject.modules.push(currentModule); currentTask = null; }
-            if (!currentModule) return;
-            if (row.Task && row.Task !== currentTask?.name) { currentTask = { id: `t-${index}`, name: row.Task, assignments: [] }; currentModule.tasks.push(currentTask); }
-            if (!currentProject) return; // redundant but for TS safety
-            if (!currentTask) return;
-            const allocations: { weekId: string, count: number }[] = [];
-            Object.keys(row).forEach(key => { if (/^\d{4}-\d{2}$/.test(key)) { allocations.push({ weekId: key, count: Number(row[key]) }); } });
-            const assignment: TaskAssignment = { id: `a-${index}`, role: row.Role as Role, resourceName: row.Resource, allocations };
-            currentTask.assignments.push(assignment);
-        });
-        if (window.confirm('This will overwrite your current plan. Are you sure?')) { onImportPlan(importedProjects, []); }
-      } catch (error: any) { alert(`Failed to import plan: ${error.message}`); }
-    };
-    reader.readAsArrayBuffer(file);
-    event.target.value = '';
   };
 
   const timeline = useMemo(() => getTimeline(viewMode, timelineStart, timelineEnd), [viewMode, timelineStart, timelineEnd]);
@@ -1090,11 +1024,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             <div className="flex items-center gap-2">
                 <button onClick={onRefresh} disabled={isRefreshing} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Refresh data from server"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh</button>
                 <SaveStatusIndicator status={saveStatus} />
-                <div className="w-px h-4 bg-slate-300"></div>
-                {!isReadOnly && <button onClick={onShowHistory} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="View and restore saved versions"><History size={12} /></button>}
-                <button onClick={handleExportExcel} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Export the current plan as an Excel file"><Download size={12} /></button>
-                {!isReadOnly && <button onClick={() => importInputRef.current?.click()} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Import a plan from an Excel file"><Upload size={12} /></button>}
-                <input type="file" ref={importInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
             </div>
             <div className="w-px h-4 bg-slate-300"></div>
             {!isReadOnly && <button onClick={onAddProject} className="text-xs flex items-center gap-1 bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 transition-colors"><Plus size={12} /> Add Project</button>}
@@ -1483,8 +1412,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     </div>
                                   </div>
                                   
-                                  {/* Assignment Details Columns */}
-                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-center ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
+                                  {/* Assignment Details Columns - Increased Z-Index to prevent overlap with Gantt bars */}
+                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 30 : undefined }}>
                                     {assignment.startDate ? (
                                         <div className="relative group/date">
                                             <button 
@@ -1510,7 +1439,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                         <span className="text-[10px] text-slate-300">-</span>
                                     )}
                                   </div>
-                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-center ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
+                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-center ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 30 : undefined }}>
                                     {isEditingDuration ? (
                                         <input 
                                             ref={editInputRef} 
@@ -1532,7 +1461,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     )}
                                   </div>
 
-                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-center px-1 overflow-hidden relative group/dep ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
+                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-center px-1 overflow-hidden relative group/dep ${isDetailsFrozen ? 'sticky' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 30 : undefined }}>
                                      {assignment.parentAssignmentId ? (
                                          <div className="flex items-center gap-1 w-full" title={`Depends on: ${allAssignmentsMap.get(assignment.parentAssignmentId)?.resourceName || 'Unknown'}`}>
                                             <Link2 size={10} className="text-indigo-500 flex-shrink-0" />
@@ -1654,14 +1583,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     );
                   })}
                   
-                  {!isProjectCollapsed && !isReadOnly && (
-                    <div className="bg-slate-50 border-b border-slate-100 p-2 pl-8 flex items-center justify-start">
-                        <button onClick={() => onAddModule(project.id)} className="text-xs flex items-center gap-1.5 text-slate-500 hover:text-indigo-600 px-3 py-1.5 rounded-md hover:bg-slate-100 transition-colors border border-dashed border-slate-300 hover:border-indigo-300 w-full justify-center">
-                            <Plus size={14} /> Add Module to {project.name}
-                        </button>
-                    </div>
-                  )}
-
                 </React.Fragment>
               );
             })}
@@ -1672,31 +1593,35 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         {contextMenu && (
           <div className="fixed bg-white border border-slate-200 shadow-xl rounded-lg py-1 z-50 text-sm min-w-[160px] animate-in fade-in zoom-in-95 duration-100" style={{ top: contextMenu.y, left: contextMenu.x }}>
             {contextMenu.type === 'project' && (
-              <button onClick={() => onDeleteProject(contextMenu.projectId)} className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={14} /> Delete Project</button>
+              <>
+                <button onClick={() => { onAddModule(contextMenu.projectId); setContextMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2"><Plus size={14} /> Add Module</button>
+                <div className="h-px bg-slate-100 my-1"></div>
+                <button onClick={() => { onDeleteProject(contextMenu.projectId); setContextMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={14} /> Delete Project</button>
+              </>
             )}
             {contextMenu.type === 'module' && contextMenu.moduleId && (
               <>
-                <button onClick={() => handleAddTaskClick(contextMenu.projectId, contextMenu.moduleId!)} className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2"><Plus size={14} /> Add Task</button>
+                <button onClick={() => { handleAddTaskClick(contextMenu.projectId, contextMenu.moduleId!); setContextMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2"><Plus size={14} /> Add Task</button>
                 <div className="h-px bg-slate-100 my-1"></div>
-                <button onClick={() => onDeleteModule(contextMenu.projectId, contextMenu.moduleId!)} className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={14} /> Delete Module</button>
+                <button onClick={() => { onDeleteModule(contextMenu.projectId, contextMenu.moduleId!); setContextMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={14} /> Delete Module</button>
               </>
             )}
             {contextMenu.type === 'task' && contextMenu.moduleId && contextMenu.taskId && (
               <>
-                 <button onClick={() => onAddAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, Role.EA)} className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2"><UserPlus size={14} /> Add Assignment</button>
+                 <button onClick={() => { onAddAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, Role.EA); setContextMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2"><UserPlus size={14} /> Add Assignment</button>
                  <div className="h-px bg-slate-100 my-1"></div>
-                 <button onClick={() => onDeleteTask(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!)} className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={14} /> Delete Task</button>
+                 <button onClick={() => { onDeleteTask(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!); setContextMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={14} /> Delete Task</button>
               </>
             )}
             {contextMenu.type === 'assignment' && contextMenu.moduleId && contextMenu.taskId && contextMenu.assignmentId && (
                <>
-                 <button onClick={() => onCopyAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!)} className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2"><Copy size={14} /> Duplicate</button>
+                 <button onClick={() => { onCopyAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2"><Copy size={14} /> Duplicate</button>
                  <div className="h-px bg-slate-100 my-1"></div>
                  <div className="px-3 py-1 text-xs text-slate-400 font-bold uppercase">Shift Timeline</div>
-                 <button onClick={() => onShiftTask(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, 'left')} className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2"><ChevronLeft size={14} /> Shift -1 Week</button>
-                 <button onClick={() => onShiftTask(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, 'right')} className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2"><ChevronRight size={14} /> Shift +1 Week</button>
+                 <button onClick={() => { onShiftTask(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, 'left'); setContextMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2"><ChevronLeft size={14} /> Shift -1 Week</button>
+                 <button onClick={() => { onShiftTask(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, 'right'); setContextMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2"><ChevronRight size={14} /> Shift +1 Week</button>
                  <div className="h-px bg-slate-100 my-1"></div>
-                 <button onClick={() => onDeleteAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!)} className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={14} /> Remove Assignment</button>
+                 <button onClick={() => { onDeleteAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={14} /> Remove Assignment</button>
                </>
             )}
           </div>
