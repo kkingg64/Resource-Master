@@ -413,7 +413,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
 
   const [viewMode, setViewMode] = useState<ViewMode>('day');
-  const [displayMode, setDisplayMode] = useState<'allocation' | 'gantt'>('allocation');
+  const [displayMode, setDisplayMode] = useState<'allocation' | 'gantt'>('gantt');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   
@@ -1101,7 +1101,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     const map = new Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>();
     let rowIndex = 0;
     const HEADER_HEIGHT = (showYearRow ? 32 : 0) + (showMonthRow ? 32 : 0) + 32;
-    const ROW_HEIGHT = 34;
+    const ROW_HEIGHT = 33;
 
     filteredProjects.forEach(project => {
         rowIndex++; // Project header
@@ -1356,7 +1356,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
               return (
                 <React.Fragment key={project.id}>
-                  <div className="flex bg-slate-700 border-b border-slate-600 sticky z-30 group h-[34px]">
+                  <div className="flex bg-slate-700 border-b border-slate-600 sticky z-30 group">
                     <div className="flex-shrink-0 px-3 py-1.5 pr-2 border-r border-slate-600 sticky left-0 bg-slate-700 z-40 cursor-pointer flex items-center justify-between text-white shadow-[4px_0_10px_-4px_rgba(0,0,0,0.3)]" style={stickyStyle} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'project', x: e.pageX, y: e.pageY, projectId: project.id }); }}>
                       <div className="flex items-center gap-2 overflow-hidden flex-1" onClick={() => !isEditingProject && toggleProject(project.id)}>
                         {isProjectCollapsed ? <ChevronRight className="w-4 h-4 text-slate-300" /> : <ChevronDown className="w-4 h-4 text-slate-300" />}
@@ -1441,7 +1441,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                     return (
                       <div key={module.id} draggable={!isReadOnly && !isFiltered} onDragStart={(e) => handleModuleDragStart(e, index)} onDragOver={handleModuleDragOver} onDrop={(e) => handleModuleDrop(e, project.id, module.id, index)} className={`${draggedModuleIndex === index ? 'opacity-50' : 'opacity-100'}`} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'module', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id }); }}>
-                        <div className={`flex ${style.bgColor} border-b border-slate-100 ${style.hoverBgColor} transition-colors group h-[34px]`}>
+                        <div className={`flex ${style.bgColor} border-b border-slate-100 ${style.hoverBgColor} transition-colors group`}>
                           <div className={`flex-shrink-0 py-1.5 px-3 pl-6 border-r border-slate-200 sticky left-0 ${style.bgColor} z-30 flex items-center justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`} style={stickyStyle}>
                             <div className="flex items-center gap-2 flex-1 overflow-hidden cursor-pointer" onClick={() => !isEditingModule && toggleModule(module.id)}>
                               {!isReadOnly && !isFiltered && <div className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500" title="Drag to reorder"><GripVertical className="w-4 h-4" /></div>}
@@ -1557,7 +1557,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                           return (
                             <React.Fragment key={task.id}>
-                              <div draggable={!isReadOnly && !isFiltered} onDragStart={(e) => handleTaskDragStart(e, project.id, module.id, taskIndex)} onDragOver={handleTaskDragOver} onDrop={(e) => handleTaskDrop(e, project.id, module.id, taskIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'task', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id }); }} className={`flex border-b border-slate-100 bg-slate-50 group/task h-[34px] ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>
+                              <div draggable={!isReadOnly && !isFiltered} onDragStart={(e) => handleTaskDragStart(e, project.id, module.id, taskIndex)} onDragOver={handleTaskDragOver} onDrop={(e) => handleTaskDrop(e, project.id, module.id, taskIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'task', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id }); }} className={`flex border-b border-slate-100 bg-slate-50 group/task ${draggedTask?.moduleId === module.id && draggedTask?.index === taskIndex ? 'opacity-30' : ''}`}>
                                 <div className="flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-slate-50 z-20 flex items-center justify-between pl-6 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]" style={stickyStyle}>
                                   <div className="flex items-center gap-2 overflow-hidden cursor-pointer flex-1" onClick={() => !isEditingTask && toggleTask(task.id)}>
                                     {!isReadOnly && !isFiltered && <div className="cursor-grab text-slate-400 hover:text-slate-600" title="Drag to reorder task"><GripVertical size={14} /></div>}
@@ -1580,4 +1580,264 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 <div className="flex relative">
                                     {isTaskCollapsed && displayMode === 'gantt' && taskStartIndex > -1 && taskEndIndex > -1 && (
                                         <div
-                                            className="absolute top-1/2 -translate-y-1/2 h-4 z-10 bg-slate-400 rounded-md flex items-center justify
+                                            className="absolute top-1/2 -translate-y-1/2 h-4 z-10 bg-slate-400 rounded-md flex items-center justify-center overflow-hidden"
+                                            style={{
+                                                left: `${taskStartIndex * colWidth + 2}px`,
+                                                width: `${(taskEndIndex - taskStartIndex + 1) * colWidth - 4}px`,
+                                            }}
+                                            title={`Duration: ${totalDuration} working days`}
+                                        >
+                                            {taskProgress > 0 && (
+                                                <div className="absolute top-0 bottom-0 left-0 bg-slate-600" style={{ width: `${taskProgress}%` }}></div>
+                                            )}
+                                            <span className="relative z-10 text-[9px] font-bold text-white/90 drop-shadow-sm px-1">
+                                                {taskProgress > 0 ? `${taskProgress}%` : ''}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {timeline.map(col => {
+                                      const total = getTaskTotal(task, col);
+                                      return ( <div key={`th-${task.id}-${col.id}`} className={`flex-shrink-0 border-r border-slate-100 flex items-center justify-center bg-slate-50 relative`} style={{ width: `${colWidth}px` }}>
+                                          {total > 0 && displayMode === 'allocation' && (<span className="text-[10px] font-semibold text-slate-600 relative z-10">{formatValue(total)}</span>)}
+                                      </div> );
+                                    })}
+                                </div>
+                              </div>
+
+                              {!isTaskCollapsed && task.assignments.map((assignment, assignmentIndex) => {
+                                const hasSchedule = assignment.startDate && assignment.duration && assignment.duration > 0;
+                                let assignmentStartDate: Date | null = null;
+                                let assignmentEndDate: Date | null = null;
+                                let endDateStr = '';
+                                
+                                if (hasSchedule) {
+                                  assignmentStartDate = new Date(assignment.startDate!.replace(/-/g, '/'));
+                                  const resourceName = assignment.resourceName || 'Unassigned'; 
+                                  const resourceHolidayData = resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'); 
+                                  const assignmentHolidaysMap = resourceHolidayData?.holidayMap || new Map<string, number>();
+                                  endDateStr = calculateEndDate(assignment.startDate!, assignment.duration!, assignmentHolidaysMap);
+                                  assignmentEndDate = new Date(endDateStr.replace(/-/g, '/'));
+                                } else {
+                                  // Fallback for display if no schedule
+                                  assignmentStartDate = new Date();
+                                }
+                                
+                                const { startIndex, endIndex } = (() => {
+                                    if (!hasSchedule) return { startIndex: -1, endIndex: -1 };
+                                    
+                                    let startIdx = -1, endIdx = -1;
+                                    if (viewMode === 'day') {
+                                        const startDateStr = formatDateForInput(assignmentStartDate!);
+                                        startIdx = timeline.findIndex(c => c.date && formatDateForInput(c.date) === startDateStr);
+                                        endIdx = timeline.findIndex(c => c.date && formatDateForInput(c.date) === endDateStr);
+                                    } else if (viewMode === 'week') {
+                                        const startWeekId = getWeekIdFromDate(assignmentStartDate!);
+                                        const endWeekId = getWeekIdFromDate(assignmentEndDate!);
+                                        startIdx = timeline.findIndex(c => c.id === startWeekId);
+                                        endIdx = timeline.findIndex(c => c.id === endWeekId);
+                                    } else if (viewMode === 'month') {
+                                        const startWeekId = getWeekIdFromDate(assignmentStartDate!);
+                                        const endWeekId = getWeekIdFromDate(assignmentEndDate!);
+                                        startIdx = timeline.findIndex(c => c.weekIds?.includes(startWeekId));
+                                        endIdx = timeline.findIndex(c => c.weekIds?.includes(endWeekId));
+                                    }
+                                    return { startIndex: startIdx, endIndex: endIdx };
+                                })();
+
+
+                                const possibleParents = allAssignmentsForDependencies.filter(parent => parent.id !== assignment.id && !isCircularDependency(assignment.id, parent.id)); 
+                                const groupedParents = possibleParents.reduce((acc, parent) => { if (!acc[parent.groupLabel]) acc[parent.groupLabel] = []; acc[parent.groupLabel].push(parent); return acc; }, {} as Record<string, typeof possibleParents>);
+                                const isEditingDuration = editingId === `duration::${assignment.id}`; 
+                                const roleStyle = getRoleStyle(assignment.role);
+                                const currentRowIndex = gridRowIndex++;
+
+                                let displayProgress = assignment.progress || 0;
+                                if (hasSchedule && endDateStr && assignment.startDate) {
+                                    const timeProgress = calculateTimeBasedProgress(assignment.startDate, endDateStr);
+                                    if (displayProgress === 0) displayProgress = timeProgress;
+                                }
+
+                                return (
+                                <div key={assignment.id} className={`flex border-b border-slate-100 group/assign ${draggedAssignment?.taskId === task.id && draggedAssignment?.index === assignmentIndex ? 'opacity-30' : ''} ${datePickerState.assignmentId === assignment.id ? 'relative z-40' : ''}`} draggable={!isReadOnly && !isFiltered} onDragStart={(e) => handleAssignmentDragStart(e, task.id, assignmentIndex)} onDragOver={handleAssignmentDragOver} onDrop={(e) => handleAssignmentDrop(e, project.id, module.id, task.id, assignmentIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'assignment', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id, assignmentId: assignment.id }); }}>
+                                  <div className={`flex-shrink-0 py-1.5 px-3 border-r border-slate-200 sticky left-0 bg-white group-hover/assign:bg-slate-50 z-10 flex items-center justify-between border-l-[3px] ${roleStyle.border} shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]`} style={stickyStyle}>
+                                    <div className="flex-1 overflow-hidden flex items-center gap-2 pl-12">
+                                      <select disabled={isReadOnly} value={assignment.resourceName || 'Unassigned'} onChange={(e) => onUpdateAssignmentResourceName(project.id, module.id, task.id, assignment.id, e.target.value)} className="w-full text-[11px] text-slate-600 bg-transparent border-none p-0 focus:ring-0 cursor-pointer hover:text-indigo-600 disabled:cursor-default disabled:hover:text-slate-600">
+                                          <option value="Unassigned">Unassigned</option>
+                                          {Object.entries(groupedResources).map(([category, resList]) => ( <optgroup label={category} key={category}>{resList.map(r => <option key={r.id} value={r.name}>{r.name} {r.type === 'External' ? '(Ext.)' : ''}</option>)}</optgroup> ))}
+                                      </select>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Assignment Details Columns */}
+                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
+                                    <div className="flex-1 text-center relative">
+                                        <button 
+                                            onClick={() => !isReadOnly && setDatePickerState({ assignmentId: assignment.id })} 
+                                            className={`text-[10px] px-1.5 py-0.5 rounded hover:bg-slate-100 ${!assignment.startDate ? 'text-slate-400 italic' : 'text-slate-600 font-medium'}`}
+                                            disabled={isReadOnly}
+                                        >
+                                            {assignment.startDate || 'Set Date'}
+                                        </button>
+                                        {datePickerState.assignmentId === assignment.id && (
+                                            <div ref={datePickerContainerRef} className="absolute top-full left-0 mt-1 z-[100]">
+                                                <DatePicker 
+                                                    value={assignment.startDate ? new Date(assignment.startDate.replace(/-/g, '/')) : new Date()} 
+                                                    onChange={(d) => { handleAssignmentStartDateChange(assignment, formatDateForInput(d)); setDatePickerState({ assignmentId: null }); }} 
+                                                    onClose={() => setDatePickerState({ assignmentId: null })}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                  </div>
+
+                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
+                                    {isEditingDuration ? (
+                                        <input 
+                                            ref={editInputRef} 
+                                            value={editValue} 
+                                            onChange={(e) => setEditValue(e.target.value)} 
+                                            onBlur={() => saveDuration(assignment)} 
+                                            onKeyDown={(e) => { if (e.key === 'Enter') saveDuration(assignment); else if (e.key === 'Escape') setEditingId(null); }}
+                                            className="w-full text-center text-[10px] border border-indigo-300 rounded px-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                            autoFocus
+                                        />
+                                    ) : (
+                                        <span 
+                                            className="text-[10px] text-slate-600 cursor-pointer hover:text-indigo-600 border-b border-transparent hover:border-indigo-300" 
+                                            onClick={(e) => startEditing(`duration::${assignment.id}`, String(assignment.duration || 0), e)}
+                                            title="Click to edit duration"
+                                        >
+                                            {assignment.duration}d
+                                        </span>
+                                    )}
+                                  </div>
+
+                                  <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-center px-2 py-1.5 relative group-hover/assign:bg-slate-50 ${isDetailsFrozen ? 'sticky shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined, zIndex: isDetailsFrozen ? 9 : undefined }}>
+                                     <select 
+                                        disabled={isReadOnly}
+                                        value={assignment.parentAssignmentId || ''} 
+                                        onChange={(e) => onUpdateAssignmentDependency(assignment.id, e.target.value || null)}
+                                        className="w-full text-[10px] text-slate-500 bg-transparent border-none p-0 focus:ring-0 cursor-pointer hover:text-indigo-600 disabled:cursor-default"
+                                        title={assignment.parentAssignmentId ? allAssignmentsMap.get(assignment.parentAssignmentId)?.resourceName : 'No dependency'}
+                                     >
+                                        <option value="">-</option>
+                                        {Object.entries(groupedParents).map(([label, items]) => (
+                                            <optgroup label={label} key={label}>
+                                                {items.map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                                ))}
+                                            </optgroup>
+                                        ))}
+                                     </select>
+                                  </div>
+
+                                  <div className="flex relative z-0">
+                                    {timeline.map((col, colIdx) => {
+                                        const value = getRawCellValue(assignment, col);
+                                        const isCurrent = isCurrentColumn(col);
+                                        
+                                        // Determine background for holidays
+                                        const resourceName = assignment.resourceName || 'Unassigned';
+                                        const resourceData = resourceHolidaysMap.get(resourceName);
+                                        const holidayVal = resourceData?.holidayMap.get(viewMode === 'day' && col.date ? formatDateForInput(col.date) : '') || 0;
+                                        let holidayName = undefined;
+                                        if (holidayVal > 0 && viewMode === 'day' && col.date) {
+                                            const dateStr = formatDateForInput(col.date);
+                                            const hol = resourceData?.holidays.find(h => h.date === dateStr);
+                                            if (hol) holidayName = hol;
+                                        }
+
+                                        return (
+                                            <GridNumberInput
+                                                key={`${assignment.id}-${col.id}`}
+                                                rowIndex={currentRowIndex}
+                                                colIndex={colIdx}
+                                                value={value}
+                                                onChange={(val) => handleCellUpdate(project.id, module.id, task.id, assignment.id, col, val)}
+                                                onNavigate={handleNavigate}
+                                                width={colWidth}
+                                                holidayDuration={viewMode === 'day' ? holidayVal : 0}
+                                                holidayName={holidayName}
+                                                isCurrent={isCurrent}
+                                                disabled={isReadOnly}
+                                                isGanttMode={displayMode === 'gantt'}
+                                            />
+                                        );
+                                    })}
+                                    {/* Gantt Bar - Rendered AFTER cells with higher Z-index */}
+                                    {displayMode === 'gantt' && startIndex > -1 && endIndex > -1 && (
+                                        <div 
+                                            className={`absolute top-1/2 -translate-y-1/2 h-4 z-30 ${roleStyle.bar} rounded flex items-center justify-center px-1 pointer-events-none shadow-sm overflow-hidden`}
+                                            style={{
+                                                left: `${startIndex * colWidth + 2}px`,
+                                                width: `${(endIndex - startIndex + 1) * colWidth - 4}px`,
+                                            }}
+                                        >
+                                           {displayProgress > 0 && (
+                                                <div className={`absolute top-0 bottom-0 left-0 ${roleStyle.fill} opacity-50`} style={{ width: `${displayProgress}%` }}></div>
+                                           )}
+                                           <span className="relative z-10 text-[10px] font-bold text-white drop-shadow-md">
+                                                {displayProgress > 0 ? `${displayProgress}%` : '0%'}
+                                           </span>
+                                        </div>
+                                    )}
+                                  </div>
+                                </div>
+                                );
+                              })}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Context Menu */}
+        {contextMenu && (
+            <div 
+                className="fixed bg-white border border-slate-200 shadow-xl rounded-lg py-1 z-[100] text-xs min-w-[150px] animate-in fade-in zoom-in-95 duration-100"
+                style={{ top: contextMenu.y, left: contextMenu.x }}
+                onClick={(e) => e.stopPropagation()}
+            >
+                {contextMenu.type === 'project' && (
+                    <>
+                        <button onClick={() => { startEditing(`project::${contextMenu.projectId}`, projects.find(p => p.id === contextMenu.projectId)?.name || ''); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2"><Settings2 size={14}/> Rename Project</button>
+                        <button onClick={() => { onDeleteProject(contextMenu.projectId); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={14}/> Delete Project</button>
+                    </>
+                )}
+                {contextMenu.type === 'module' && contextMenu.moduleId && (
+                    <>
+                         <button onClick={() => { startEditing(`module::${contextMenu.projectId}::${contextMenu.moduleId}`, projects.find(p => p.id === contextMenu.projectId)?.modules.find(m => m.id === contextMenu.moduleId)?.name || ''); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2"><Settings2 size={14}/> Rename Module</button>
+                         <button onClick={() => { onDeleteModule(contextMenu.projectId, contextMenu.moduleId!); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={14}/> Delete Module</button>
+                    </>
+                )}
+                {contextMenu.type === 'task' && contextMenu.moduleId && contextMenu.taskId && (
+                    <>
+                        <button onClick={() => { startEditing(`task::${contextMenu.projectId}::${contextMenu.moduleId}::${contextMenu.taskId}`, projects.find(p => p.id === contextMenu.projectId)?.modules.find(m => m.id === contextMenu.moduleId)?.tasks.find(t => t.id === contextMenu.taskId)?.name || ''); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2"><Settings2 size={14}/> Rename Task</button>
+                        <button onClick={() => { onShiftTask(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, 'left'); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2"><ChevronLeft size={14}/> Shift Left (1 Week)</button>
+                        <button onClick={() => { onShiftTask(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, 'right'); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2"><ChevronRight size={14}/> Shift Right (1 Week)</button>
+                        <button onClick={() => { onDeleteTask(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={14}/> Delete Task</button>
+                    </>
+                )}
+                {contextMenu.type === 'assignment' && contextMenu.moduleId && contextMenu.taskId && contextMenu.assignmentId && (
+                    <>
+                        <button onClick={() => { onCopyAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2"><Copy size={14}/> Duplicate Assignment</button>
+                        <button onClick={() => { 
+                             const assignment = projects.find(p => p.id === contextMenu.projectId)?.modules.find(m => m.id === contextMenu.moduleId)?.tasks.find(t => t.id === contextMenu.taskId)?.assignments.find(a => a.id === contextMenu.assignmentId);
+                             if (assignment) onUpdateAssignmentProgress(contextMenu.assignmentId!, Math.min(100, (assignment.progress || 0) + 25));
+                             setContextMenu(null); 
+                        }} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2"><Percent size={14}/> Add 25% Progress</button>
+                        <button onClick={() => { onDeleteAssignment(contextMenu.projectId, contextMenu.moduleId!, contextMenu.taskId!, contextMenu.assignmentId!); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-red-50 text-red-600 flex items-center gap-2"><Trash2 size={14}/> Delete Assignment</button>
+                    </>
+                )}
+            </div>
+        )}
+      </div>
+    </>
+  );
+};
