@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType, ProjectRole, ProjectMember } from './types';
@@ -241,6 +242,7 @@ CREATE POLICY "Individual Holidays All Access" ON individual_holidays
 -- 7. Add missing columns (Self-healing)
 ALTER TABLE holidays ADD COLUMN IF NOT EXISTS duration numeric DEFAULT 1;
 ALTER TABLE individual_holidays ADD COLUMN IF NOT EXISTS duration numeric DEFAULT 1;
+ALTER TABLE resources ADD COLUMN IF NOT EXISTS program text;
 
 NOTIFY pgrst, 'reload schema';
 `;
@@ -763,7 +765,7 @@ const App: React.FC = () => {
       .from('holidays')
       .select('*');
       
-    if (holidaysError) console.error(holidaysError);
+    if (holidaysData) console.error(holidaysError);
     const freshHolidays = holidaysData || [];
     
     const structuredProjects = structureProjectsData(uniqueProjects, modulesData, tasksData, assignmentsData, allocationsData, session.user.id, memberships, session.user.email);
@@ -1115,10 +1117,10 @@ const App: React.FC = () => {
       fetchData(false);
   };
 
-  const addResource = async (name: string, category: Role, region: string, type: 'Internal' | 'External') => {
+  const addResource = async (name: string, category: Role, region: string, type: 'Internal' | 'External', program: string | null) => {
       if (isReadOnlyMode) return;
       await callSupabase('ADD resource', { name },
-          supabase.from('resources').insert({ name, category, holiday_region: region, type })
+          supabase.from('resources').insert({ name, category, holiday_region: region, type, program })
       );
       fetchData(true);
   };

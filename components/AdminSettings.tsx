@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo } from 'react';
 import { Holiday } from '../types';
 import { GOV_HOLIDAYS_DB } from '../constants';
@@ -25,7 +26,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
   const [newHolidayDuration, setNewHolidayDuration] = useState<number>(1); // 1 = Full, 0.5 = Half
 
   const countries = [
-    { code: 'CE', name: 'Central Europe' },
+    { code: 'CE', name: 'Germany (CE)' },
     { code: 'CN', name: 'China' },
     { code: 'HK', name: 'Hong Kong' },
     { code: 'MY', name: 'Malaysia' },
@@ -183,172 +184,4 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
                    <Building size={14} /> Add Company Holiday to {selectedCountryName}
                  </h3>
                  <form onSubmit={handleAddCustomHoliday} className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end">
-                   <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">From</label>
-                      <input 
-                      type="date" 
-                      value={newHolidayStartDate}
-                      onChange={e => setNewHolidayStartDate(e.target.value)}
-                      required
-                      className="p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                      />
-                   </div>
-                   <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">To (Optional)</label>
-                      <input 
-                      type="date" 
-                      value={newHolidayEndDate}
-                      onChange={e => setNewHolidayEndDate(e.target.value)}
-                      className="p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                      />
-                   </div>
-                   <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Duration</label>
-                      <select 
-                        value={newHolidayDuration} 
-                        onChange={(e) => setNewHolidayDuration(parseFloat(e.target.value))}
-                        className="p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                      >
-                        <option value={1}>Full Day</option>
-                        <option value={0.5}>Half Day</option>
-                      </select>
-                   </div>
-                   <div className="flex flex-col gap-1 md:col-span-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Holiday Name</label>
-                      <div className="flex gap-2">
-                          <input 
-                          type="text" 
-                          value={newHolidayName}
-                          onChange={e => setNewHolidayName(e.target.value)}
-                          placeholder="e.g., Company Off-site Day" 
-                          required
-                          className="flex-1 p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                          />
-                          <button 
-                          type="submit" 
-                          disabled={isAdding}
-                          className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
-                          >
-                          <Plus size={16} /> {isAdding ? 'Adding...' : 'Add'}
-                          </button>
-                      </div>
-                   </div>
-                 </form>
-               </div>
-             )}
-
-            {/* Preview List */}
-            <div className="border rounded-lg border-slate-200 overflow-hidden">
-               <div className="bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                 Available Public Data ({sourceHolidays.length})
-               </div>
-               <div className="max-h-32 overflow-y-auto bg-slate-50/30">
-                  {sourceHolidays.length === 0 ? (
-                    <div className="p-4 text-center text-sm text-slate-400">No data available for this region.</div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 p-3">
-                      {sourceHolidays.map(h => {
-                        const isActive = isHolidayActive(h);
-                        return (
-                          <div key={h.date} className={`flex items-center gap-2 p-2 rounded border text-xs ${isActive ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200'}`}>
-                             {isActive ? <CheckCircle size={14} className="text-green-600" /> : <div className="w-3.5 h-3.5 rounded-full border border-slate-300"></div>}
-                             <span className="font-mono text-slate-500">{h.date}</span>
-                             <span className="font-medium text-slate-700 truncate">{h.name}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-               </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-            <h3 className="font-bold text-slate-700 flex items-center gap-2">
-              <CalendarDays className="w-5 h-5 text-slate-500" />
-              Active Holidays in Database
-            </h3>
-            <span className="text-xs font-medium bg-white px-2 py-1 rounded border border-slate-200 text-slate-600">
-              Total: {holidays.length}
-            </span>
-          </div>
-          
-          <div className="flex-1 overflow-auto custom-scrollbar">
-             <table className="w-full text-sm text-left">
-               <thead className="bg-white text-slate-600 sticky top-0 z-10 shadow-sm">
-                 <tr>
-                   <th className="p-3 font-semibold border-b w-32 pl-6">Date</th>
-                   <th className="p-3 font-semibold border-b">Holiday Name</th>
-                   <th className="p-3 font-semibold border-b w-24">Region</th>
-                   <th className="p-3 font-semibold border-b w-32">Duration</th>
-                   <th className="p-3 font-semibold border-b w-24">Type</th>
-                   <th className="p-3 font-semibold border-b w-16 text-right pr-6">Action</th>
-                 </tr>
-               </thead>
-               <tbody className="divide-y divide-slate-100">
-                 {holidays.length === 0 && (
-                   <tr>
-                     <td colSpan={6} className="p-8 text-center text-slate-400">
-                       No active holidays. Sync from a region or add a custom one above.
-                     </td>
-                   </tr>
-                 )}
-                 {sortedCountryCodes.map(countryCode => (
-                    <React.Fragment key={countryCode}>
-                        <tr className="bg-slate-50 border-y border-slate-200 sticky top-10 z-0">
-                            <td colSpan={6} className="px-4 py-2 text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50">
-                                {countries.find(c => c.code === countryCode)?.name || countryCode} ({countryCode})
-                            </td>
-                        </tr>
-                        {groupedHolidays[countryCode].map((h) => (
-                           <tr key={h.id} className={`hover:bg-slate-50 ${h.country === selectedCountryCode ? 'bg-indigo-50/10' : ''}`}>
-                             <td className="p-3 font-mono text-slate-600 pl-6">{h.date}</td>
-                             <td className="p-3 font-medium text-slate-800">{h.name}</td>
-                             <td className="p-3">
-                               <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${h.country === selectedCountryCode ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-600'}`}>
-                                 {h.country}
-                               </span>
-                             </td>
-                             <td className="p-3">
-                                <select 
-                                    value={h.duration || 1} 
-                                    onChange={(e) => onUpdateHolidayDuration(h.id, parseFloat(e.target.value))}
-                                    disabled={isReadOnly}
-                                    className={`text-xs border-slate-200 rounded px-2 py-1 bg-white focus:ring-indigo-500 focus:border-indigo-500 ${h.duration === 0.5 ? 'text-orange-600 font-semibold' : 'text-slate-600'}`}
-                                >
-                                    <option value={1}>Full Day</option>
-                                    <option value={0.5}>Half Day</option>
-                                </select>
-                             </td>
-                             <td className="p-3">
-                                {isGovHoliday(h) ? (
-                                    <span className="text-xs font-semibold text-slate-500">Public</span>
-                                ) : (
-                                    <span className="text-xs font-semibold text-indigo-600">Company</span>
-                                )}
-                             </td>
-                             <td className="p-3 text-right pr-6">
-                               {!isReadOnly && (
-                                 <button 
-                                   onClick={() => onDeleteHoliday(h.id)}
-                                   className="text-slate-400 hover:text-red-600 transition-colors"
-                                   title="Remove holiday"
-                                 >
-                                   <Trash2 size={14} />
-                                 </button>
-                               )}
-                             </td>
-                           </tr>
-                        ))}
-                    </React.Fragment>
-                 ))}
-               </tbody>
-             </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
+                   <div className="

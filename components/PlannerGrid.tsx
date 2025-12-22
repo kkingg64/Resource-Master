@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween, calculateTimeBasedProgress } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server, Search, X, Filter, CheckSquare, Square } from 'lucide-react';
+import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server, Search, X, Filter, CheckSquare, Square, Download, Upload, History } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { DependencyLines } from './DependencyLines';
 
 // --- Custom DatePicker Component ---
@@ -419,6 +420,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   // Resource Filter State
   const [selectedResourceFilters, setSelectedResourceFilters] = useState<string[]>([]);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [resourceFilterSearch, setResourceFilterSearch] = useState('');
   const filterRef = useRef<HTMLDivElement>(null);
 
   const [draggedModuleIndex, setDraggedModuleIndex] = useState<number | null>(null);
@@ -448,6 +450,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
   const [datePickerState, setDatePickerState] = useState<{ assignmentId: string | null }>({ assignmentId: null });
   
+  const importInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const toggleButtonRef = useRef<HTMLButtonElement>(null);
   const datePickerContainerRef = useRef<HTMLDivElement>(null);
@@ -804,6 +807,63 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }
   };
 
+  const handleExportExcel = () => {
+    const planData: any[] = [];
+    const weekHeaders = getTimeline('week', timelineStart, timelineEnd).map(w => w.id);
+    projects.forEach(p => {
+      p.modules.forEach(m => {
+        m.tasks.forEach(t => {
+          t.assignments.forEach(a => {
+            const row: any = { 'Project': p.name, 'Module': m.name, 'Task': t.name, 'Role': a.role, 'Resource': a.resourceName || 'Unassigned' };
+            a.allocations.forEach(alloc => { if (weekHeaders.includes(alloc.weekId)) { row[alloc.weekId] = alloc.count; } });
+            planData.push(row);
+          });
+        });
+      });
+    });
+    const wb = XLSX.utils.book_new();
+    const planWs = XLSX.utils.json_to_sheet(planData, { header: ['Project', 'Module', 'Task', 'Role', 'Resource', ...weekHeaders] });
+    XLSX.utils.book_append_sheet(wb, planWs, 'Resource Plan');
+    XLSX.writeFile(wb, `oms-resource-plan-${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const handleImportExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (isReadOnly) return;
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'array' });
+        const planSheet = workbook.Sheets['Resource Plan'];
+        if (!planSheet) throw new Error('Resource Plan sheet not found');
+        const planJson = XLSX.utils.sheet_to_json<any>(planSheet);
+        const importedProjects: Project[] = [];
+        let currentProject: Project | null = null;
+        let currentModule: ProjectModule | null = null;
+        let currentTask: ProjectTask | null = null;
+        planJson.forEach((row, index) => {
+            /* Added missing user_id property to correctly satisfy the Project interface during import */
+            if (row.Project && row.Project !== currentProject?.name) { currentProject = { id: `p-${index}`, name: row.Project, modules: [], user_id: 'imported' }; importedProjects.push(currentProject); currentModule = null; currentTask = null; }
+            if (!currentProject) return;
+            if (row.Module && row.Module !== currentModule?.name) { currentModule = { id: `m-${index}`, name: row.Module, tasks: [], functionPoints: 0, legacyFunctionPoints: 0 }; currentProject.modules.push(currentModule); currentTask = null; }
+            if (!currentModule) return;
+            if (row.Task && row.Task !== currentTask?.name) { currentTask = { id: `t-${index}`, name: row.Task, assignments: [] }; currentModule.tasks.push(currentTask); }
+            if (!currentProject) return; // redundant but for TS safety
+            if (!currentTask) return;
+            const allocations: { weekId: string, count: number }[] = [];
+            Object.keys(row).forEach(key => { if (/^\d{4}-\d{2}$/.test(key)) { allocations.push({ weekId: key, count: Number(row[key]) }); } });
+            const assignment: TaskAssignment = { id: `a-${index}`, role: row.Role as Role, resourceName: row.Resource, allocations };
+            currentTask.assignments.push(assignment);
+        });
+        if (window.confirm('This will overwrite your current plan. Are you sure?')) { onImportPlan(importedProjects, []); }
+      } catch (error: any) { alert(`Failed to import plan: ${error.message}`); }
+    };
+    reader.readAsArrayBuffer(file);
+    event.target.value = '';
+  };
+
   const timeline = useMemo(() => getTimeline(viewMode, timelineStart, timelineEnd), [viewMode, timelineStart, timelineEnd]);
 
   const today = new Date();
@@ -1043,7 +1103,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     const HEADER_HEIGHT = (showYearRow ? 32 : 0) + (showMonthRow ? 32 : 0) + 32;
     const ROW_HEIGHT = 33;
 
-    filteredProjects.forEach(project => {
+    projects.forEach(project => {
         rowIndex++; // Project header
         if (!collapsedProjects[project.id]) {
             project.modules.forEach(module => {
@@ -1074,7 +1134,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         }
     });
     return { map, totalHeight: HEADER_HEIGHT + rowIndex * ROW_HEIGHT };
-  }, [filteredProjects, collapsedProjects, collapsedModules, collapsedTasks, holidays, resources, showMonthRow, showYearRow]);
+  }, [projects, collapsedProjects, collapsedModules, collapsedTasks, holidays, resources, showMonthRow, showYearRow]);
 
   return (
     <>
@@ -1116,17 +1176,55 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             <span className="text-xs font-bold text-slate-500 uppercase">Select Resources</span>
                             {selectedResourceFilters.length > 0 && <button onClick={() => setSelectedResourceFilters([])} className="text-[10px] text-red-500 hover:text-red-700">Clear</button>}
                         </div>
+                        {/* Search Input */}
+                        <div className="p-2 border-b border-slate-100">
+                            <div className="relative">
+                                <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input 
+                                    type="text" 
+                                    value={resourceFilterSearch}
+                                    onChange={(e) => setResourceFilterSearch(e.target.value)}
+                                    placeholder="Search resources..." 
+                                    className="w-full pl-7 pr-2 py-1 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-indigo-300"
+                                    autoFocus
+                                />
+                            </div>
+                        </div>
                         <div className="overflow-y-auto custom-scrollbar p-1">
-                            {allResourceNames.map(name => (
+                            {/* Unassigned First */}
+                            {('unassigned'.includes(resourceFilterSearch.toLowerCase())) && (
                                 <button 
-                                    key={name}
-                                    onClick={() => toggleResourceFilter(name)}
-                                    className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 rounded-md flex items-center gap-2 ${selectedResourceFilters.includes(name) ? 'text-indigo-700 bg-indigo-50 font-medium' : 'text-slate-600'}`}
+                                    onClick={() => toggleResourceFilter("Unassigned")}
+                                    className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 rounded-md flex items-center gap-2 ${selectedResourceFilters.includes("Unassigned") ? 'text-indigo-700 bg-indigo-50 font-medium' : 'text-slate-600'}`}
                                 >
-                                    {selectedResourceFilters.includes(name) ? <CheckSquare size={14} className="text-indigo-600"/> : <Square size={14} className="text-slate-300"/>}
-                                    {name}
+                                    {selectedResourceFilters.includes("Unassigned") ? <CheckSquare size={14} className="text-indigo-600"/> : <Square size={14} className="text-slate-300"/>}
+                                    Unassigned
                                 </button>
-                            ))}
+                            )}
+                            
+                            {/* Grouped by Role */}
+                            {Object.entries(groupedResources)
+                                .sort(([a], [b]) => a.localeCompare(b))
+                                .map(([role, list]) => {
+                                    const filteredList = list.filter(r => r.name.toLowerCase().includes(resourceFilterSearch.toLowerCase()));
+                                    if (filteredList.length === 0) return null;
+                                    
+                                    return (
+                                        <div key={role}>
+                                            <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase mt-1">{role}</div>
+                                            {filteredList.map(r => (
+                                                <button 
+                                                    key={r.name}
+                                                    onClick={() => toggleResourceFilter(r.name)}
+                                                    className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 rounded-md flex items-center gap-2 ${selectedResourceFilters.includes(r.name) ? 'text-indigo-700 bg-indigo-50 font-medium' : 'text-slate-600'}`}
+                                                >
+                                                    {selectedResourceFilters.includes(r.name) ? <CheckSquare size={14} className="text-indigo-600"/> : <Square size={14} className="text-slate-300"/>}
+                                                    {r.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    );
+                                })}
                         </div>
                     </div>
                 )}
@@ -1151,6 +1249,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             <div className="flex items-center gap-2">
                 <button onClick={onRefresh} disabled={isRefreshing} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Refresh data from server"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh</button>
                 <SaveStatusIndicator status={saveStatus} />
+                <div className="w-px h-4 bg-slate-300"></div>
+                {!isReadOnly && <button onClick={onShowHistory} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="View and restore saved versions"><History size={12} /></button>}
+                <button onClick={handleExportExcel} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Export the current plan as an Excel file"><Download size={12} /></button>
+                {!isReadOnly && <button onClick={() => importInputRef.current?.click()} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Import a plan from an Excel file"><Upload size={12} /></button>}
+                <input type="file" ref={importInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
             </div>
             <div className="w-px h-4 bg-slate-300"></div>
             {!isReadOnly && <button onClick={onAddProject} className="text-xs flex items-center gap-1 bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 transition-colors"><Plus size={12} /> Add Project</button>}

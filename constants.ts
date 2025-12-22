@@ -1,4 +1,5 @@
 
+
 import { TimelineColumn, ViewMode, Holiday } from './types';
 
 // Mock "Government Database" - Expanded for 2024-2027
@@ -155,7 +156,29 @@ export const GOV_HOLIDAYS_DB: Record<string, Omit<Holiday, 'id' | 'user_id'>[]> 
     { date: '2025-12-25', name: 'Christmas Day', country: 'UK' },
     { date: '2025-12-26', name: 'Boxing Day', country: 'UK' },
   ],
-  'CE': [], 'LK': [] // Preserving keys for TS
+  'CE': [
+    // Germany 2025
+    { date: '2025-01-01', name: 'New Year\'s Day', country: 'CE' },
+    { date: '2025-04-18', name: 'Good Friday', country: 'CE' },
+    { date: '2025-04-21', name: 'Easter Monday', country: 'CE' },
+    { date: '2025-05-01', name: 'Labour Day', country: 'CE' },
+    { date: '2025-05-29', name: 'Ascension Day', country: 'CE' },
+    { date: '2025-06-09', name: 'Whit Monday', country: 'CE' },
+    { date: '2025-10-03', name: 'German Unity Day', country: 'CE' },
+    { date: '2025-12-25', name: 'Christmas Day', country: 'CE' },
+    { date: '2025-12-26', name: 'Boxing Day', country: 'CE' },
+    // Germany 2026
+    { date: '2026-01-01', name: 'New Year\'s Day', country: 'CE' },
+    { date: '2026-04-03', name: 'Good Friday', country: 'CE' },
+    { date: '2026-04-06', name: 'Easter Monday', country: 'CE' },
+    { date: '2026-05-01', name: 'Labour Day', country: 'CE' },
+    { date: '2026-05-14', name: 'Ascension Day', country: 'CE' },
+    { date: '2026-05-25', name: 'Whit Monday', country: 'CE' },
+    { date: '2026-10-03', name: 'German Unity Day', country: 'CE' },
+    { date: '2026-12-25', name: 'Christmas Day', country: 'CE' },
+    { date: '2026-12-26', name: 'Boxing Day', country: 'CE' },
+  ], 
+  'LK': [] 
 };
 
 // --- Date Utilities for Timeline Generation ---

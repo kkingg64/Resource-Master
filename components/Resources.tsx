@@ -1,3 +1,5 @@
+
+
 import React, { useState, useMemo } from 'react';
 import { Resource, Role, IndividualHoliday } from '../types';
 import { Users, Plus, Trash2, Calendar, ChevronDown, Edit2, Check, X, Clock } from 'lucide-react';
@@ -5,7 +7,7 @@ import { GOV_HOLIDAYS_DB } from '../constants';
 
 interface ResourcesProps {
   resources: Resource[];
-  onAddResource: (name: string, category: Role, region: string, type: 'Internal' | 'External') => Promise<void>;
+  onAddResource: (name: string, category: Role, region: string, type: 'Internal' | 'External', program: string | null) => Promise<void>;
   onDeleteResource: (id: string) => Promise<void>;
   onUpdateResourceCategory: (id: string, category: Role) => Promise<void>;
   onUpdateResourceRegion: (id: string, region: string | null) => Promise<void>;
@@ -123,6 +125,7 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
   const [newResourceCategory, setNewResourceCategory] = useState<Role>(Role.EA);
   const [newResourceRegion, setNewResourceRegion] = useState<string>('HK');
   const [newResourceType, setNewResourceType] = useState<'Internal' | 'External'>('Internal');
+  const [newResourceProgram, setNewResourceProgram] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [expandedResourceId, setExpandedResourceId] = useState<string | null>(null);
   
@@ -135,9 +138,16 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
     if (!newResourceName.trim() || isAdding) return;
     
     setIsAdding(true);
-    await onAddResource(newResourceName.trim(), newResourceCategory, newResourceRegion, newResourceType);
+    await onAddResource(
+        newResourceName.trim(), 
+        newResourceCategory, 
+        newResourceRegion, 
+        newResourceType, 
+        newResourceProgram.trim() || null
+    );
     setIsAdding(false);
     setNewResourceName('');
+    setNewResourceProgram('');
   };
   
   const startEditing = (resource: Resource) => {
@@ -208,8 +218,9 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
           <h2 className="text-xl font-bold text-slate-800">Manage Resources & Holidays</h2>
         </div>
         
-        {!isReadOnly && <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-6 items-center">
+        {!isReadOnly && <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-6 gap-2 mb-6 items-center">
           <input type="text" value={newResourceName} onChange={(e) => setNewResourceName(e.target.value)} placeholder="e.g., John Doe" className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm md:col-span-2"/>
+          <input type="text" value={newResourceProgram} onChange={(e) => setNewResourceProgram(e.target.value)} placeholder="Program (Optional)" className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"/>
           <select value={newResourceCategory} onChange={(e) => setNewResourceCategory(e.target.value as Role)} className="p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
             {Object.values(Role).map(cat => (<option key={cat} value={cat}>{cat}</option>))}
           </select>
@@ -223,7 +234,7 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
             </select>
            </div>
           <button type="submit" disabled={isAdding || !newResourceName.trim()} className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-            <Plus size={16} />{isAdding ? 'Adding...' : 'Add Resource'}
+            <Plus size={16} />{isAdding ? '...' : 'Add'}
           </button>
         </form>}
 
@@ -241,8 +252,8 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
                         <ul>
                           {countryResources.map(resource => (
                             <li key={resource.id} className="border-b border-slate-100 last:border-b-0">
-                              <div className="p-3 pl-6 grid grid-cols-3 items-center gap-4 hover:bg-slate-50/50">
-                                <div className="flex items-center gap-3">
+                              <div className="p-3 pl-6 grid grid-cols-12 items-center gap-4 hover:bg-slate-50/50">
+                                <div className="col-span-4 flex items-center gap-3">
                                   {editingResourceId === resource.id && !isReadOnly ? (
                                       <div className="flex items-center gap-1 w-full max-w-xs">
                                           <input 
@@ -267,17 +278,20 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
                                     {Object.values(Role).map(cat => (<option key={cat} value={cat}>{cat}</option>))}
                                   </select>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="col-span-3 text-xs text-slate-500 truncate" title={resource.program || ''}>
+                                    {resource.program || '-'}
+                                </div>
+                                <div className="col-span-3 flex items-center gap-2">
                                   <select disabled={isReadOnly} value={resource.type || 'Internal'} onChange={(e) => onUpdateResourceType(resource.id, e.target.value as 'Internal' | 'External')} className="text-xs font-medium rounded-md appearance-none bg-white border border-slate-200 px-2 py-1 focus:ring-2 focus:ring-indigo-500 cursor-pointer disabled:cursor-default disabled:bg-slate-50">
                                     <option value="Internal">Internal</option>
                                     <option value="External">External</option>
                                   </select>
                                   <select disabled={isReadOnly} value={resource.holiday_region || ''} onChange={(e) => onUpdateResourceRegion(resource.id, e.target.value || null)} className="text-xs font-medium rounded-md appearance-none bg-white border border-slate-200 px-2 py-1 focus:ring-2 focus:ring-indigo-500 cursor-pointer disabled:cursor-default disabled:bg-slate-50">
                                     <option value="">No Region</option>
-                                    {countries.map(code => (<option key={code} value={code}>{code} Holidays</option>))}
+                                    {countries.map(code => (<option key={code} value={code}>{code}</option>))}
                                   </select>
                                 </div>
-                                <div className="flex items-center gap-3 justify-end">
+                                <div className="col-span-2 flex items-center gap-3 justify-end">
                                   <button onClick={() => setExpandedResourceId(prev => prev === resource.id ? null : resource.id)} className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md ${expandedResourceId === resource.id ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100'}`}>
                                     <Calendar size={12} /> Holidays <ChevronDown size={14} className={`transition-transform ${expandedResourceId === resource.id ? 'rotate-180' : ''}`} />
                                   </button>

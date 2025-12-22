@@ -180,6 +180,7 @@ export interface Resource {
   id: string;
   name: string;
   category: Role;
+  program?: string; // Added Program field
   holiday_region?: string;
   individual_holidays?: IndividualHoliday[];
   type: 'Internal' | 'External';
