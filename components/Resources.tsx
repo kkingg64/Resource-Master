@@ -179,6 +179,8 @@ export const Resources: React.FC<ResourcesProps> = ({ resources, onAddResource, 
     [Role.PLM_D365]: 'bg-green-100 text-green-800 border-green-200 focus:ring-green-500',
     [Role.BA]: 'bg-purple-100 text-purple-800 border-purple-200 focus:ring-purple-500',
     [Role.APP_SUPPORT]: 'bg-red-100 text-red-800 border-red-200 focus:ring-red-500',
+    [Role.CS]: 'bg-violet-100 text-violet-800 border-violet-200 focus:ring-violet-500',
+    [Role.PRODUCTION]: 'bg-emerald-100 text-emerald-800 border-emerald-200 focus:ring-emerald-500',
   };
 
   const countries = Object.keys(GOV_HOLIDAYS_DB).sort();

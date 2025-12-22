@@ -11,6 +11,8 @@ export enum Role {
   PLM_D365 = 'PLM & D365',
   BA = 'BA',
   APP_SUPPORT = 'Application Support',
+  CS = 'CS',
+  PRODUCTION = 'Production',
 }
 
 export enum Phase {
