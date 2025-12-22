@@ -1,5 +1,3 @@
-
-
 import React, { useState, useMemo } from 'react';
 import { Holiday } from '../types';
 import { GOV_HOLIDAYS_DB } from '../constants';
@@ -11,7 +9,6 @@ interface AdminSettingsProps {
   onDeleteHoliday: (id: string) => Promise<void>;
   onDeleteHolidaysByCountry: (country: string) => Promise<void>;
   onUpdateHolidayDuration: (id: string, duration: number) => Promise<void>;
-  /* Added isReadOnly property to AdminSettingsProps to fix assignment error in App.tsx */
   isReadOnly?: boolean;
 }
 
@@ -42,7 +39,6 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
   const activeCountryHolidays = holidays.filter(h => h.country === selectedCountryCode);
 
   const handleSync = async () => {
-    /* Guard against sync in read-only mode */
     if (isReadOnly) return;
     setIsSyncing(true);
     // When syncing public holidays, default to Full Day (1.0)
@@ -57,7 +53,6 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
 
   const handleAddCustomHoliday = async (e: React.FormEvent) => {
     e.preventDefault();
-    /* Guard against adding custom holidays in read-only mode */
     if (isReadOnly || !newHolidayStartDate || !newHolidayName.trim()) return;
     setIsAdding(true);
 
@@ -90,7 +85,6 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
   };
 
   const handleDeleteAllFromCountry = async () => {
-    /* Guard against delete action in read-only mode */
     if (isReadOnly) return;
     if (window.confirm(`Are you sure you want to delete all active holidays for ${selectedCountryName}?`)) {
         await onDeleteHolidaysByCountry(selectedCountryCode);
@@ -99,7 +93,6 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
   
   const isGovHoliday = (holiday: Holiday) => {
     const govHolidaysForCountry = GOV_HOLIDAYS_DB[holiday.country] || [];
-    // Check only date and country for a match, as names can sometimes differ slightly.
     return govHolidaysForCountry.some(h => h.date === holiday.date && h.country === holiday.country);
   };
 
@@ -114,14 +107,11 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
         if (!groups[h.country]) groups[h.country] = [];
         groups[h.country].push(h);
     });
-    // Sort holidays within groups by date
     Object.keys(groups).forEach(key => {
         groups[key].sort((a, b) => a.date.localeCompare(b.date));
     });
     return groups;
   }, [holidays]);
-
-  const sortedCountryCodes = Object.keys(groupedHolidays).sort();
 
   return (
     <div className="flex flex-col gap-6">
@@ -184,4 +174,74 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ holidays, onAddHol
                    <Building size={14} /> Add Company Holiday to {selectedCountryName}
                  </h3>
                  <form onSubmit={handleAddCustomHoliday} className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end">
-                   <div className="
+                   <div className="flex flex-col gap-1">
+                     <label className="text-[10px] font-bold text-slate-500 uppercase">Start Date</label>
+                     <input type="date" required value={newHolidayStartDate} onChange={e => setNewHolidayStartDate(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg text-xs" />
+                   </div>
+                   <div className="flex flex-col gap-1">
+                     <label className="text-[10px] font-bold text-slate-500 uppercase">End Date (Opt)</label>
+                     <input type="date" value={newHolidayEndDate} onChange={e => setNewHolidayEndDate(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg text-xs" />
+                   </div>
+                   <div className="flex flex-col gap-1 md:col-span-2">
+                     <label className="text-[10px] font-bold text-slate-500 uppercase">Holiday Name</label>
+                     <input type="text" required placeholder="e.g. Company Founders Day" value={newHolidayName} onChange={e => setNewHolidayName(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg text-xs" />
+                   </div>
+                   <div className="flex gap-2">
+                       <div className="flex-1">
+                           <label className="text-[10px] font-bold text-slate-500 uppercase">Type</label>
+                           <select value={newHolidayDuration} onChange={e => setNewHolidayDuration(parseFloat(e.target.value))} className="w-full p-2 border border-slate-300 rounded-lg text-xs bg-white">
+                               <option value={1}>Full Day</option>
+                               <option value={0.5}>Half Day</option>
+                           </select>
+                       </div>
+                       <button type="submit" disabled={isAdding} className="flex-1 bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-xs font-bold flex items-center justify-center">
+                         {isAdding ? '...' : <Plus size={16} />}
+                       </button>
+                   </div>
+                 </form>
+               </div>
+             )}
+
+             <div className="space-y-2 max-h-96 overflow-y-auto custom-scrollbar pr-2">
+                {activeCountryHolidays.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                        No holidays configured for {selectedCountryName}.
+                    </div>
+                ) : (
+                    groupedHolidays[selectedCountryCode]?.map(holiday => (
+                        <div key={holiday.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 hover:border-indigo-200 transition-colors group">
+                            <div className="flex items-center gap-3">
+                                <div className="flex flex-col items-center justify-center w-10 h-10 bg-white border border-slate-200 rounded-lg shadow-sm">
+                                    <span className="text-[9px] text-slate-400 font-bold uppercase">{new Date(holiday.date).toLocaleString('default', { month: 'short' })}</span>
+                                    <span className="text-sm font-bold text-slate-700">{new Date(holiday.date).getDate()}</span>
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-bold text-slate-700">{holiday.name}</h4>
+                                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                                        <span className="font-mono">{holiday.date}</span>
+                                        {holiday.duration === 0.5 && <span className="flex items-center text-[10px] text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100"><Clock size={10} className="mr-1"/> 0.5 Day</span>}
+                                        {isGovHoliday(holiday) ? (
+                                            <span className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-full text-[10px] font-medium"><Globe size={10} /> Public</span>
+                                        ) : (
+                                            <span className="flex items-center gap-1 text-slate-600 bg-slate-200 px-1.5 py-0.5 rounded-full text-[10px] font-medium"><Building size={10} /> Custom</span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            {!isReadOnly && <button 
+                                onClick={() => onDeleteHoliday(holiday.id)}
+                                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors opacity-0 group-hover:opacity-100"
+                                title="Remove Holiday"
+                            >
+                                <Trash2 size={16} />
+                            </button>}
+                        </div>
+                    ))
+                )}
+             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

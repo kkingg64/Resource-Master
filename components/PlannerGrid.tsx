@@ -1103,7 +1103,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     const HEADER_HEIGHT = (showYearRow ? 32 : 0) + (showMonthRow ? 32 : 0) + 32;
     const ROW_HEIGHT = 33;
 
-    projects.forEach(project => {
+    filteredProjects.forEach(project => {
         rowIndex++; // Project header
         if (!collapsedProjects[project.id]) {
             project.modules.forEach(module => {
@@ -1134,7 +1134,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         }
     });
     return { map, totalHeight: HEADER_HEIGHT + rowIndex * ROW_HEIGHT };
-  }, [projects, collapsedProjects, collapsedModules, collapsedTasks, holidays, resources, showMonthRow, showYearRow]);
+  }, [filteredProjects, collapsedProjects, collapsedModules, collapsedTasks, holidays, resources, showMonthRow, showYearRow]);
 
   return (
     <>
