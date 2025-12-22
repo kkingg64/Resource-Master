@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType, ProjectRole, ProjectMember } from './types';
@@ -823,7 +821,7 @@ const App: React.FC = () => {
           }, { onConflict: 'assignment_id, week_id' })
       );
       
-      fetchData(false);
+      fetchData(true);
   };
 
   const updateAssignmentResourceName = async (projectId: string, moduleId: string, taskId: string, assignmentId: string, resourceName: string) => {
@@ -970,7 +968,7 @@ const App: React.FC = () => {
       await callSupabase('UPDATE schedule', { assignmentId, startDate, duration },
           supabase.from('task_assignments').update({ start_date: startDate, duration }).eq('id', assignmentId)
       );
-      fetchData(false);
+      fetchData(true);
   };
 
   const updateAssignmentProgress = async (assignmentId: string, progress: number) => {
