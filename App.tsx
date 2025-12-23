@@ -1,5 +1,7 @@
+
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
+import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay, generateAllocationRecords } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType, ProjectRole, ProjectMember } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
@@ -165,6 +167,28 @@ const shiftWeekIdByAmount = (weekId: string, amount: number): string => {
     if (isNaN(point.year) || isNaN(point.week)) return weekId;
     const newPoint = addWeeksToPoint(point, amount);
     return `${newPoint.year}-${String(newPoint.week).padStart(2, '0')}`;
+};
+
+const getHolidayMap = (resourceName: string | undefined, allResources: Resource[], allHolidays: Holiday[]) => {
+    const name = resourceName || 'Unassigned';
+    const resource = allResources.find(r => r.name === name);
+    const region = resource?.holiday_region || 'HK'; // Default to HK
+    
+    const map = new Map<string, number>();
+    
+    // Regional Holidays
+    allHolidays.filter(h => h.country === region).forEach(h => {
+        map.set(h.date, h.duration || 1);
+    });
+    
+    // Individual Holidays
+    if (resource?.individual_holidays) {
+        resource.individual_holidays.forEach(h => {
+            map.set(h.date, h.duration || 1);
+        });
+    }
+    
+    return map;
 };
 
 // Fix DB Screen Component
@@ -840,6 +864,27 @@ const App: React.FC = () => {
       fetchData(false);
   };
 
+  // Helper to sync schedule-driven changes to daily allocations (replaces existing allocations)
+  const syncAllocationsFromSchedule = async (assignmentId: string, startDate: string, duration: number, resourceName?: string) => {
+      const holidayMap = getHolidayMap(resourceName, resources, holidays);
+      const newAllocations = generateAllocationRecords(startDate, duration, holidayMap);
+      
+      // Delete old allocations
+      await supabase.from('resource_allocations').delete().eq('assignment_id', assignmentId);
+      
+      // Insert new allocations
+      const dbRecords = Object.entries(newAllocations).map(([weekId, data]) => ({
+          assignment_id: assignmentId,
+          week_id: weekId,
+          count: data.count,
+          days: data.days
+      }));
+      
+      if (dbRecords.length > 0) {
+          await supabase.from('resource_allocations').insert(dbRecords);
+      }
+  };
+
   const addTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
       if (isReadOnlyMode) return;
       
@@ -850,15 +895,21 @@ const App: React.FC = () => {
       await callSupabase('CREATE task', { taskId, taskName },
           supabase.from('tasks').insert({ id: taskId, module_id: moduleId, name: taskName })
       );
-      await callSupabase('CREATE assignment', { taskId, role },
+      
+      const { data: assignmentData } = await callSupabase('CREATE assignment', { taskId, role },
           supabase.from('task_assignments').insert({ 
               task_id: taskId, 
               role, 
               resource_name: 'Unassigned',
               start_date: today,
               duration: defaultDuration
-          })
+          }).select().single()
       );
+
+      if (assignmentData) {
+          await syncAllocationsFromSchedule(assignmentData.id, today, defaultDuration, 'Unassigned');
+      }
+      
       fetchData(true);
   };
 
@@ -869,15 +920,20 @@ const App: React.FC = () => {
       const today = formatDateForInput(new Date());
       const defaultDuration = 5;
 
-      await callSupabase('ADD assignment', { taskId, role },
+      const { data: assignmentData } = await callSupabase('ADD assignment', { taskId, role },
           supabase.from('task_assignments').insert({ 
               task_id: taskId, 
               role, 
               resource_name: 'Unassigned',
               start_date: today,
               duration: defaultDuration
-          })
+          }).select().single()
       );
+
+      if (assignmentData) {
+          await syncAllocationsFromSchedule(assignmentData.id, today, defaultDuration, 'Unassigned');
+      }
+
       fetchData(true);
   };
 
@@ -953,21 +1009,50 @@ const App: React.FC = () => {
       const module = project?.modules.find(m => m.id === moduleId);
       const task = module?.tasks.find(t => t.id === taskId);
       if (!task) return;
-      const updates = task.assignments.map(a => {
+      
+      const updates = task.assignments.map(async (a) => {
           if (!a.startDate) return null;
           const date = new Date(a.startDate);
           date.setDate(date.getDate() + (direction === 'right' ? 7 : -7));
-          return supabase.from('task_assignments').update({ start_date: formatDateForInput(date) }).eq('id', a.id);
-      }).filter(Boolean);
+          const newStartDate = formatDateForInput(date);
+          
+          await supabase.from('task_assignments').update({ start_date: newStartDate }).eq('id', a.id);
+          
+          // Re-sync allocations
+          if (a.duration) {
+              await syncAllocationsFromSchedule(a.id, newStartDate, a.duration, a.resourceName);
+          }
+      });
+      
       await Promise.all(updates);
       fetchData(true);
   };
 
   const updateAssignmentSchedule = async (assignmentId: string, startDate: string, duration: number) => {
       if (isReadOnlyMode) return;
+      
+      // Update DB Assignment
       await callSupabase('UPDATE schedule', { assignmentId, startDate, duration },
           supabase.from('task_assignments').update({ start_date: startDate, duration }).eq('id', assignmentId)
       );
+      
+      // Find current resource name to apply correct holidays
+      let resourceName = 'Unassigned';
+      for (const p of projects) {
+          for (const m of p.modules) {
+              for (const t of m.tasks) {
+                  const a = t.assignments.find(asg => asg.id === assignmentId);
+                  if (a) {
+                      resourceName = a.resourceName || 'Unassigned';
+                      break;
+                  }
+              }
+          }
+      }
+
+      // Re-populate Allocations Grid
+      await syncAllocationsFromSchedule(assignmentId, startDate, duration, resourceName);
+
       fetchData(true);
   };
 

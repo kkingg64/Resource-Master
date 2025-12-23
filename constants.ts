@@ -366,10 +366,6 @@ export const calculateEndDate = (startDate: string, duration: number, holidays: 
     }
     
     // Only advance if we haven't met the duration yet
-    // For half-day starts, we might finish on the same day if duration is 0.5
-    // But this logic simply advances. 
-    // To be precise: if we finish exactly at the end of this day, we stop.
-    // If we need more, we go to next day.
     if (workingDaysCounted < duration) {
       currentDate.setDate(currentDate.getDate() + 1);
     }
@@ -456,4 +452,57 @@ export const getTaskBaseName = (name: string): string => {
     }
   }
   return name.trim();
+};
+
+export const generateAllocationRecords = (startDateStr: string, duration: number, holidays: Map<string, number>): Record<string, { count: number, days: Record<string, number> }> => {
+  const result: Record<string, { count: number, days: Record<string, number> }> = {};
+  if (!startDateStr || duration <= 0) return result;
+
+  let currentDate = new Date(startDateStr.replace(/-/g, '/'));
+  // Ensure we have a valid date
+  if (isNaN(currentDate.getTime())) return result;
+
+  let workingDaysCounted = 0;
+  // Safety break
+  let loopLimit = duration * 20 + 365; 
+  let loopCount = 0;
+
+  while (workingDaysCounted < duration && loopCount < loopLimit) {
+    const dayOfWeek = currentDate.getDay();
+    const dateStr = formatDateForInput(currentDate);
+    const weekId = getWeekIdFromDate(currentDate);
+
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      const holidayDeduction = holidays.get(dateStr) || 0;
+      const capacity = Math.max(0, 1 - holidayDeduction);
+      
+      if (capacity > 0) {
+          const needed = duration - workingDaysCounted;
+          const take = Math.min(needed, capacity);
+          
+          if (take > 0) {
+             if (!result[weekId]) {
+                 result[weekId] = { count: 0, days: {} };
+             }
+             // Initialize day if needed (though we traverse sequentially so usually new)
+             if (!result[weekId].days[dateStr]) {
+                 result[weekId].days[dateStr] = 0;
+             }
+             
+             result[weekId].days[dateStr] += take;
+             result[weekId].count += take;
+             
+             workingDaysCounted += take;
+          }
+      }
+    }
+    
+    // Only advance if we haven't met the duration yet
+    if (workingDaysCounted < duration) {
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    loopCount++;
+  }
+
+  return result;
 };
