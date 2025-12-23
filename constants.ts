@@ -1,5 +1,4 @@
 
-
 import { TimelineColumn, ViewMode, Holiday } from './types';
 
 // Mock "Government Database" - Expanded for 2024-2027
@@ -221,9 +220,6 @@ export const addWeeksToPoint = (point: WeekPoint, weeksToAdd: number): WeekPoint
   let totalWeeks = week + weeksToAdd;
   
   // A robust ISO week addition handles years with 52 or 53 weeks dynamically
-  // For simplicity in this grid which spans limited years, we can approximate,
-  // but strictly speaking we should check ISO weeks per year.
-  // The safest way is to convert to date and back.
   const d = getDateFromWeek(year, week);
   d.setDate(d.getDate() + (weeksToAdd * 7));
   const [yStr, wStr] = getWeekIdFromDate(d).split('-');
@@ -351,7 +347,7 @@ export const getWeekdaysForWeekId = (weekId: string): string[] => {
 };
 
 // Holidays Map: Key = Date String (YYYY-MM-DD), Value = Deduction (1 for full day, 0.5 for half day)
-export const calculateEndDate = (startDate: string, duration: number, holidays: Map<string, number>): string => {
+export const calculateEndDate = (startDate: string, duration: number, holidays: Map<string, number> = new Map()): string => {
   if (!startDate || duration <= 0) return startDate;
 
   let currentDate = new Date(startDate.replace(/-/g, '/'));
@@ -388,7 +384,7 @@ export const calculateEndDate = (startDate: string, duration: number, holidays: 
   return formatDateForInput(currentDate);
 };
 
-export const findNextWorkingDay = (dateStr: string, holidays: Map<string, number>): string => {
+export const findNextWorkingDay = (dateStr: string, holidays: Map<string, number> = new Map()): string => {
   let currentDate = new Date(dateStr.replace(/-/g, '/'));
   currentDate.setDate(currentDate.getDate() + 1); // Start from the next day
 
@@ -410,7 +406,7 @@ export const findNextWorkingDay = (dateStr: string, holidays: Map<string, number
   return dateStr; // Fallback
 };
 
-export const calculateWorkingDaysBetween = (startDateStr: string, endDateStr: string, holidays: Map<string, number>): number => {
+export const calculateWorkingDaysBetween = (startDateStr: string, endDateStr: string, holidays: Map<string, number> = new Map()): number => {
   if (!startDateStr || !endDateStr) return 0;
   
   let currentDate = new Date(startDateStr.replace(/-/g, '/'));
@@ -467,7 +463,7 @@ export const getTaskBaseName = (name: string): string => {
   return name.trim();
 };
 
-export const generateAllocationRecords = (startDateStr: string, duration: number, holidays: Map<string, number>): Record<string, { count: number, days: Record<string, number> }> => {
+export const generateAllocationRecords = (startDateStr: string, duration: number, holidays: Map<string, number> = new Map()): Record<string, { count: number, days: Record<string, number> }> => {
   const result: Record<string, { count: number, days: Record<string, number> }> = {};
   if (!startDateStr || duration <= 0) return result;
 
