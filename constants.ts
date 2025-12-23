@@ -216,50 +216,55 @@ export const formatDateForInput = (date: Date): string => {
 export interface WeekPoint { year: number; week: number; }
 
 export const addWeeksToPoint = (point: WeekPoint, weeksToAdd: number): WeekPoint => {
-  let { year, week } = point;
-  let totalWeeks = week + weeksToAdd;
-  
-  while (totalWeeks > 52) {
-    year++;
-    totalWeeks -= 52; // This is a simplification, a date library would be more accurate
-  }
-  while (totalWeeks < 1) {
-    year--;
-    totalWeeks += 52;
-  }
-  return { year, week: totalWeeks };
+  const date = getDateFromWeek(point.year, point.week);
+  date.setDate(date.getDate() + (weeksToAdd * 7));
+  const weekId = getWeekIdFromDate(date);
+  const [y, w] = weekId.split('-').map(Number);
+  return { year: y, week: w };
 };
 
-// Helper to generate a range of weeks dynamically
+// Helper to generate a range of weeks dynamically using strict ISO date logic
 const generateWeeks = (start: WeekPoint, end: WeekPoint): TimelineColumn[] => {
   const weeks: TimelineColumn[] = [];
-  let current = { ...start };
-  const endValue = end.year * 100 + end.week;
+  
+  // Convert WeekPoint to Date objects to ensure we cover the range correctly
+  // Start from the Monday of the start week
+  const startDate = getDateFromWeek(start.year, start.week);
+  
+  // End at the Monday of the end week (inclusive)
+  const endDate = getDateFromWeek(end.year, end.week);
+  
+  let currentMonday = new Date(startDate);
 
-  while ((current.year * 100 + current.week) <= endValue) {
-    const paddedWeek = current.week.toString().padStart(2, '0');
-    
-    // Get the Monday of the week
-    const monday = getDateFromWeek(current.year, current.week);
+  // Loop until we pass the end date
+  // We add a small buffer (3 days) to endDate comparison to avoid time-of-day issues, 
+  // ensuring we include the last week if we are on its Monday.
+  const endCompare = new Date(endDate);
+  endCompare.setDate(endCompare.getDate() + 3);
+
+  while (currentMonday <= endCompare) {
+    const weekId = getWeekIdFromDate(currentMonday);
     
     // Determine the month based on the Thursday (ISO-8601 standard)
-    // This ensures W01 of 2025 (which might start Dec 30) is correctly labeled as Jan 2025
-    const thursday = new Date(monday);
-    thursday.setDate(monday.getDate() + 3);
+    const thursday = new Date(currentMonday);
+    thursday.setDate(currentMonday.getDate() + 3);
     
     const monthName = MONTH_NAMES[thursday.getMonth()];
     const yearForMonth = thursday.getFullYear();
-    const weekLabel = `W${paddedWeek}`;
+    const [_, weekNumStr] = weekId.split('-');
+    const weekLabel = `W${weekNumStr}`;
 
     weeks.push({ 
-      id: `${current.year}-${paddedWeek}`, 
+      id: weekId, 
       label: weekLabel,
-      yearLabel: `${current.year}`,
+      yearLabel: `${thursday.getFullYear()}`,
       monthLabel: `${monthName} ${yearForMonth}`,
       weekLabel: weekLabel,
       type: 'week'
     });
-    current = addWeeksToPoint(current, 1);
+    
+    // Advance by 7 days
+    currentMonday.setDate(currentMonday.getDate() + 7);
   }
   return weeks;
 };
