@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType, ProjectRole, ProjectMember } from './types';
@@ -965,9 +966,79 @@ const App: React.FC = () => {
 
   const updateAssignmentSchedule = async (assignmentId: string, startDate: string, duration: number) => {
       if (isReadOnlyMode) return;
-      await callSupabase('UPDATE schedule', { assignmentId, startDate, duration },
+      
+      const { error } = await callSupabase('UPDATE schedule', { assignmentId, startDate, duration },
           supabase.from('task_assignments').update({ start_date: startDate, duration }).eq('id', assignmentId)
       );
+
+      if (error) return;
+
+      // Automatically populate resource allocations for the new schedule
+      let resourceName = 'Unassigned';
+      let foundAssignment = false;
+      
+      for (const p of projects) {
+          for (const m of p.modules) {
+              for (const t of m.tasks) {
+                  const a = t.assignments.find(asn => asn.id === assignmentId);
+                  if (a) {
+                      resourceName = a.resourceName || 'Unassigned';
+                      foundAssignment = true;
+                      break;
+                  }
+              }
+              if (foundAssignment) break;
+          }
+          if (foundAssignment) break;
+      }
+
+      const resource = resources.find(r => r.name === resourceName);
+      const region = resource?.holiday_region || 'HK';
+      const relevantHolidays = holidays.filter(h => h.country === region);
+      const holidayMap = new Map<string, number>();
+      relevantHolidays.forEach(h => holidayMap.set(h.date, h.duration || 1));
+
+      const allocationsMap = new Map<string, { count: number, days: Record<string, number> }>();
+      
+      let currentDate = new Date(startDate.replace(/-/g, '/'));
+      let daysAdded = 0;
+      let loopGuard = 0;
+
+      while (daysAdded < duration && loopGuard < 365 * 2) {
+          const day = currentDate.getDay();
+          const dateStr = formatDateForInput(currentDate);
+          
+          if (day !== 0 && day !== 6) { // Weekdays only
+              const holDuration = holidayMap.get(dateStr) || 0;
+              const workVal = Math.max(0, 1 - holDuration); // 1, 0.5, or 0
+              
+              if (workVal > 0) {
+                  const weekId = getWeekIdFromDate(currentDate);
+                  if (!allocationsMap.has(weekId)) {
+                      allocationsMap.set(weekId, { count: 0, days: {} });
+                  }
+                  const weekAlloc = allocationsMap.get(weekId)!;
+                  weekAlloc.days[dateStr] = workVal;
+                  weekAlloc.count += workVal;
+                  
+                  daysAdded += workVal;
+              }
+          }
+          currentDate.setDate(currentDate.getDate() + 1);
+          loopGuard++;
+      }
+
+      const upsertPayload = Array.from(allocationsMap.entries()).map(([weekId, data]) => ({
+          assignment_id: assignmentId,
+          week_id: weekId,
+          count: data.count,
+          days: data.days
+      }));
+
+      if (upsertPayload.length > 0) {
+          await supabase.from('resource_allocations').upsert(upsertPayload, { onConflict: 'assignment_id, week_id' });
+      }
+
       fetchData(true);
   };
 
