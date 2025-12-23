@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { Project, Role, TaskAssignment, ViewMode, TimelineColumn, Resource, Holiday, ModuleType, MODULE_TYPE_DISPLAY_NAMES, ProjectModule, ProjectTask } from '../types';
 import { ChevronDown, ChevronRight, GripVertical, Plus, UserPlus, Folder, MoreHorizontal, Copy, Trash2, Calendar, ChevronLeft, Link2, Minimize2, Lock, Unlock, Clock } from 'lucide-react';
 import { getTimeline, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
-import { DependencyLines } from './DependencyLines';
 
 interface PlannerGridProps {
   projects: Project[];
@@ -234,16 +233,19 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const timeline = useMemo(() => getTimeline(viewMode, timelineStart, timelineEnd), [viewMode, timelineStart, timelineEnd]);
   
   const colWidth = viewMode === 'month' ? 60 : viewMode === 'week' ? 40 : 30;
-  const sidebarWidth = 280; 
-  const stickyLeftOffset = sidebarWidth; // Initial offset for timeline highlighter
+  
+  // FIXED: Consistent Sidebar Width
+  const sidebarWidth = 250; 
+  const totalStickyWidth = isDetailsFrozen ? (startColWidth + durationColWidth + dependencyColWidth) : 0;
+  const stickyLeftOffset = sidebarWidth + totalStickyWidth; 
   
   // Calculate freeze offsets
-  const startColLeft = 250; // Sidebar width (approx)
+  const startColLeft = sidebarWidth; // 250
   const durationColLeft = startColLeft + startColWidth;
   const dependencyColLeft = durationColLeft + durationColWidth;
-  const totalStickyWidth = dependencyColLeft + dependencyColWidth;
   
-  const stickyStyle = { left: 0, width: 250, minWidth: 250, maxWidth: 250, zIndex: 50 }; // Sidebar style
+  // FIXED: Removed zIndex from stickyStyle to allow Tailwind classes to control stacking context
+  const stickyStyle = { left: 0, width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth };
 
   const toggleProject = (id: string) => setCollapsedProjects(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleModule = (id: string) => setCollapsedModules(prev => ({ ...prev, [id]: !prev[id] }));
@@ -462,7 +464,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
               <>
                 <div className="flex bg-slate-100 border-b border-slate-200 sticky top-0 z-[60] h-8 items-center shadow-sm">
                   {/* Sticky Sidebar Header */}
-                  <div className="flex-shrink-0 px-3 py-1.5 font-bold text-xs text-slate-700 uppercase tracking-wider border-r border-slate-200 sticky left-0 bg-slate-100 z-[60] flex items-center justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full" style={stickyStyle}>
+                  <div className="flex-shrink-0 px-3 py-1.5 font-bold text-xs text-slate-700 uppercase tracking-wider border-r border-slate-200 sticky left-0 bg-slate-100 flex items-center justify-between shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)] h-full z-20" style={stickyStyle}>
                     <span>Project Structure</span>
                   </div>
                   
@@ -868,7 +870,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     ) : (
                                         <span 
                                             className={`text-[10px] font-mono px-1 rounded cursor-pointer ${!isReadOnly && 'hover:bg-slate-100'}`}
-                                            onClick={() => !isReadOnly && startEditing(`duration::${assignment.id}`, assignment.duration?.toString() || '0')}
+                                            onClick={(e) => !isReadOnly && startEditing(`duration::${assignment.id}`, assignment.duration?.toString() || '0', e)}
                                         >
                                             {assignment.duration || 0}d
                                         </span>
