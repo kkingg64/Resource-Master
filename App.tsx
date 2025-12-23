@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay, generateAllocationRecords } from './constants';
+import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType, ProjectRole, ProjectMember } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
@@ -47,10 +46,10 @@ const structureProjectsData = (
       id: a.id,
       role: a.role,
       resourceName: a.resource_name,
-      startDate: a.start_date,
-      startWeekId: a.start_week_id,
+      startDate: a.start_date, // New day-based field
+      startWeekId: a.start_week_id, // Keep for backward compatibility
       duration: a.duration,
-      progress: a.progress || 0,
+      progress: a.progress || 0, // NEW: Progress field
       parentAssignmentId: a.parent_assignment_id,
       sort_order: a.sort_order,
       allocations: allocationsByAssignment.get(a.id) || [],
@@ -91,30 +90,42 @@ const structureProjectsData = (
       type: m.type || ModuleType.Development,
       legacyFunctionPoints: m.legacy_function_points,
       functionPoints: m.function_points,
-      complexity: m.complexity || 'Medium',
+      complexity: m.complexity || 'Medium', // Default to Medium if undefined
+      
+      // Default FE/BE FP to the main function_points if they are not explicitly set (null)
       frontendFunctionPoints: m.frontend_function_points ?? m.function_points ?? 0,
       backendFunctionPoints: m.backend_function_points ?? m.function_points ?? 0,
+      
       frontendComplexity: m.frontend_complexity || m.complexity || 'Medium',
       backendComplexity: m.backend_complexity || m.complexity || 'Medium',
+
+      // New Prep fields
       prepVelocity: m.prep_velocity || 10,
       prepTeamSize: m.prep_team_size || 2,
+
+      // New FE/BE fields (default to 5 vel, 2 team if not set)
       frontendVelocity: m.frontend_velocity || 5,
       frontendTeamSize: m.frontend_team_size || 2,
       backendVelocity: m.backend_velocity || 5,
       backendTeamSize: m.backend_team_size || 2,
-      startDate: m.start_date,
-      startTaskId: m.start_task_id,
-      deliveryTaskId: m.delivery_task_id,
+
+      startDate: m.start_date, // New Start Date field
+      startTaskId: m.start_task_id, // New Start Task Anchor
+      deliveryTaskId: m.delivery_task_id, // Deprecated but kept
+
       sort_order: m.sort_order,
       tasks: moduleTasks,
     });
   });
 
   return (projects || []).map(p => {
+    // Determine Role
     let role: ProjectRole = 'viewer';
     if (p.user_id === currentUserId) {
         role = 'owner';
     } else {
+        // Members lookup: match project_id and the current user's email
+        // Note: We use Email because project_members stores user_email
         const membership = members.find(m => m.project_id === p.id && m.user_email === currentUserEmail);
         if (membership) {
             role = membership.role;
@@ -127,34 +138,41 @@ const structureProjectsData = (
         modules: (modulesByProject.get(p.id) || []).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
         currentUserRole: role,
         ownerEmail: p.owner_email,
-        user_id: p.user_id 
+        user_id: p.user_id // Pass this through to identify owner
     };
   }).sort((a,b) => a.name.localeCompare(b.name));
 };
 
-const getHolidayMap = (resourceName: string | undefined, allResources: Resource[], allHolidays: Holiday[]) => {
-    const name = resourceName || 'Unassigned';
-    const resource = allResources.find(r => r.name === name);
-    const region = resource?.holiday_region || 'HK'; 
-    
-    const map = new Map<string, number>();
-    allHolidays.filter(h => h.country === region).forEach(h => {
-        map.set(h.date, h.duration || 1);
-    });
-    
-    if (resource?.individual_holidays) {
-        resource.individual_holidays.forEach(h => {
-            map.set(h.date, h.duration || 1);
-        });
-    }
-    
-    return map;
+const deepClone = <T,>(obj: T): T => JSON.parse(JSON.stringify(obj));
+
+const shiftWeekId = (weekId: string, direction: 'left' | 'right'): string => {
+  const [yearStr, weekStr] = weekId.split('-');
+  if (!yearStr || !weekStr) return weekId;
+  const point = { year: parseInt(yearStr), week: parseInt(weekStr) };
+  if (isNaN(point.year) || isNaN(point.week)) return weekId;
+
+  const weeksToAdd = direction === 'left' ? -1 : 1;
+  const newPoint = addWeeksToPoint(point, weeksToAdd);
+  return `${newPoint.year}-${String(newPoint.week).padStart(2, '0')}`;
 };
 
+// Helper to shift week ID by N weeks
+const shiftWeekIdByAmount = (weekId: string, amount: number): string => {
+    if (amount === 0) return weekId;
+    const [yearStr, weekStr] = weekId.split('-');
+    if (!yearStr || !weekStr) return weekId;
+    const point = { year: parseInt(yearStr), week: parseInt(weekStr) };
+    if (isNaN(point.year) || isNaN(point.week)) return weekId;
+    const newPoint = addWeeksToPoint(point, amount);
+    return `${newPoint.year}-${String(newPoint.week).padStart(2, '0')}`;
+};
+
+// Fix DB Screen Component
 const FixRecursionScreen: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
   const sql = `-- FIX POLICIES AND ENABLE GLOBAL RESOURCE ACCESS
 -- This script fixes recursion issues and makes Resources/Holidays editable by all team members.
 
+-- 1. Helper function to check if current user is a member of a project
 CREATE OR REPLACE FUNCTION is_project_member(_project_id uuid)
 RETURNS boolean AS $$
 BEGIN
@@ -166,6 +184,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+-- 2. Helper function to check if current user owns a project
 CREATE OR REPLACE FUNCTION is_project_owner(_project_id uuid)
 RETURNS boolean AS $$
 BEGIN
@@ -177,11 +196,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+-- 3. Reset Policies for Projects
 DROP POLICY IF EXISTS "Projects Select Policy" ON projects;
 DROP POLICY IF EXISTS "Projects Manage Policy" ON projects;
 DROP POLICY IF EXISTS "Members Select Policy" ON project_members;
 DROP POLICY IF EXISTS "Members Manage Policy" ON project_members;
 
+-- 4. Projects Policy
 CREATE POLICY "Projects Select Policy" ON projects
   FOR SELECT USING (
     user_id = auth.uid() 
@@ -192,6 +213,7 @@ CREATE POLICY "Projects Select Policy" ON projects
 CREATE POLICY "Projects Manage Policy" ON projects
   FOR ALL USING (user_id = auth.uid());
 
+-- 5. Members Policy
 CREATE POLICY "Members Select Policy" ON project_members
   FOR SELECT USING (
     user_email = auth.email() OR is_project_owner(project_id)
@@ -202,6 +224,7 @@ CREATE POLICY "Members Manage Policy" ON project_members
     is_project_owner(project_id)
   );
 
+-- 6. GLOBAL ACCESS for Resources & Holidays
 DROP POLICY IF EXISTS "Resources All Access" ON resources;
 CREATE POLICY "Resources All Access" ON resources
   FOR ALL TO authenticated USING (true);
@@ -214,6 +237,7 @@ DROP POLICY IF EXISTS "Individual Holidays All Access" ON individual_holidays;
 CREATE POLICY "Individual Holidays All Access" ON individual_holidays
   FOR ALL TO authenticated USING (true);
 
+-- 7. Add missing columns (Self-healing)
 ALTER TABLE holidays ADD COLUMN IF NOT EXISTS duration numeric DEFAULT 1;
 ALTER TABLE individual_holidays ADD COLUMN IF NOT EXISTS duration numeric DEFAULT 1;
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS program text;
@@ -323,7 +347,7 @@ const ShareModal: React.FC<{ onClose: () => void, projectId: string, session: an
       const { error } = await supabase.from('project_members').update({ role }).eq('id', memberId);
       if (error) {
           alert('Failed to update role');
-          fetchMembers();
+          fetchMembers(); // Revert on failure
       }
   };
 
@@ -334,7 +358,7 @@ const ShareModal: React.FC<{ onClose: () => void, projectId: string, session: an
       const { error } = await supabase.from('project_members').delete().eq('id', memberId);
       if (error) {
           alert('Failed to remove member');
-          fetchMembers();
+          fetchMembers(); // Revert on failure
       }
   };
 
@@ -358,6 +382,7 @@ const ShareModal: React.FC<{ onClose: () => void, projectId: string, session: an
           </button>
         </div>
 
+        {/* Invite Section */}
         <div className="mb-6">
             <label className="text-sm font-semibold text-slate-700 mb-2 block">Invite Teammate</label>
             <div className="flex gap-2">
@@ -386,9 +411,11 @@ const ShareModal: React.FC<{ onClose: () => void, projectId: string, session: an
             </div>
         </div>
 
+        {/* List Section */}
         <div>
             <h4 className="text-sm font-semibold text-slate-700 mb-3">People with access</h4>
             <div className="space-y-3 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                {/* Owner (You) */}
                 <div className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg transition-colors">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs">
@@ -401,6 +428,7 @@ const ShareModal: React.FC<{ onClose: () => void, projectId: string, session: an
                     </div>
                 </div>
 
+                {/* Other Members */}
                 {isLoading ? <div className="text-center py-4 text-slate-400 text-sm">Loading members...</div> : members.map(member => (
                     <div key={member.id} className="flex items-center justify-between p-2 hover:bg-slate-50 rounded-lg transition-colors group">
                         <div className="flex items-center gap-3">
@@ -430,6 +458,7 @@ const ShareModal: React.FC<{ onClose: () => void, projectId: string, session: an
             </div>
         </div>
         
+        {/* Footer Link */}
         <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
              <div className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer hover:text-indigo-600" onClick={copyToClipboard}>
                 <div className="p-1.5 bg-slate-100 rounded-full"><Share2 size={14}/></div>
@@ -696,6 +725,7 @@ const App: React.FC = () => {
 
     const projectIds = uniqueProjects.map(p => p.id);
     
+    // Explicitly initialize as empty arrays to prevent undefined
     let modulesData: any[] = [], tasksData: any[] = [], assignmentsData: any[] = [], allocationsData: any[] = [];
 
     if (projectIds.length > 0) {
@@ -779,7 +809,7 @@ const App: React.FC = () => {
           const currentDays = { ...(allocation?.days || {}) };
           currentDays[dayDate] = count;
           
-          const totalCount = Object.values(currentDays).reduce((sum: number, val: number) => sum + val, 0);
+          const totalCount = Object.values(currentDays).reduce((sum, val) => sum + val, 0);
           payload = { count: totalCount, days: currentDays };
       }
 
@@ -810,74 +840,44 @@ const App: React.FC = () => {
       fetchData(false);
   };
 
-  // Helper to sync schedule-driven changes to daily allocations (replaces existing allocations)
-  const syncAllocationsFromSchedule = async (assignmentId: string, startDate: string, duration: number, resourceName?: string) => {
-      const holidayMap = getHolidayMap(resourceName, resources, holidays);
-      const newAllocations = generateAllocationRecords(startDate, duration, holidayMap);
-      
-      // Delete old allocations
-      await supabase.from('resource_allocations').delete().eq('assignment_id', assignmentId);
-      
-      // Insert new allocations
-      const dbRecords = Object.entries(newAllocations).map(([weekId, data]) => ({
-          assignment_id: assignmentId,
-          week_id: weekId,
-          count: data.count,
-          days: data.days
-      }));
-      
-      if (dbRecords.length > 0) {
-          await supabase.from('resource_allocations').insert(dbRecords);
-      }
-  };
-
   const addTask = async (projectId: string, moduleId: string, taskId: string, taskName: string, role: Role) => {
       if (isReadOnlyMode) return;
       
+      // Default new tasks to start today for 5 days
       const today = formatDateForInput(new Date());
       const defaultDuration = 5;
 
       await callSupabase('CREATE task', { taskId, taskName },
           supabase.from('tasks').insert({ id: taskId, module_id: moduleId, name: taskName })
       );
-      
-      const { data: assignmentData } = await callSupabase('CREATE assignment', { taskId, role },
+      await callSupabase('CREATE assignment', { taskId, role },
           supabase.from('task_assignments').insert({ 
               task_id: taskId, 
               role, 
               resource_name: 'Unassigned',
               start_date: today,
               duration: defaultDuration
-          }).select().single()
+          })
       );
-
-      if (assignmentData) {
-          await syncAllocationsFromSchedule(assignmentData.id, today, defaultDuration, 'Unassigned');
-      }
-      
       fetchData(true);
   };
 
   const addAssignment = async (projectId: string, moduleId: string, taskId: string, role: Role) => {
       if (isReadOnlyMode) return;
       
+      // Default new assignments to start today for 5 days
       const today = formatDateForInput(new Date());
       const defaultDuration = 5;
 
-      const { data: assignmentData } = await callSupabase('ADD assignment', { taskId, role },
+      await callSupabase('ADD assignment', { taskId, role },
           supabase.from('task_assignments').insert({ 
               task_id: taskId, 
               role, 
               resource_name: 'Unassigned',
               start_date: today,
               duration: defaultDuration
-          }).select().single()
+          })
       );
-
-      if (assignmentData) {
-          await syncAllocationsFromSchedule(assignmentData.id, today, defaultDuration, 'Unassigned');
-      }
-
       fetchData(true);
   };
 
@@ -953,46 +953,21 @@ const App: React.FC = () => {
       const module = project?.modules.find(m => m.id === moduleId);
       const task = module?.tasks.find(t => t.id === taskId);
       if (!task) return;
-      
-      const updates = task.assignments.map(async (a) => {
+      const updates = task.assignments.map(a => {
           if (!a.startDate) return null;
           const date = new Date(a.startDate);
           date.setDate(date.getDate() + (direction === 'right' ? 7 : -7));
-          const newStartDate = formatDateForInput(date);
-          
-          await supabase.from('task_assignments').update({ start_date: newStartDate }).eq('id', a.id);
-          
-          if (a.duration) {
-              await syncAllocationsFromSchedule(a.id, newStartDate, a.duration, a.resourceName);
-          }
-      });
-      
+          return supabase.from('task_assignments').update({ start_date: formatDateForInput(date) }).eq('id', a.id);
+      }).filter(Boolean);
       await Promise.all(updates);
       fetchData(true);
   };
 
   const updateAssignmentSchedule = async (assignmentId: string, startDate: string, duration: number) => {
       if (isReadOnlyMode) return;
-      
       await callSupabase('UPDATE schedule', { assignmentId, startDate, duration },
           supabase.from('task_assignments').update({ start_date: startDate, duration }).eq('id', assignmentId)
       );
-      
-      let resourceName = 'Unassigned';
-      for (const p of projects) {
-          for (const m of p.modules) {
-              for (const t of m.tasks) {
-                  const a = t.assignments.find(asg => asg.id === assignmentId);
-                  if (a) {
-                      resourceName = a.resourceName || 'Unassigned';
-                      break;
-                  }
-              }
-          }
-      }
-
-      await syncAllocationsFromSchedule(assignmentId, startDate, duration, resourceName);
-
       fetchData(true);
   };
 
@@ -1222,6 +1197,8 @@ const App: React.FC = () => {
   };
 
   const onImportPlan = async (importedProjects: Project[], importedHolidays: Holiday[]) => {
+      // Placeholder for import logic. Full implementation would require replacing DB content.
+      // For now, this prevents the crash.
       console.log('Import requested', importedProjects);
       alert('Import functionality is partially implemented. Please use the Database Repair Tool in Settings if you encounter data issues.');
   };

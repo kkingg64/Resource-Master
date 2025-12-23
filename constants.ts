@@ -186,7 +186,6 @@ export const GOV_HOLIDAYS_DB: Record<string, Omit<Holiday, 'id' | 'user_id'>[]> 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Helper to get date from ISO Week
-// Returns the Monday of the ISO Week
 export const getDateFromWeek = (year: number, week: number): Date => {
   const simple = new Date(year, 0, 1 + (week - 1) * 7);
   const dow = simple.getDay();
@@ -200,11 +199,11 @@ export const getDateFromWeek = (year: number, week: number): Date => {
 
 // Helper to get ISO Week from Date
 export const getWeekIdFromDate = (d: Date): string => {
-  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay()||7));
-  var yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1));
-  var weekNo = Math.ceil(( ( (date.getTime() - yearStart.getTime()) / 86400000) + 1)/7);
-  return `${date.getUTCFullYear()}-${weekNo.toString().padStart(2, '0')}`;
+  d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
+  var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  var weekNo = Math.ceil(( ( (d.getTime() - yearStart.getTime()) / 86400000) + 1)/7);
+  return `${d.getUTCFullYear()}-${weekNo.toString().padStart(2, '0')}`;
 }
 
 export const formatDateForInput = (date: Date): string => {
@@ -220,33 +219,31 @@ export const addWeeksToPoint = (point: WeekPoint, weeksToAdd: number): WeekPoint
   let { year, week } = point;
   let totalWeeks = week + weeksToAdd;
   
-  // A robust ISO week addition handles years with 52 or 53 weeks dynamically
-  // For simplicity in this grid which spans limited years, we can approximate,
-  // but strictly speaking we should check ISO weeks per year.
-  // The safest way is to convert to date and back.
-  const d = getDateFromWeek(year, week);
-  d.setDate(d.getDate() + (weeksToAdd * 7));
-  const [yStr, wStr] = getWeekIdFromDate(d).split('-');
-  return { year: parseInt(yStr), week: parseInt(wStr) };
+  while (totalWeeks > 52) {
+    year++;
+    totalWeeks -= 52; // This is a simplification, a date library would be more accurate
+  }
+  while (totalWeeks < 1) {
+    year--;
+    totalWeeks += 52;
+  }
+  return { year, week: totalWeeks };
 };
 
-// Helper to generate a range of weeks dynamically using strictly contiguous logic
+// Helper to generate a range of weeks dynamically
 const generateWeeks = (start: WeekPoint, end: WeekPoint): TimelineColumn[] => {
   const weeks: TimelineColumn[] = [];
-  
-  let currentPoint = { ...start };
-  // Safety break to prevent infinite loops
-  let limit = 200; 
-  
-  // We include the end week
-  while (limit > 0) {
-    const paddedWeek = currentPoint.week.toString().padStart(2, '0');
-    const weekId = `${currentPoint.year}-${paddedWeek}`;
+  let current = { ...start };
+  const endValue = end.year * 100 + end.week;
+
+  while ((current.year * 100 + current.week) <= endValue) {
+    const paddedWeek = current.week.toString().padStart(2, '0');
     
     // Get the Monday of the week
-    const monday = getDateFromWeek(currentPoint.year, currentPoint.week);
+    const monday = getDateFromWeek(current.year, current.week);
     
     // Determine the month based on the Thursday (ISO-8601 standard)
+    // This ensures W01 of 2025 (which might start Dec 30) is correctly labeled as Jan 2025
     const thursday = new Date(monday);
     thursday.setDate(monday.getDate() + 3);
     
@@ -255,20 +252,14 @@ const generateWeeks = (start: WeekPoint, end: WeekPoint): TimelineColumn[] => {
     const weekLabel = `W${paddedWeek}`;
 
     weeks.push({ 
-      id: weekId, 
+      id: `${current.year}-${paddedWeek}`, 
       label: weekLabel,
-      yearLabel: `${currentPoint.year}`, // Use ISO year
+      yearLabel: `${current.year}`,
       monthLabel: `${monthName} ${yearForMonth}`,
       weekLabel: weekLabel,
       type: 'week'
     });
-
-    if (currentPoint.year === end.year && currentPoint.week === end.week) {
-        break;
-    }
-    
-    currentPoint = addWeeksToPoint(currentPoint, 1);
-    limit--;
+    current = addWeeksToPoint(current, 1);
   }
   return weeks;
 };
@@ -358,7 +349,7 @@ export const calculateEndDate = (startDate: string, duration: number, holidays: 
   let workingDaysCounted = 0;
 
   // Safety break to prevent infinite loops in extreme cases
-  let loopLimit = duration * 20 + 365; 
+  let loopLimit = duration * 10 + 365; 
   let loopCount = 0;
 
   while (workingDaysCounted < duration && loopCount < loopLimit) {
@@ -371,17 +362,17 @@ export const calculateEndDate = (startDate: string, duration: number, holidays: 
       const holidayDeduction = holidays.get(dateStr) || 0;
       const capacity = Math.max(0, 1 - holidayDeduction);
       
-      if (capacity > 0) {
-          workingDaysCounted += capacity;
-          // If we hit exactly the duration, we stop here (inclusive end date)
-          if (workingDaysCounted >= duration) {
-              break;
-          }
-      }
+      workingDaysCounted += capacity;
     }
     
-    // Always advance to check next day
-    currentDate.setDate(currentDate.getDate() + 1);
+    // Only advance if we haven't met the duration yet
+    // For half-day starts, we might finish on the same day if duration is 0.5
+    // But this logic simply advances. 
+    // To be precise: if we finish exactly at the end of this day, we stop.
+    // If we need more, we go to next day.
+    if (workingDaysCounted < duration) {
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
     loopCount++;
   }
 
@@ -465,63 +456,4 @@ export const getTaskBaseName = (name: string): string => {
     }
   }
   return name.trim();
-};
-
-export const generateAllocationRecords = (startDateStr: string, duration: number, holidays: Map<string, number>): Record<string, { count: number, days: Record<string, number> }> => {
-  const result: Record<string, { count: number, days: Record<string, number> }> = {};
-  if (!startDateStr || duration <= 0) return result;
-
-  let currentDate = new Date(startDateStr.replace(/-/g, '/'));
-  // Ensure we have a valid date
-  if (isNaN(currentDate.getTime())) return result;
-
-  let workingDaysCounted = 0;
-  // Safety break
-  let loopLimit = duration * 20 + 365; 
-  let loopCount = 0;
-
-  while (workingDaysCounted < duration && loopCount < loopLimit) {
-    const dayOfWeek = currentDate.getDay();
-    const dateStr = formatDateForInput(currentDate);
-    const weekId = getWeekIdFromDate(currentDate);
-
-    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-      const holidayDeduction = holidays.get(dateStr) || 0;
-      const capacity = Math.max(0, 1 - holidayDeduction);
-      
-      if (capacity > 0) {
-          const needed = duration - workingDaysCounted;
-          const take = Math.min(needed, capacity);
-          
-          if (take > 0) {
-             if (!result[weekId]) {
-                 result[weekId] = { count: 0, days: {} };
-             }
-             // Initialize day if needed
-             if (!result[weekId].days[dateStr]) {
-                 result[weekId].days[dateStr] = 0;
-             }
-             
-             result[weekId].days[dateStr] += take;
-             result[weekId].count += take;
-             
-             workingDaysCounted += take;
-          }
-      }
-    }
-    
-    // Always advance, even if we took some work, unless we are done
-    // But wait, if we are done, the loop condition handles it.
-    // We must advance date to continue checking subsequent days.
-    if (workingDaysCounted < duration) {
-       currentDate.setDate(currentDate.getDate() + 1);
-    } else {
-       // Loop terminates naturally
-       break;
-    }
-    
-    loopCount++;
-  }
-
-  return result;
 };

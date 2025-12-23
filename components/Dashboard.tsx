@@ -1,9 +1,9 @@
 
 import React, { useMemo } from 'react';
-import { Project, Resource, Holiday, Role } from '../types';
-import { Briefcase, AlertCircle, Users, Clock, Activity, CalendarOff, AlertTriangle, AlertOctagon, ArrowRight, CheckCircle2, ChevronRight } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getWeekIdFromDate, formatDateForInput, getWeekdaysForWeekId, calculateEndDate, calculateTimeBasedProgress } from '../constants';
+import { Project, Role, WeeklySummary, ResourceAllocation, Resource, Holiday } from '../types';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
+import { getTimeline, DEFAULT_START, DEFAULT_END, calculateWorkingDaysBetween, formatDateForInput, getWeekIdFromDate, getWeekdaysForWeekId, calculateEndDate, calculateTimeBasedProgress } from '../constants';
+import { AlertCircle, CheckCircle2, Clock, Users, Briefcase, ChevronRight, AlertTriangle, AlertOctagon, CalendarDays, Activity, CalendarOff, ArrowRight } from 'lucide-react';
 
 interface DashboardProps {
   projects: Project[];
@@ -11,141 +11,154 @@ interface DashboardProps {
   holidays: Holiday[];
 }
 
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+
 export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holidays }) => {
-  const currentWeekId = getWeekIdFromDate(new Date());
+  
+  const GLOBAL_TIMELINE_DATA = useMemo(() => getTimeline('week', DEFAULT_START, DEFAULT_END), []);
+  const today = new Date();
+  const todayStr = formatDateForInput(today);
+  const currentWeekId = getWeekIdFromDate(today);
 
-  // 1. Resource Utilization Calculation
-  const resourceUtilization = useMemo(() => {
-    const map = new Map<string, number>();
-    projects.forEach(p => {
-      p.modules.forEach(m => {
-        m.tasks.forEach(t => {
-          t.assignments.forEach(a => {
-            if (a.resourceName && a.resourceName !== 'Unassigned') {
-              const currentAlloc = a.allocations.find(al => al.weekId === currentWeekId);
-              if (currentAlloc) {
-                map.set(a.resourceName, (map.get(a.resourceName) || 0) + currentAlloc.count);
-              }
-            }
-          });
-        });
-      });
-    });
-    return Array.from(map.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
-  }, [projects, currentWeekId]);
-
-  // 2. Chart Data by Role
-  const chartData = useMemo(() => {
-    const data: any[] = [{ name: 'Current Week' }];
-    projects.forEach(p => {
-      p.modules.forEach(m => {
-        m.tasks.forEach(t => {
-          t.assignments.forEach(a => {
-            const role = a.role;
-            const currentAlloc = a.allocations.find(al => al.weekId === currentWeekId);
-            if (currentAlloc) {
-                data[0][role] = (data[0][role] || 0) + currentAlloc.count;
-            }
-          });
-        });
-      });
-    });
-    return data;
-  }, [projects, currentWeekId]);
-
-  // 3. High Level Stats
+  // 1. Calculate General Stats
   const stats = useMemo(() => {
-    let totalAllocatedDays = 0;
-    let unassignedCount = 0;
-    const unassignedTasks: { taskName: string, projectName: string, moduleName: string }[] = [];
-    
-    // FP Stats
+    let totalFP = 0;
     let totalFeFP = 0;
     let totalBeFP = 0;
+    let totalAllocatedDays = 0;
+    let unassignedCount = 0;
+    const unassignedTasks: { projectName: string, moduleName: string, taskName: string }[] = [];
 
     projects.forEach(p => {
-      p.modules.forEach(m => {
-        const isDev = !m.type || m.type === 'STANDARD'; // assuming standard is dev for simplicity in dashboard logic, realistically check ModuleType
-        if (isDev) {
-             m.tasks.forEach(t => {
-                 totalFeFP += t.frontendFunctionPoints || 0;
-                 totalBeFP += t.backendFunctionPoints || 0;
-             });
-        } else {
-             // For non-dev modules, function points might be stored differently or aggregated
-             // keeping simple for now
-             m.tasks.forEach(t => {
-                 totalFeFP += t.frontendFunctionPoints || 0; // Legacy mapping
-             });
-        }
-
-        m.tasks.forEach(t => {
-          t.assignments.forEach(a => {
-            a.allocations.forEach(al => totalAllocatedDays += al.count);
-            if (!a.resourceName || a.resourceName === 'Unassigned') {
-                unassignedCount++;
-                unassignedTasks.push({ taskName: t.name, projectName: p.name, moduleName: m.name });
-            }
-          });
+        p.modules.forEach(m => {
+            totalFP += m.functionPoints || 0;
+            totalFeFP += m.frontendFunctionPoints || 0;
+            totalBeFP += m.backendFunctionPoints || 0;
+            
+            m.tasks.forEach(t => {
+                t.assignments.forEach(a => {
+                    const isUnassigned = !a.resourceName || a.resourceName === 'Unassigned';
+                    if (isUnassigned) {
+                        unassignedCount++;
+                        unassignedTasks.push({
+                            projectName: p.name,
+                            moduleName: m.name,
+                            taskName: t.name
+                        });
+                    }
+                    a.allocations.forEach(alloc => {
+                        totalAllocatedDays += alloc.count;
+                    });
+                });
+            });
         });
-      });
     });
-    return { 
-        totalAllocatedDays, 
-        unassignedCount, 
-        unassignedTasks,
-        totalFP: totalFeFP + totalBeFP,
-        totalFeFP,
-        totalBeFP
-    };
+
+    return { totalFP, totalFeFP, totalBeFP, totalAllocatedDays, unassignedCount, unassignedTasks };
   }, [projects]);
 
-  // 4. Project Progress (Simple Timeline based)
+  // 2. Resource Utilization Logic
+  const resourceUtilization = useMemo(() => {
+    const usage: Record<string, number> = {};
+    projects.forEach(p => {
+        p.modules.forEach(m => {
+            m.tasks.forEach(t => {
+                t.assignments.forEach(a => {
+                    if (a.resourceName && a.resourceName !== 'Unassigned') {
+                        a.allocations.forEach(alloc => {
+                            usage[a.resourceName!] = (usage[a.resourceName!] || 0) + alloc.count;
+                        });
+                    }
+                });
+            });
+        });
+    });
+
+    return Object.entries(usage)
+        .map(([name, days]) => ({ name, days }))
+        .sort((a, b) => b.days - a.days)
+        .slice(0, 5); // Top 5
+  }, [projects]);
+
+  // 3. Project Progress Logic
   const projectProgress = useMemo(() => {
     return projects.map(p => {
-        let earliest = '';
-        let latest = '';
-        
+        let start: string | null = null;
+        let end: string | null = null;
+
         p.modules.forEach(m => {
             m.tasks.forEach(t => {
                 t.assignments.forEach(a => {
                     if (a.startDate) {
-                        if (!earliest || a.startDate < earliest) earliest = a.startDate;
-                        // Approximate end
+                        if (!start || a.startDate < start) start = a.startDate;
+                        // Rough estimation of end date based on start + duration
                         if (a.duration) {
-                             // This is a rough estimation for the dashboard
-                             const endDate = new Date(a.startDate);
-                             endDate.setDate(endDate.getDate() + (a.duration * 1.4)); // simple weekday buffer
-                             const endStr = formatDateForInput(endDate);
-                             if (!latest || endStr > latest) latest = endStr;
+                            const d = new Date(a.startDate);
+                            d.setDate(d.getDate() + (a.duration * 1.4)); // approx working days to calendar days
+                            const eStr = formatDateForInput(d);
+                            if (!end || eStr > end) end = eStr;
                         }
                     }
                 });
             });
         });
 
-        const now = formatDateForInput(new Date());
-        let progress = 0;
-        if (earliest && latest) {
-            if (now > latest) progress = 100;
-            else if (now < earliest) progress = 0;
-            else {
-                const total = new Date(latest).getTime() - new Date(earliest).getTime();
-                const current = new Date(now).getTime() - new Date(earliest).getTime();
-                progress = (current / total) * 100;
-            }
-        }
+        if (!start || !end) return { id: p.id, name: p.name, progress: 0, status: 'Not Started', start: '-', end: '-' };
 
-        return {
-            id: p.id,
-            name: p.name,
-            start: earliest || '-',
-            end: latest || '-',
-            progress,
-            status: progress === 100 ? 'Completed' : progress > 0 ? 'In Progress' : 'Planning'
+        const totalDuration = new Date(end).getTime() - new Date(start).getTime();
+        const elapsed = today.getTime() - new Date(start).getTime();
+        let progress = Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
+        
+        // Status logic
+        let status = 'In Progress';
+        if (progress === 0 && new Date(start) > today) status = 'Upcoming';
+        if (progress === 100) status = 'Completed';
+
+        return { 
+            id: p.id, 
+            name: p.name, 
+            progress, 
+            status,
+            start,
+            end
         };
     });
-  }, [projects]);
+  }, [projects, today]);
+
+  // 4. Chart Data Aggregation
+  const chartData = useMemo(() => {
+    return GLOBAL_TIMELINE_DATA.map(week => {
+      const [month] = week.monthLabel.split(' ');
+      const summary: any = {
+        name: `${week.label} (${month})`,
+        [Role.DEV]: 0,
+        [Role.BA]: 0,
+        [Role.APP_SUPPORT]: 0,
+        [Role.BRAND_SOLUTIONS]: 0,
+        [Role.PREP_DEV]: 0,
+        total: 0
+      };
+
+      projects.forEach(proj => {
+        proj.modules.forEach(mod => {
+          mod.tasks.forEach(task => {
+            task.assignments.forEach(assignment => {
+              const role = assignment.role;
+              assignment.allocations.forEach(alloc => {
+                if (alloc.weekId === week.id) {
+                  if (summary[role as keyof typeof summary] !== undefined) {
+                    (summary[role as keyof typeof summary] as number) += alloc.count;
+                  }
+                  summary.total += alloc.count;
+                }
+              });
+            });
+          });
+        });
+      });
+      return summary;
+    });
+  }, [projects, GLOBAL_TIMELINE_DATA]);
 
   // 5. Conflict Detection (Grouped by Resource)
   const conflictsByResource = useMemo((): Record<string, { weekId: string, total: number, modules: string[] }[]> => {
@@ -176,7 +189,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
         Object.entries(weeks).forEach(([weekId, data]) => {
             const d = data as UsageData;
             // Conflict if allocated more than 5 days OR works on multiple modules
-            if (d.modules.size > 1 || (d.total as number) > 5) {
+            if (d.modules.size > 1 || d.total > 5) {
                 if (!result[res]) result[res] = [];
                 result[res].push({
                     weekId,
@@ -507,7 +520,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
         </div>
         <div className="grid grid-cols-5 gap-4">
             {weeklyPulse.dates.map((date, idx) => {
-                const todayStr = formatDateForInput(new Date());
                 const isToday = date === todayStr;
                 const items = weeklyPulse.activity[date] || [];
                 const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short' });
@@ -682,16 +694,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                             <div key={resource} className="bg-white p-0">
                                 <div className="bg-slate-50/50 px-4 py-2 border-b border-slate-100 flex justify-between items-center">
                                     <span className="font-bold text-sm text-slate-700">{resource}</span>
-                                    <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">{(weeks as any[]).length} Weeks</span>
+                                    <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">{weeks.length} Weeks</span>
                                 </div>
                                 <table className="w-full text-sm text-left">
                                     <tbody className="divide-y divide-slate-50">
-                                        {(weeks as any[]).map((c, idx) => (
+                                        {weeks.map((c, idx) => (
                                             <tr key={`${resource}-${c.weekId}`} className="hover:bg-red-50/20">
                                                 <td className="px-4 py-2 w-24 font-mono text-xs text-slate-500 border-r border-slate-50">{c.weekId}</td>
                                                 <td className="px-4 py-2">
                                                     <div className="flex flex-col gap-1">
-                                                        {c.modules.map((m: string) => (
+                                                        {c.modules.map(m => (
                                                             <span key={m} className="text-[10px] bg-red-50 text-red-700 px-1.5 py-0.5 rounded w-fit truncate max-w-[200px]" title={m}>{m}</span>
                                                         ))}
                                                     </div>
