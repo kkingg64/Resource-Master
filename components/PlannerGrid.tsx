@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
@@ -202,8 +203,9 @@ const GridNumberInput: React.FC<GridNumberInputProps> = ({ value, onChange, onNa
   };
 
   if (isGanttMode) {
+      // Important: Use z-0 to ensure it sits behind the Gantt bar (which is z-20)
       return (
-          <div className="flex-shrink-0 border-r border-slate-100 bg-transparent relative" style={{ width: `${width}px` }}></div>
+          <div className="flex-shrink-0 border-r border-slate-100 bg-transparent relative z-0" style={{ width: `${width}px` }}></div>
       );
   }
 
@@ -376,6 +378,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   isRefreshing,
   isReadOnly = false,
 }) => {
+  // ... (State initialization omitted for brevity, logic preserved)
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>(() => {
     try {
         const saved = localStorage.getItem('oms_collapsed_projects');
@@ -481,6 +484,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }).filter(Boolean) as Project[];
   }, [projects, filterText]);
 
+  // ... (Effect hooks for resizing, editing focus, clicking outside, etc. logic preserved)
   useEffect(() => {
     if (userHasResizedSidebar) return;
     if (!projects || projects.length === 0) return;
@@ -552,6 +556,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     };
   }, [datePickerState.assignmentId]);
 
+  // ... (Toggle functions, resize handlers, etc. logic preserved)
   const toggleProject = (id: string) => setCollapsedProjects(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleModule = (id: string) => setCollapsedModules(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleTask = (id: string) => setCollapsedTasks(prev => ({ ...prev, [id]: !prev[id] }));
@@ -1312,6 +1317,29 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             startIdx = timeline.findIndex(c => c.weekIds?.includes(startWeekId));
                             endIdx = timeline.findIndex(c => c.weekIds?.includes(endWeekId));
                         }
+
+                        if (startIdx !== -1 && endIdx === -1) {
+                            const lastCol = timeline[timeline.length - 1];
+                            if (viewMode === 'day' && lastCol.date) {
+                                const endD = new Date(modEndDateStr.replace(/-/g, '/'));
+                                if (endD > lastCol.date) {
+                                    endIdx = timeline.length - 1;
+                                } else {
+                                    for (let i = timeline.length - 1; i >= startIdx; i--) {
+                                        if (timeline[i].date && timeline[i].date! < endD) {
+                                            endIdx = i;
+                                            break;
+                                        }
+                                    }
+                                }
+                            } else {
+                                endIdx = timeline.length - 1;
+                            }
+                        }
+                        if (endIdx !== -1 && startIdx === -1) {
+                            startIdx = 0;
+                        }
+
                         return { moduleStartIndex: startIdx, moduleEndIndex: endIdx };
                     })();
 
@@ -1420,6 +1448,29 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     startIdx = timeline.findIndex(c => c.weekIds?.includes(startWeekId));
                                     endIdx = timeline.findIndex(c => c.weekIds?.includes(endWeekId));
                                 }
+
+                                if (startIdx !== -1 && endIdx === -1) {
+                                    const lastCol = timeline[timeline.length - 1];
+                                    if (viewMode === 'day' && lastCol.date) {
+                                        const endD = new Date(tEndDateStr.replace(/-/g, '/'));
+                                        if (endD > lastCol.date) {
+                                            endIdx = timeline.length - 1;
+                                        } else {
+                                            for (let i = timeline.length - 1; i >= startIdx; i--) {
+                                                if (timeline[i].date && timeline[i].date! < endD) {
+                                                    endIdx = i;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        endIdx = timeline.length - 1;
+                                    }
+                                }
+                                if (endIdx !== -1 && startIdx === -1) {
+                                    startIdx = 0;
+                                }
+
                                 return { taskStartIndex: startIdx, taskEndIndex: endIdx };
                           })();
 
@@ -1502,6 +1553,45 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                         startIdx = timeline.findIndex(c => c.weekIds?.includes(startWeekId));
                                         endIdx = timeline.findIndex(c => c.weekIds?.includes(endWeekId));
                                     }
+
+                                    // Auto-clamp for partial visibility
+                                    if (startIdx !== -1 && endIdx === -1) {
+                                        const lastCol = timeline[timeline.length - 1];
+                                        if (viewMode === 'day' && lastCol.date) {
+                                            const endD = new Date(endDateStr.replace(/-/g, '/'));
+                                            if (endD > lastCol.date) {
+                                                // Off-screen right
+                                                endIdx = timeline.length - 1;
+                                            } else {
+                                                // Inside timeline, but date missing (weekend/holiday gap)
+                                                // Clamp to nearest previous day
+                                                for (let i = timeline.length - 1; i >= startIdx; i--) {
+                                                    if (timeline[i].date && timeline[i].date! < endD) {
+                                                        endIdx = i;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            endIdx = timeline.length - 1;
+                                        }
+                                    }
+                                    if (endIdx !== -1 && startIdx === -1) {
+                                        startIdx = 0;
+                                    }
+                                    
+                                    // Handle full span (both off-screen, but overlapping)
+                                    if (startIdx === -1 && endIdx === -1 && timeline.length > 0) {
+                                        const viewStart = getDateFromWeek(timelineStart.year, timelineStart.week);
+                                        const viewEnd = getDateFromWeek(timelineEnd.year, timelineEnd.week);
+                                        viewEnd.setDate(viewEnd.getDate() + 7);
+
+                                        if (assignmentStartDate! < viewStart && assignmentEndDate! > viewEnd) {
+                                            startIdx = 0;
+                                            endIdx = timeline.length - 1;
+                                        }
+                                    }
+
                                     return { startIndex: startIdx, endIndex: endIdx };
                                 })();
 
@@ -1607,10 +1697,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                         <>
                                             {/* Progress Bar Background */}
                                             <div
+                                                key={`gantt-bar-${assignment.id}-${assignment.duration}-${assignment.startDate}`}
                                                 className={`absolute top-1.5 h-4 z-20 ${roleStyle.bar} rounded flex items-center overflow-hidden transition-all duration-300 group/bar`}
                                                 style={{
                                                     left: `${startIndex * colWidth + 2}px`,
-                                                    width: `${(endIndex - startIndex + 1) * colWidth - 4}px`,
+                                                    width: `${Math.max(4, (endIndex - startIndex + 1) * colWidth - 4)}px`,
                                                 }}
                                                 title={`${assignment.role} - ${assignment.resourceName}\nDuration: ${assignment.duration} days\n${formatDateForInput(assignmentStartDate!)} -> ${endDateStr}`}
                                             >
@@ -1668,7 +1759,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                                       return (
                                         <GridNumberInput
-                                          key={`${assignment.id}-${col.id}`}
+                                          key={`${assignment.id}-${col.id}-${displayMode}`}
                                           value={rawValue}
                                           onChange={(val) => handleCellUpdate(project.id, module.id, task.id, assignment.id, col, val)}
                                           onNavigate={(dir) => handleNavigate(dir, currentRowIndex, timeline.indexOf(col))}
