@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
-import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server, Search, X } from 'lucide-react';
+import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween, calculateTimeBasedProgress } from '../constants';
+import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server, Search, X, Filter, CheckSquare, Square } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { DependencyLines } from './DependencyLines';
 
@@ -414,7 +414,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
 
   const [viewMode, setViewMode] = useState<ViewMode>('day');
-  const [displayMode, setDisplayMode] = useState<'allocation' | 'gantt'>('allocation');
+  const [displayMode, setDisplayMode] = useState<'allocation' | 'gantt'>('gantt'); // Default to Gantt
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   
@@ -432,7 +432,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [isDetailsFrozen, setIsDetailsFrozen] = useState(true);
   
   const [showToggleMenu, setShowToggleMenu] = useState(false);
-  const [filterText, setFilterText] = useState('');
+  const [showResourceFilter, setShowResourceFilter] = useState(false);
+  const [selectedResources, setSelectedResources] = useState<string[]>([]);
 
   const [contextMenu, setContextMenu] = useState<{ 
     x: number; 
@@ -449,6 +450,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const importInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const toggleButtonRef = useRef<HTMLButtonElement>(null);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
   const datePickerContainerRef = useRef<HTMLDivElement>(null);
 
   const resizeGhostRef = useRef<HTMLDivElement>(null);
@@ -463,26 +465,42 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     return map;
   }, [holidays]);
 
+  // Unique Resource Names for Filter
+  const uniqueResourceNames = useMemo(() => {
+    const names = new Set<string>();
+    projects.forEach(p => p.modules.forEach(m => m.tasks.forEach(t => t.assignments.forEach(a => {
+        if (a.resourceName && a.resourceName !== 'Unassigned') {
+            names.add(a.resourceName);
+        }
+    }))));
+    return Array.from(names).sort();
+  }, [projects]);
+
   // Filtered Projects Logic
   const filteredProjects = useMemo(() => {
-    if (!filterText.trim()) return projects;
-    const lower = filterText.toLowerCase();
+    if (selectedResources.length === 0) return projects;
+    
     return projects.map(p => {
-        const pMatch = p.name.toLowerCase().includes(lower);
+        // Check if project has relevant modules/tasks
         const modules = p.modules.map(m => {
-            const mMatch = m.name.toLowerCase().includes(lower);
             const tasks = m.tasks.filter(t => {
-                const tMatch = t.name.toLowerCase().includes(lower);
-                const aMatch = t.assignments.some(a => (a.resourceName||'').toLowerCase().includes(lower));
-                return pMatch || mMatch || tMatch || aMatch;
+                // Check if any assignment matches selected resources
+                return t.assignments.some(a => selectedResources.includes(a.resourceName || 'Unassigned'));
             });
-            if (pMatch || mMatch || tasks.length > 0) return { ...m, tasks: (pMatch || mMatch) ? m.tasks : tasks };
+            if (tasks.length > 0) return { ...m, tasks };
             return null;
         }).filter(Boolean) as ProjectModule[];
-        if (pMatch || modules.length > 0) return { ...p, modules: pMatch ? p.modules : modules };
+        
+        if (modules.length > 0) return { ...p, modules };
         return null;
     }).filter(Boolean) as Project[];
-  }, [projects, filterText]);
+  }, [projects, selectedResources]);
+
+  const toggleResourceSelection = (name: string) => {
+      setSelectedResources(prev => 
+          prev.includes(name) ? prev.filter(r => r !== name) : [...prev, name]
+      );
+  };
 
   // ... (Effect hooks for resizing, editing focus, clicking outside, etc. logic preserved)
   useEffect(() => {
@@ -530,9 +548,17 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   }, [editingId]);
 
   useEffect(() => {
-    const handleClick = () => {
+    const handleClick = (e: MouseEvent) => {
+        // Don't close if clicking inside specific menus
+        if (filterButtonRef.current?.contains(e.target as Node)) return;
+        if (toggleButtonRef.current?.contains(e.target as Node)) return;
+        
+        const target = e.target as HTMLElement;
+        if (target.closest('.filter-menu') || target.closest('.toggle-menu')) return;
+
         setContextMenu(null);
         setShowToggleMenu(false);
+        setShowResourceFilter(false);
     };
     window.addEventListener('click', handleClick);
     return () => window.removeEventListener('click', handleClick);
@@ -758,42 +784,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     const planWs = XLSX.utils.json_to_sheet(planData, { header: ['Project', 'Module', 'Task', 'Role', 'Resource', ...weekHeaders] });
     XLSX.utils.book_append_sheet(wb, planWs, 'Resource Plan');
     XLSX.writeFile(wb, `oms-resource-plan-${new Date().toISOString().split('T')[0]}.xlsx`);
-  };
-
-  const handleImportExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (isReadOnly) return;
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'array' });
-        const planSheet = workbook.Sheets['Resource Plan'];
-        if (!planSheet) throw new Error('Resource Plan sheet not found');
-        const planJson = XLSX.utils.sheet_to_json<any>(planSheet);
-        const importedProjects: Project[] = [];
-        let currentProject: Project | null = null;
-        let currentModule: ProjectModule | null = null;
-        let currentTask: ProjectTask | null = null;
-        planJson.forEach((row, index) => {
-            if (row.Project && row.Project !== currentProject?.name) { currentProject = { id: `p-${index}`, name: row.Project, modules: [], user_id: 'imported' }; importedProjects.push(currentProject); currentModule = null; currentTask = null; }
-            if (!currentProject) return;
-            if (row.Module && row.Module !== currentModule?.name) { currentModule = { id: `m-${index}`, name: row.Module, tasks: [], functionPoints: 0, legacyFunctionPoints: 0 }; currentProject.modules.push(currentModule); currentTask = null; }
-            if (!currentModule) return;
-            if (row.Task && row.Task !== currentTask?.name) { currentTask = { id: `t-${index}`, name: row.Task, assignments: [] }; currentModule.tasks.push(currentTask); }
-            if (!currentProject) return; 
-            if (!currentTask) return;
-            const allocations: { weekId: string, count: number }[] = [];
-            Object.keys(row).forEach(key => { if (/^\d{4}-\d{2}$/.test(key)) { allocations.push({ weekId: key, count: Number(row[key]) }); } });
-            const assignment: TaskAssignment = { id: `a-${index}`, role: row.Role as Role, resourceName: row.Resource, allocations };
-            currentTask.assignments.push(assignment);
-        });
-        if (window.confirm('This will overwrite your current plan. Are you sure?')) { onImportPlan(importedProjects, []); }
-      } catch (error: any) { alert(`Failed to import plan: ${error.message}`); }
-    };
-    reader.readAsArrayBuffer(file);
-    event.target.value = '';
   };
 
   const timeline = useMemo(() => getTimeline(viewMode, timelineStart, timelineEnd), [viewMode, timelineStart, timelineEnd]);
@@ -1084,33 +1074,53 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   <Eye size={14} /> View Options <ChevronDown size={12} />
                 </button>
                 {showToggleMenu && (
-                  <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50 py-1 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="toggle-menu absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50 py-1 animate-in fade-in zoom-in-95 duration-200">
                     <button onClick={() => { handleToggleModules(); setShowToggleMenu(false); }} className="w-full text-left px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 flex items-center gap-2"><ChevronsDownUp size={14} /> Toggle All Modules</button>
                     <button onClick={() => { handleToggleResources(); setShowToggleMenu(false); }} className="w-full text-left px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 flex items-center gap-2"><EyeOff size={14} /> Toggle Resources Only</button>
                   </div>
                 )}
             </div>
             
-            {/* Filter Input */}
+            {/* Filter Input - Replaced with Multi-select Dropdown */}
             <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
-                <input 
-                    type="text" 
-                    placeholder="Filter..." 
-                    value={filterText}
-                    onChange={(e) => setFilterText(e.target.value)}
-                    className="pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-40 transition-all focus:w-64"
-                />
-                {filterText && (
-                    <button onClick={() => setFilterText('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                        <X size={12} />
-                    </button>
+                <button 
+                    ref={filterButtonRef}
+                    onClick={() => setShowResourceFilter(!showResourceFilter)}
+                    className={`text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors ${selectedResources.length > 0 ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                >
+                    <Filter size={14} /> 
+                    {selectedResources.length > 0 ? `${selectedResources.length} Selected` : 'Filter Resources'}
+                    <ChevronDown size={12} />
+                </button>
+                {showResourceFilter && (
+                    <div className="filter-menu absolute top-full left-0 mt-1 w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50 animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-64">
+                        <div className="p-2 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-lg">
+                            <span className="text-xs font-semibold text-slate-600">Select Resources</span>
+                            {selectedResources.length > 0 && (
+                                <button onClick={() => setSelectedResources([])} className="text-[10px] text-red-500 hover:text-red-700">Clear</button>
+                            )}
+                        </div>
+                        <div className="overflow-y-auto p-1 custom-scrollbar">
+                            {uniqueResourceNames.map(name => (
+                                <label key={name} className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 cursor-pointer rounded text-xs text-slate-700">
+                                    <input 
+                                        type="checkbox" 
+                                        className="rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                                        checked={selectedResources.includes(name)}
+                                        onChange={() => toggleResourceSelection(name)}
+                                    />
+                                    <span className="truncate">{name}</span>
+                                </label>
+                            ))}
+                            {uniqueResourceNames.length === 0 && <div className="p-2 text-xs text-slate-400 text-center">No resources found</div>}
+                        </div>
+                    </div>
                 )}
             </div>
 
             <div className="flex items-center gap-2 bg-slate-200 rounded-lg p-1">
-                <button onClick={() => setDisplayMode('allocation')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'allocation' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Grid View (Allocations)"><LayoutList size={14} /> Grid</button>
                 <button onClick={() => setDisplayMode('gantt')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'gantt' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Gantt View (Timeline Bars)"><CalendarRange size={14} /> Gantt</button>
+                <button onClick={() => setDisplayMode('allocation')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'allocation' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Grid View (Allocations)"><LayoutList size={14} /> Grid</button>
             </div>
             <div className="h-4 w-px bg-slate-300"></div>
             <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden">
@@ -1128,10 +1138,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                 <button onClick={onRefresh} disabled={isRefreshing} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Refresh data from server"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh</button>
                 <SaveStatusIndicator status={saveStatus} />
                 <div className="w-px h-4 bg-slate-300"></div>
-                {!isReadOnly && <button onClick={onShowHistory} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="View and restore saved versions"><History size={12} /></button>}
                 <button onClick={handleExportExcel} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Export the current plan as an Excel file"><Download size={12} /></button>
-                {!isReadOnly && <button onClick={() => importInputRef.current?.click()} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Import a plan from an Excel file"><Upload size={12} /></button>}
-                <input type="file" ref={importInputRef} onChange={handleImportExcel} accept=".xlsx, .xls" className="hidden" />
+                <input type="file" ref={importInputRef} accept=".xlsx, .xls" className="hidden" />
             </div>
             <div className="w-px h-4 bg-slate-300"></div>
             {!isReadOnly && <button onClick={onAddProject} className="text-xs flex items-center gap-1 bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-700 transition-colors"><Plus size={12} /> Add Project</button>}
@@ -1601,6 +1609,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 const isEditingDuration = editingId === `duration::${assignment.id}`; 
                                 const roleStyle = getRoleStyle(assignment.role);
                                 const currentRowIndex = gridRowIndex++;
+                                
+                                const calculatedProgress = hasSchedule ? calculateTimeBasedProgress(assignment.startDate!, endDateStr) : 0;
 
                                 return (
                                 <div key={assignment.id} className={`flex border-b border-slate-100 group/assign ${draggedAssignment?.taskId === task.id && draggedAssignment?.index === assignmentIndex ? 'opacity-30' : ''} ${datePickerState.assignmentId === assignment.id ? 'relative z-[40]' : ''}`} draggable={!isReadOnly} onDragStart={(e) => handleAssignmentDragStart(e, task.id, assignmentIndex)} onDragOver={handleAssignmentDragOver} onDrop={(e) => handleAssignmentDrop(e, project.id, module.id, task.id, assignmentIndex)} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); !isReadOnly && setContextMenu({ type: 'assignment', x: e.pageX, y: e.pageY, projectId: project.id, moduleId: module.id, taskId: task.id, assignmentId: assignment.id }); }}>
@@ -1705,28 +1715,16 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                                 }}
                                                 title={`${assignment.role} - ${assignment.resourceName}\nDuration: ${assignment.duration} days\n${formatDateForInput(assignmentStartDate!)} -> ${endDateStr}`}
                                             >
-                                                {/* Actual Progress Fill */}
+                                                {/* Actual Progress Fill (Calculated by Time) */}
                                                 <div 
                                                     className={`h-full ${roleStyle.fill} transition-all duration-300`} 
-                                                    style={{ width: `${assignment.progress || 0}%` }}
+                                                    style={{ width: `${calculatedProgress}%` }}
                                                 ></div>
                                                 
                                                 {/* Percentage Text (visible on hover) */}
                                                 <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white/90 font-bold opacity-0 group-hover/bar:opacity-100 drop-shadow-md select-none pointer-events-none">
-                                                    {assignment.progress || 0}%
+                                                    {calculatedProgress}%
                                                 </span>
-
-                                                {/* Progress Adjuster (Invisible Slider) */}
-                                                {!isReadOnly && <input 
-                                                    type="range" 
-                                                    min="0" 
-                                                    max="100" 
-                                                    step="5"
-                                                    value={assignment.progress || 0} 
-                                                    onChange={(e) => onUpdateAssignmentProgress && onUpdateAssignmentProgress(assignment.id, parseInt(e.target.value))}
-                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-e-resize z-20"
-                                                    title="Drag to adjust progress"
-                                                />}
                                             </div>
                                             {/* Label next to bar */}
                                             <div 
