@@ -11,7 +11,7 @@ import { VersionHistory } from './components/VersionHistory';
 import { DebugLog } from './components/DebugLog';
 import { AdminSettings } from './components/AdminSettings';
 import { AIAssistant } from './components/AIAssistant';
-import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X, UserPlus, Database, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X, UserPlus, Database, AlertTriangle, History } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
@@ -430,7 +430,7 @@ NOTIFY pgrst, 'reload schema';
   );
 };
 
-const App: React.FC = () => {
+export const App: React.FC = () => {
   const [session, setSession] = useState<any | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
@@ -1256,4 +1256,180 @@ const App: React.FC = () => {
   }
 
   return (
-    <div
+    <div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-900">
+      {/* Sidebar */}
+      <aside className={`bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-16' : 'w-64'} h-full flex-shrink-0 z-50 shadow-xl`}>
+        <div className="h-16 flex items-center justify-center border-b border-slate-800">
+          <div className="flex items-center gap-2 font-bold text-white text-lg overflow-hidden">
+             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">R</div>
+             {!isSidebarCollapsed && <span>ResourceMaster</span>}
+          </div>
+        </div>
+
+        <nav className="flex-1 py-4 flex flex-col gap-1 overflow-y-auto custom-scrollbar px-2">
+           <button onClick={() => setActiveTab('dashboard')} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}>
+              <LayoutDashboard size={20} />
+              {!isSidebarCollapsed && <span>Dashboard</span>}
+           </button>
+           <button onClick={() => setActiveTab('planner')} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${activeTab === 'planner' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}>
+              <Calendar size={20} />
+              {!isSidebarCollapsed && <span>Planner</span>}
+           </button>
+           <button onClick={() => setActiveTab('estimator')} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${activeTab === 'estimator' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}>
+              <Calculator size={20} />
+              {!isSidebarCollapsed && <span>Estimator</span>}
+           </button>
+           <button onClick={() => setActiveTab('resources')} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${activeTab === 'resources' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}>
+              <Users size={20} />
+              {!isSidebarCollapsed && <span>Resources</span>}
+           </button>
+           <button onClick={() => setActiveTab('holidays')} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${activeTab === 'holidays' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}>
+              <Globe size={20} />
+              {!isSidebarCollapsed && <span>Holidays</span>}
+           </button>
+           
+           <div className="my-2 border-t border-slate-800 mx-2"></div>
+           
+           <button onClick={() => setActiveTab('settings')} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${activeTab === 'settings' ? 'bg-indigo-600 text-white' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}>
+              <SettingsIcon size={20} />
+              {!isSidebarCollapsed && <span>Settings</span>}
+           </button>
+        </nav>
+
+        <div className="p-4 border-t border-slate-800">
+           <div className="flex items-center gap-3 overflow-hidden">
+               <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold flex-shrink-0">
+                  {session.user.email?.charAt(0).toUpperCase()}
+               </div>
+               {!isSidebarCollapsed && (
+                   <div className="flex flex-col overflow-hidden">
+                       <span className="text-sm font-medium text-white truncate">{session.user.email}</span>
+                       <button onClick={() => supabase.auth.signOut()} className="text-xs text-slate-400 hover:text-white flex items-center gap-1 mt-1"><LogOut size={12}/> Sign Out</button>
+                   </div>
+               )}
+           </div>
+           <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="absolute top-1/2 -right-3 w-6 h-6 bg-slate-800 border border-slate-600 rounded-full flex items-center justify-center text-slate-400 hover:text-white shadow-sm z-50">
+               {isSidebarCollapsed ? <ChevronRight size={14}/> : <ChevronLeft size={14}/>}
+           </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative h-full">
+         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 flex-shrink-0 z-20">
+             <div className="flex items-center gap-4">
+                 <h1 className="text-xl font-bold text-slate-800 capitalize">{activeTab}</h1>
+                 {isReadOnlyMode && <span className="bg-slate-100 text-slate-500 text-xs px-2 py-1 rounded font-medium border border-slate-200">Read Only</span>}
+             </div>
+             <div className="flex items-center gap-2">
+                 <button onClick={() => setShowHistory(true)} className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors">
+                     <History size={16} /> History
+                 </button>
+                 {isOwner && (
+                     <button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 rounded-lg transition-colors">
+                         <Share2 size={16} /> Share
+                     </button>
+                 )}
+             </div>
+         </header>
+
+         <div className="flex-1 overflow-y-auto p-6 bg-slate-50 relative">
+             {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
+             {activeTab === 'planner' && (
+                 <PlannerGrid 
+                    projects={projects} 
+                    holidays={holidays}
+                    resources={resources}
+                    timelineStart={timelineStart}
+                    timelineEnd={timelineEnd}
+                    onExtendTimeline={handleExtendTimeline}
+                    onUpdateAllocation={updateAllocation}
+                    onUpdateAssignmentResourceName={updateAssignmentResourceName}
+                    onUpdateAssignmentDependency={updateAssignmentDependency}
+                    onAddTask={addTask}
+                    onAddAssignment={addAssignment}
+                    onCopyAssignment={onCopyAssignment}
+                    onReorderModules={reorderModules}
+                    onReorderTasks={reorderTasks}
+                    onMoveTask={moveTask}
+                    onUpdateModuleType={updateModuleType}
+                    onReorderAssignments={reorderAssignments}
+                    onShiftTask={onShiftTask}
+                    onUpdateAssignmentSchedule={updateAssignmentSchedule}
+                    onUpdateAssignmentProgress={updateAssignmentProgress}
+                    onAddProject={addProject}
+                    onAddModule={addModule}
+                    onUpdateProjectName={updateProjectName}
+                    onUpdateModuleName={updateModuleName}
+                    onUpdateTaskName={updateTaskName}
+                    onDeleteProject={deleteProject}
+                    onDeleteModule={deleteModule}
+                    onDeleteTask={deleteTask}
+                    onDeleteAssignment={deleteAssignment}
+                    onImportPlan={onImportPlan}
+                    onShowHistory={() => setShowHistory(true)}
+                    onRefresh={() => fetchData(true)}
+                    saveStatus={saveStatus}
+                    isRefreshing={isRefreshing}
+                    isReadOnly={isReadOnlyMode}
+                 />
+             )}
+             {activeTab === 'estimator' && (
+                 <Estimator 
+                    projects={projects} 
+                    holidays={holidays}
+                    onUpdateModuleEstimates={updateModuleEstimates}
+                    onUpdateTaskEstimates={updateTaskEstimates}
+                    onUpdateModuleComplexity={updateModuleComplexity}
+                    onUpdateModuleStartDate={updateModuleStartDate}
+                    onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
+                    onUpdateModuleStartTask={updateModuleStartTask}
+                    onReorderModules={reorderModules}
+                    onDeleteModule={deleteModule}
+                    isReadOnly={isReadOnlyMode}
+                 />
+             )}
+             {activeTab === 'resources' && (
+                 <Resources 
+                    resources={resources} 
+                    onAddResource={addResource} 
+                    onDeleteResource={deleteResource} 
+                    onUpdateResourceCategory={updateResourceCategory} 
+                    onUpdateResourceRegion={updateResourceRegion}
+                    onUpdateResourceType={updateResourceType}
+                    onUpdateResourceName={updateResourceName}
+                    onAddIndividualHoliday={addIndividualHolidays}
+                    onDeleteIndividualHoliday={deleteIndividualHoliday}
+                    isReadOnly={isReadOnlyMode}
+                 />
+             )}
+             {activeTab === 'holidays' && (
+                 <AdminSettings 
+                    holidays={holidays}
+                    onAddHolidays={addHoliday}
+                    onDeleteHoliday={deleteHoliday}
+                    onDeleteHolidaysByCountry={deleteHolidaysByCountry}
+                    onUpdateHolidayDuration={updateHolidayDuration}
+                    isReadOnly={isReadOnlyMode}
+                 />
+             )}
+             {activeTab === 'settings' && (
+                 <Settings 
+                    isDebugLogEnabled={isDebugLogEnabled}
+                    setIsDebugLogEnabled={setIsDebugLogEnabled}
+                    isAIEnabled={isAIEnabled}
+                    setIsAIEnabled={setIsAIEnabled}
+                    onOpenDatabaseFix={() => setDbError({ code: 'FORCE_FIX', message: 'User requested fix' })}
+                 />
+             )}
+         </div>
+      </main>
+
+      {isDebugLogEnabled && <DebugLog entries={logEntries} setEntries={setLogEntries} />}
+      {isAIEnabled && <AIAssistant projects={projects} resources={resources} onAddTask={addTask} onAssignResource={updateAssignmentResourceName} />}
+      
+      {showHistory && <VersionHistory onClose={() => setShowHistory(false)} onRestore={restoreVersion} onSaveCurrent={saveCurrentVersion} />}
+      {showShareModal && <ShareModal onClose={() => setShowShareModal(false)} projectId={selectedProjectId} session={session} />}
+    </div>
+  );
+};

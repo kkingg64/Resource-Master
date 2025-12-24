@@ -726,10 +726,10 @@ export const App: React.FC = () => {
           const assignment = task?.assignments.find(a => a.id === assignmentId);
           const allocation = assignment?.allocations.find(a => a.weekId === weekId);
           
-          const currentDays = { ...(allocation?.days || {}) };
+          const currentDays: Record<string, number> = { ...(allocation?.days || {}) };
           currentDays[dayDate] = count;
           
-          const totalCount = Object.values(currentDays).reduce((sum, val) => sum + val, 0);
+          const totalCount = Object.values(currentDays).reduce((sum: number, val: number) => sum + val, 0);
           payload = { count: totalCount, days: currentDays };
       }
 
