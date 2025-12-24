@@ -276,7 +276,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ onClose, projectId, session }) 
 // Fix DB Screen Component
 const FixRecursionScreen: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
   const sql = `-- FIX POLICIES AND ENABLE CHILD TABLE ACCESS
--- This script fixes "42501" permission errors and recursion issues.
+-- This script fixes "42501" permission errors and "23502" null constraint errors.
 
 -- 1. Helper function to check if current user is a member of a project
 CREATE OR REPLACE FUNCTION is_project_member(_project_id uuid)
@@ -365,6 +365,13 @@ ALTER TABLE holidays ADD COLUMN IF NOT EXISTS duration numeric DEFAULT 1;
 ALTER TABLE individual_holidays ADD COLUMN IF NOT EXISTS duration numeric DEFAULT 1;
 ALTER TABLE resources ADD COLUMN IF NOT EXISTS program text;
 
+-- 9. Relax constraints on child tables (Fixes 23502)
+-- Child tables shouldn't strictly require user_id if they link to parent project
+ALTER TABLE modules ALTER COLUMN user_id DROP NOT NULL;
+ALTER TABLE tasks ALTER COLUMN user_id DROP NOT NULL;
+ALTER TABLE task_assignments ALTER COLUMN user_id DROP NOT NULL;
+ALTER TABLE resource_allocations ALTER COLUMN user_id DROP NOT NULL;
+
 NOTIFY pgrst, 'reload schema';
 `;
 
@@ -377,7 +384,7 @@ NOTIFY pgrst, 'reload schema';
           </div>
           <div>
             <h2 className="text-xl font-bold text-red-900">Database Permissions Update</h2>
-            <p className="text-red-700 mt-1">Permission Error Detected (42501). Please update your database policies.</p>
+            <p className="text-red-700 mt-1">Permission Error Detected (42501 or 23502). Please update your database policies.</p>
           </div>
         </div>
         <div className="p-6">
@@ -510,8 +517,8 @@ const App: React.FC = () => {
       updateLog(logId, 'error', result.error);
       setSaveStatus('error');
       
-      // Auto-detect RLS violations and prompt user to fix DB
-      if (result.error.code === '42501') { // 42501 = insufficient_privilege (RLS)
+      // Auto-detect RLS violations (42501) and Not Null constraint errors (23502)
+      if (result.error.code === '42501' || result.error.code === '23502') { 
           setDbError(result.error);
       }
     } else {
@@ -693,6 +700,7 @@ const App: React.FC = () => {
           supabase.from('resource_allocations').upsert({
               assignment_id: assignmentId,
               week_id: weekId,
+              user_id: session.user.id,
               ...payload
           }, { onConflict: 'assignment_id, week_id' })
       );
@@ -724,7 +732,7 @@ const App: React.FC = () => {
       const defaultDuration = 5;
 
       await callSupabase('CREATE task', { taskId, taskName },
-          supabase.from('tasks').insert({ id: taskId, module_id: moduleId, name: taskName })
+          supabase.from('tasks').insert({ id: taskId, module_id: moduleId, name: taskName, user_id: session.user.id })
       );
       await callSupabase('CREATE assignment', { taskId, role },
           supabase.from('task_assignments').insert({ 
@@ -732,7 +740,8 @@ const App: React.FC = () => {
               role, 
               resource_name: 'Unassigned',
               start_date: today,
-              duration: defaultDuration
+              duration: defaultDuration,
+              user_id: session.user.id
           })
       );
       fetchData(true);
@@ -750,7 +759,8 @@ const App: React.FC = () => {
               role, 
               resource_name: 'Unassigned',
               start_date: today,
-              duration: defaultDuration
+              duration: defaultDuration,
+              user_id: session.user.id
           })
       );
       fetchData(true);
@@ -768,7 +778,8 @@ const App: React.FC = () => {
           role: assignment.role,
           resource_name: assignment.resource_name,
           start_date: assignment.start_date,
-          duration: assignment.duration
+          duration: assignment.duration,
+          user_id: session.user.id
       }).select().single();
       
       if (newAssignment && allocations) {
@@ -776,7 +787,8 @@ const App: React.FC = () => {
               assignment_id: newAssignment.id,
               week_id: a.week_id,
               count: a.count,
-              days: a.days
+              days: a.days,
+              user_id: session.user.id
           }));
           if (newAllocations.length > 0) {
               await supabase.from('resource_allocations').insert(newAllocations);
@@ -905,6 +917,7 @@ const App: React.FC = () => {
       const upsertPayload = Array.from(allocationsMap.entries()).map(([weekId, data]) => ({
           assignment_id: assignmentId,
           week_id: weekId,
+          user_id: session.user.id,
           count: data.count,
           days: data.days
       }));
@@ -913,14 +926,14 @@ const App: React.FC = () => {
       // Direct supabase call here to allow granular error handling if needed, but sticking to pattern
       const { error: deleteError } = await supabase.from('resource_allocations').delete().eq('assignment_id', assignmentId);
       if (deleteError) {
-          if (deleteError.code === '42501') setDbError(deleteError);
+          if (deleteError.code === '42501' || deleteError.code === '23502') setDbError(deleteError);
           return;
       }
 
       if (upsertPayload.length > 0) {
           const { error: insertError } = await supabase.from('resource_allocations').insert(upsertPayload);
           if (insertError) {
-              if (insertError.code === '42501') setDbError(insertError);
+              if (insertError.code === '42501' || insertError.code === '23502') setDbError(insertError);
               return;
           }
       }
@@ -950,7 +963,7 @@ const App: React.FC = () => {
   const addModule = async (projectId: string) => {
       if (isReadOnlyMode) return;
       await callSupabase('ADD module', { projectId },
-          supabase.from('modules').insert({ project_id: projectId, name: 'New Module' })
+          supabase.from('modules').insert({ project_id: projectId, name: 'New Module', user_id: session.user.id })
       );
       fetchData(true);
   };
