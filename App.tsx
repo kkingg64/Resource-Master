@@ -1258,7 +1258,7 @@ export const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-900">
       {/* Sidebar */}
-      <aside className={`bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-16' : 'w-64'} h-full flex-shrink-0 z-50 shadow-xl`}>
+      <aside className={`bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-16' : 'w-64'} h-full flex-shrink-0 z-[100] shadow-xl`}>
         <div className="h-16 flex items-center justify-center border-b border-slate-800">
           <div className="flex items-center gap-2 font-bold text-white text-lg overflow-hidden">
              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">R</div>
@@ -1337,20 +1337,22 @@ export const App: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative h-full">
-         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 flex-shrink-0 z-20">
-             <div className="flex items-center gap-4">
-                 <h1 className="text-xl font-bold text-slate-800 capitalize">{activeTab}</h1>
-                 {isReadOnlyMode && <span className="bg-slate-100 text-slate-500 text-xs px-2 py-1 rounded font-medium border border-slate-200">Read Only</span>}
-             </div>
-             <div className="flex items-center gap-2">
-                 <button onClick={() => setShowHistory(true)} className="hidden flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors">
-                     <History size={16} /> History
-                 </button>
-                 {/* Removed Header Share Button */}
-             </div>
-         </header>
+         {activeTab !== 'planner' && (
+             <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 flex-shrink-0 z-20">
+                 <div className="flex items-center gap-4">
+                     <h1 className="text-xl font-bold text-slate-800 capitalize">{activeTab}</h1>
+                     {isReadOnlyMode && <span className="bg-slate-100 text-slate-500 text-xs px-2 py-1 rounded font-medium border border-slate-200">Read Only</span>}
+                 </div>
+                 <div className="flex items-center gap-2">
+                     <button onClick={() => setShowHistory(true)} className="hidden flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors">
+                         <History size={16} /> History
+                     </button>
+                     {/* Removed Header Share Button */}
+                 </div>
+             </header>
+         )}
 
-         <div className="flex-1 overflow-y-auto p-6 bg-slate-50 relative">
+         <div className={`flex-1 overflow-y-auto ${activeTab === 'planner' ? 'p-0' : 'p-6'} bg-slate-50 relative`}>
              {activeTab === 'dashboard' && <Dashboard projects={projects} resources={resources} holidays={holidays} />}
              {activeTab === 'planner' && (
                  <PlannerGrid 
@@ -1450,3 +1452,4 @@ export const App: React.FC = () => {
     </div>
   );
 };
+    

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Info, Code, Database, Bug, Sparkles, ShieldAlert } from 'lucide-react';
 
@@ -11,7 +12,7 @@ interface SettingsProps {
 
 
 export const Settings: React.FC<SettingsProps> = ({ isDebugLogEnabled, setIsDebugLogEnabled, isAIEnabled, setIsAIEnabled, onOpenDatabaseFix }) => {
-  const version = "1.1.2";
+  const version = "2.0.0 (Production)";
 
   return (
     <div className="space-y-8">
@@ -116,3 +117,4 @@ export const Settings: React.FC<SettingsProps> = ({ isDebugLogEnabled, setIsDebu
     </div>
   );
 };
+    

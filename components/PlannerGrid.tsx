@@ -432,6 +432,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const [showToggleMenu, setShowToggleMenu] = useState(false);
   const [showResourceFilter, setShowResourceFilter] = useState(false);
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
+  const [resourceSearchTerm, setResourceSearchTerm] = useState('');
 
   const [contextMenu, setContextMenu] = useState<{ 
     x: number; 
@@ -475,7 +476,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   }, [projects]);
 
   // Filtered Projects Logic
-  const filteredProjects = useMemo(() => {
+  const filteredProjects = useMemo<Project[]>(() => {
     if (selectedResources.length === 0) return projects;
     
     return projects.map(p => {
@@ -770,7 +771,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }
   };
 
-  const timeline = useMemo(() => getTimeline(viewMode, timelineStart, timelineEnd), [viewMode, timelineStart, timelineEnd]);
+  const timeline = useMemo<TimelineColumn[]>(() => getTimeline(viewMode, timelineStart, timelineEnd), [viewMode, timelineStart, timelineEnd]);
 
   const today = new Date();
   const currentWeekId = getWeekIdFromDate(today);
@@ -1001,7 +1002,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const currentColumnIndex = timeline.findIndex(c => isCurrentColumn(c));
   const stickyLeftOffset = sidebarWidth + startColWidth + durationColWidth + dependencyColWidth;
 
-  const assignmentRenderInfo = useMemo(() => {
+  const assignmentRenderInfo = useMemo<{
+    map: Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>;
+    totalHeight: number;
+  }>(() => {
     const map = new Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>();
     let rowIndex = 0;
     const HEADER_HEIGHT = (showYearRow ? 32 : 0) + (showMonthRow ? 32 : 0) + 32;
@@ -1090,7 +1094,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                 )}
             </div>
             
-            {/* Filter Input - Multi-select Dropdown */}
+            {/* Filter Input - Multi-select Dropdown with Search */}
             <div className="relative">
                 <button 
                     ref={filterButtonRef}
@@ -1102,15 +1106,30 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     {selectedResources.length > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-indigo-600 rounded-full"></span>}
                 </button>
                 {showResourceFilter && (
-                    <div className="filter-menu absolute top-full left-0 mt-1 w-56 bg-white border border-slate-200 rounded-lg shadow-xl z-[100] animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-64">
-                        <div className="p-2 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-lg">
-                            <span className="text-xs font-semibold text-slate-600">Select Resources</span>
-                            {selectedResources.length > 0 && (
-                                <button onClick={() => setSelectedResources([])} className="text-[10px] text-red-500 hover:text-red-700">Clear</button>
-                            )}
+                    <div className="filter-menu absolute top-full left-0 mt-1 w-64 bg-white border border-slate-200 rounded-lg shadow-xl z-[100] animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-80">
+                        <div className="p-2 border-b border-slate-100 bg-slate-50 rounded-t-lg space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-semibold text-slate-600">Select Resources</span>
+                                {selectedResources.length > 0 && (
+                                    <button onClick={() => setSelectedResources([])} className="text-[10px] text-red-500 hover:text-red-700">Clear</button>
+                                )}
+                            </div>
+                            <div className="relative">
+                                <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input 
+                                    type="text" 
+                                    value={resourceSearchTerm}
+                                    onChange={(e) => setResourceSearchTerm(e.target.value)}
+                                    placeholder="Search..."
+                                    className="w-full pl-6 pr-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    autoFocus
+                                />
+                            </div>
                         </div>
                         <div className="overflow-y-auto p-1 custom-scrollbar">
-                            {uniqueResourceNames.map(name => (
+                            {uniqueResourceNames
+                                .filter(name => name.toLowerCase().includes(resourceSearchTerm.toLowerCase()))
+                                .map(name => (
                                 <label key={name} className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 cursor-pointer rounded text-xs text-slate-700">
                                     <input 
                                         type="checkbox" 
@@ -1121,7 +1140,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     <span className="truncate">{name}</span>
                                 </label>
                             ))}
-                            {uniqueResourceNames.length === 0 && <div className="p-2 text-xs text-slate-400 text-center">No resources found</div>}
+                            {uniqueResourceNames.filter(name => name.toLowerCase().includes(resourceSearchTerm.toLowerCase())).length === 0 && (
+                                <div className="p-2 text-xs text-slate-400 text-center">No resources found</div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -1201,7 +1222,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     <div className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-400 transition-colors" onMouseDown={(e) => handleResizeStart('dependency', dependencyColWidth, e)}></div>
                   </div>
 
-                  {Object.values(yearHeaders).map((group, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+                  {Object.values(yearHeaders).map((group: { label: string, colspan: number }, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-700 border-r border-slate-300 uppercase tracking-wider h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                 </div>
                 {showMonthRow && (
                   <div className="flex bg-slate-100 border-b border-slate-200 sticky top-8 z-[59] h-8 items-center">
@@ -1209,7 +1230,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky z-[50]' : ''}`} style={{ width: startColWidth, minWidth: startColWidth, maxWidth: startColWidth, left: isDetailsFrozen ? startColLeft : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky z-[50]' : ''}`} style={{ width: durationColWidth, minWidth: durationColWidth, maxWidth: durationColWidth, left: isDetailsFrozen ? durationColLeft : undefined }}></div>
                     <div className={`flex-shrink-0 border-r border-slate-200 h-full bg-slate-100 ${isDetailsFrozen ? 'sticky z-[50]' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined }}></div>
-                    {Object.values(monthHeaders).map((group, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-600 border-r border-slate-200 uppercase h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
+                    {Object.values(monthHeaders).map((group: { label: string, colspan: number }, idx) => (<div key={idx} className="text-center text-[11px] font-bold text-slate-600 border-r border-slate-200 uppercase h-full flex items-center justify-center" style={{ width: `${group.colspan * colWidth}px` }}>{group.label}</div>))}
                   </div>
                 )}
                 <div className={`flex bg-slate-50 border-b border-slate-200 sticky z-[58] shadow-sm h-8 items-center ${showMonthRow ? 'top-16' : 'top-8'}`}>
