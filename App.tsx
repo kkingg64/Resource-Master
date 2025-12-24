@@ -1129,7 +1129,14 @@ export const App: React.FC = () => {
   const addResource = async (name: string, category: Role, region: string, type: 'Internal' | 'External', program: string | null) => {
       if (isReadOnlyMode) return;
       await callSupabase('ADD resource', { name },
-          supabase.from('resources').insert({ name, category, holiday_region: region, type, program })
+          supabase.from('resources').insert({ 
+              name, 
+              category, 
+              holiday_region: region, 
+              type, 
+              program,
+              user_id: session.user.id 
+          })
       );
       fetchData(true);
   };
@@ -1167,7 +1174,13 @@ export const App: React.FC = () => {
 
   const addIndividualHolidays = async (resourceId: string, items: { date: string, name: string, duration: number }[]) => {
       if (isReadOnlyMode) return;
-      const records = items.map(i => ({ resource_id: resourceId, date: i.date, name: i.name, duration: i.duration }));
+      const records = items.map(i => ({ 
+          resource_id: resourceId, 
+          date: i.date, 
+          name: i.name, 
+          duration: i.duration,
+          user_id: session.user.id
+      }));
       await callSupabase('ADD ind holidays', { count: items.length }, supabase.from('individual_holidays').insert(records));
       fetchData(true);
   };
@@ -1178,9 +1191,10 @@ export const App: React.FC = () => {
       fetchData(true);
   };
 
-  const addHoliday = async (holidays: Omit<Holiday, 'id'>[]) => {
+  const addHoliday = async (newHolidays: Omit<Holiday, 'id'>[]) => {
       if (isReadOnlyMode) return;
-      await callSupabase('ADD holidays', { count: holidays.length }, supabase.from('holidays').insert(holidays));
+      const holidaysWithUser = newHolidays.map(h => ({ ...h, user_id: session.user.id }));
+      await callSupabase('ADD holidays', { count: newHolidays.length }, supabase.from('holidays').insert(holidaysWithUser));
       fetchData(true);
   };
 
@@ -1452,4 +1466,3 @@ export const App: React.FC = () => {
     </div>
   );
 };
-    
