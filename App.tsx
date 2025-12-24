@@ -11,7 +11,7 @@ import { VersionHistory } from './components/VersionHistory';
 import { DebugLog } from './components/DebugLog';
 import { AdminSettings } from './components/AdminSettings';
 import { AIAssistant } from './components/AIAssistant';
-import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X, UserPlus, Database, AlertTriangle, History } from 'lucide-react';
+import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, LogOut, Users, Globe, Share2, Copy, Check, X, UserPlus, Database, AlertTriangle, History, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
@@ -726,7 +726,7 @@ export const App: React.FC = () => {
           const assignment = task?.assignments.find(a => a.id === assignmentId);
           const allocation = assignment?.allocations.find(a => a.weekId === weekId);
           
-          const currentDays = { ...(allocation?.days || {}) };
+          const currentDays: Record<string, number> = { ...(allocation?.days || {}) };
           currentDays[dayDate] = count;
           
           const totalCount = Object.values(currentDays).reduce((sum, val) => sum + val, 0);
@@ -1296,21 +1296,42 @@ export const App: React.FC = () => {
            </button>
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
-           <div className="flex items-center gap-3 overflow-hidden">
+        <div className="p-4 border-t border-slate-800 flex flex-col gap-2">
+           {/* Share Button (moved above avatar) */}
+           {isOwner && (
+               <button 
+                   onClick={() => setShowShareModal(true)} 
+                   className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3 px-2'} py-2 rounded-lg text-indigo-400 hover:text-white hover:bg-slate-800 transition-colors`}
+                   title="Share Project"
+               >
+                   <Share2 size={20} />
+                   {!isSidebarCollapsed && <span className="text-sm font-medium">Share</span>}
+               </button>
+           )}
+
+           <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3 px-2'} py-2 overflow-hidden`}>
                <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold flex-shrink-0">
                   {session.user.email?.charAt(0).toUpperCase()}
                </div>
                {!isSidebarCollapsed && (
                    <div className="flex flex-col overflow-hidden">
-                       <span className="text-sm font-medium text-white truncate">{session.user.email}</span>
-                       <button onClick={() => supabase.auth.signOut()} className="text-xs text-slate-400 hover:text-white flex items-center gap-1 mt-1"><LogOut size={12}/> Sign Out</button>
+                       <span className="text-sm font-medium text-white truncate" title={session.user.email}>{session.user.email}</span>
                    </div>
                )}
            </div>
-           <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="absolute top-1/2 -right-3 w-6 h-6 bg-slate-800 border border-slate-600 rounded-full flex items-center justify-center text-slate-400 hover:text-white shadow-sm z-50">
-               {isSidebarCollapsed ? <ChevronRight size={14}/> : <ChevronLeft size={14}/>}
+           
+           {/* Logout (moved below avatar) */}
+           <button onClick={() => supabase.auth.signOut()} className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3 px-2'} py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors`} title="Sign Out">
+               <LogOut size={20}/> 
+               {!isSidebarCollapsed && <span className="text-sm font-medium">Sign Out</span>}
            </button>
+
+           {/* Collapse Button - Integrated at bottom */}
+           <div className={`flex ${isSidebarCollapsed ? 'justify-center' : 'justify-end'} mt-2`}>
+                <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-2 text-slate-500 hover:text-white transition-colors rounded-lg hover:bg-slate-800" title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}>
+                   {isSidebarCollapsed ? <PanelLeftOpen size={20}/> : <PanelLeftClose size={20}/>}
+                </button>
+           </div>
         </div>
       </aside>
 
@@ -1322,14 +1343,10 @@ export const App: React.FC = () => {
                  {isReadOnlyMode && <span className="bg-slate-100 text-slate-500 text-xs px-2 py-1 rounded font-medium border border-slate-200">Read Only</span>}
              </div>
              <div className="flex items-center gap-2">
-                 <button onClick={() => setShowHistory(true)} className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors">
+                 <button onClick={() => setShowHistory(true)} className="hidden flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors">
                      <History size={16} /> History
                  </button>
-                 {isOwner && (
-                     <button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 rounded-lg transition-colors">
-                         <Share2 size={16} /> Share
-                     </button>
-                 )}
+                 {/* Removed Header Share Button */}
              </div>
          </header>
 
