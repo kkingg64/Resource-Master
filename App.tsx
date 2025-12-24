@@ -1035,8 +1035,11 @@ const App: React.FC = () => {
           days: data.days
       }));
 
+      // CLEAR EXISTING ALLOCATIONS to prevent ghosts
+      await supabase.from('resource_allocations').delete().eq('assignment_id', assignmentId);
+
       if (upsertPayload.length > 0) {
-          await supabase.from('resource_allocations').upsert(upsertPayload, { onConflict: 'assignment_id, week_id' });
+          await supabase.from('resource_allocations').insert(upsertPayload);
       }
 
       fetchData(true);
