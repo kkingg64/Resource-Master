@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GOV_HOLIDAYS_DB, DEFAULT_START, DEFAULT_END, addWeeksToPoint, WeekPoint, getWeekdaysForWeekId, getWeekIdFromDate, getDateFromWeek, formatDateForInput, calculateEndDate, findNextWorkingDay } from './constants';
 import { Project, Role, ResourceAllocation, Holiday, ProjectModule, ProjectTask, TaskAssignment, LogEntry, Resource, ComplexityLevel, ModuleType, ProjectRole, ProjectMember } from './types';
@@ -12,7 +11,7 @@ import { VersionHistory } from './components/VersionHistory';
 import { DebugLog } from './components/DebugLog';
 import { AdminSettings } from './components/AdminSettings';
 import { AIAssistant } from './components/AIAssistant';
-import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X, UserPlus, Database, AlertTriangle, History } from 'lucide-react';
+import { LayoutDashboard, Calendar, Calculator, Settings as SettingsIcon, ChevronLeft, ChevronRight, LogOut, Users, Globe, Share2, Copy, Check, X, UserPlus, Database, AlertTriangle } from 'lucide-react';
 import { supabase } from './lib/supabaseClient';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
@@ -431,7 +430,7 @@ NOTIFY pgrst, 'reload schema';
   );
 };
 
-export const App: React.FC = () => {
+const App: React.FC = () => {
   const [session, setSession] = useState<any | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
@@ -1256,238 +1255,5 @@ export const App: React.FC = () => {
     );
   }
 
-  const handleLogout = async () => {
-      await supabase.auth.signOut();
-      setSession(null);
-  };
-
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
-        {/* Sidebar */}
-        <div className={`flex flex-col bg-slate-900 text-slate-300 transition-all duration-300 ${isSidebarCollapsed ? 'w-16' : 'w-64'} border-r border-slate-800 flex-shrink-0 z-50`}>
-            <div className="flex items-center justify-between p-4 border-b border-slate-800 h-16">
-                {!isSidebarCollapsed && <span className="font-bold text-lg text-white tracking-tight">Resource<span className="text-indigo-500">Master</span></span>}
-                <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
-                    {isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-                </button>
-            </div>
-            
-            <nav className="flex-1 py-4 flex flex-col gap-1 px-2 overflow-y-auto">
-                <button onClick={() => setActiveTab('dashboard')} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`} title="Dashboard">
-                    <LayoutDashboard size={20} />
-                    {!isSidebarCollapsed && <span>Dashboard</span>}
-                </button>
-                <button onClick={() => setActiveTab('planner')} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'planner' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`} title="Planner">
-                    <Calendar size={20} />
-                    {!isSidebarCollapsed && <span>Planner</span>}
-                </button>
-                <button onClick={() => setActiveTab('estimator')} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'estimator' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`} title="Estimator">
-                    <Calculator size={20} />
-                    {!isSidebarCollapsed && <span>Estimator</span>}
-                </button>
-                <button onClick={() => setActiveTab('resources')} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'resources' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`} title="Resources">
-                    <Users size={20} />
-                    {!isSidebarCollapsed && <span>Resources</span>}
-                </button>
-                 <button onClick={() => setActiveTab('holidays')} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'holidays' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`} title="Global Holidays">
-                    <Globe size={20} />
-                    {!isSidebarCollapsed && <span>Holidays</span>}
-                </button>
-                <div className="flex-1"></div>
-                 <button onClick={() => setActiveTab('settings')} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'hover:bg-slate-800 hover:text-white'}`} title="Settings">
-                    <SettingsIcon size={20} />
-                    {!isSidebarCollapsed && <span>Settings</span>}
-                </button>
-            </nav>
-
-            <div className="p-4 border-t border-slate-800">
-                <button onClick={handleLogout} className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-red-400 hover:bg-red-950/30 hover:text-red-300 transition-all`} title="Logout">
-                    <LogOut size={20} />
-                    {!isSidebarCollapsed && <span>Sign Out</span>}
-                </button>
-            </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col h-full overflow-hidden relative min-w-0">
-             <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 flex-shrink-0 z-40">
-                <div className="flex items-center gap-4">
-                    <h1 className="text-xl font-bold text-slate-800">
-                        {activeTab === 'dashboard' && 'Dashboard'}
-                        {activeTab === 'planner' && 'Resource Planner'}
-                        {activeTab === 'estimator' && 'Effort Estimator'}
-                        {activeTab === 'resources' && 'Resources & Team'}
-                        {activeTab === 'holidays' && 'Global Holidays'}
-                        {activeTab === 'settings' && 'Settings'}
-                    </h1>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                    {currentProject && (
-                        <div className="flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-1.5 border border-slate-200">
-                           <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Project:</span>
-                           <select 
-                             value={selectedProjectId} 
-                             onChange={(e) => setSelectedProjectId(e.target.value)} 
-                             className="bg-transparent border-none text-sm font-semibold text-slate-700 focus:ring-0 cursor-pointer py-0 pl-0 pr-6"
-                           >
-                             {projects.map(p => (
-                               <option key={p.id} value={p.id}>{p.name} {p.currentUserRole === 'viewer' ? '(View)' : ''}</option>
-                             ))}
-                           </select>
-                        </div>
-                    )}
-                    
-                    <button onClick={() => setShowHistory(true)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors" title="Version History">
-                        <History size={20} />
-                    </button>
-                    
-                     {currentProject && isOwner && (
-                        <button onClick={() => setShowShareModal(true)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors" title="Share Project">
-                            <Share2 size={20} />
-                        </button>
-                    )}
-                    
-                    <div className="w-px h-6 bg-slate-200 mx-1"></div>
-                    <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs border border-indigo-200" title={session.user.email}>
-                        {session.user.email?.charAt(0).toUpperCase()}
-                    </div>
-                </div>
-             </header>
-
-             <main className="flex-1 overflow-hidden relative p-4 z-0">
-                {activeTab === 'dashboard' && (
-                    <div className="h-full overflow-y-auto custom-scrollbar">
-                        <Dashboard projects={projects} resources={resources} holidays={holidays} />
-                    </div>
-                )}
-                {activeTab === 'planner' && (
-                    <PlannerGrid 
-                        projects={projects}
-                        holidays={holidays}
-                        resources={resources}
-                        timelineStart={timelineStart}
-                        timelineEnd={timelineEnd}
-                        onExtendTimeline={handleExtendTimeline}
-                        onUpdateAllocation={updateAllocation}
-                        onUpdateAssignmentResourceName={updateAssignmentResourceName}
-                        onUpdateAssignmentDependency={updateAssignmentDependency}
-                        onAddTask={addTask}
-                        onAddAssignment={addAssignment}
-                        onCopyAssignment={onCopyAssignment}
-                        onReorderModules={reorderModules}
-                        onReorderTasks={reorderTasks}
-                        onMoveTask={moveTask}
-                        onUpdateModuleType={updateModuleType}
-                        onReorderAssignments={reorderAssignments}
-                        onShiftTask={onShiftTask}
-                        onUpdateAssignmentSchedule={updateAssignmentSchedule}
-                        onUpdateAssignmentProgress={updateAssignmentProgress}
-                        onAddProject={addProject}
-                        onAddModule={addModule}
-                        onUpdateProjectName={updateProjectName}
-                        onUpdateModuleName={updateModuleName}
-                        onUpdateTaskName={updateTaskName}
-                        onDeleteProject={deleteProject}
-                        onDeleteModule={deleteModule}
-                        onDeleteTask={deleteTask}
-                        onDeleteAssignment={deleteAssignment}
-                        onImportPlan={onImportPlan}
-                        onShowHistory={() => setShowHistory(true)}
-                        onRefresh={() => fetchData(true)}
-                        saveStatus={saveStatus}
-                        isRefreshing={isRefreshing}
-                        isReadOnly={isReadOnlyMode}
-                    />
-                )}
-                {activeTab === 'estimator' && (
-                    <Estimator 
-                        projects={projects}
-                        holidays={holidays}
-                        onUpdateModuleEstimates={updateModuleEstimates}
-                        onUpdateTaskEstimates={updateTaskEstimates}
-                        onUpdateModuleComplexity={updateModuleComplexity}
-                        onUpdateModuleStartDate={updateModuleStartDate}
-                        onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
-                        onUpdateModuleStartTask={updateModuleStartTask}
-                        onReorderModules={reorderModules}
-                        onDeleteModule={deleteModule}
-                        isReadOnly={isReadOnlyMode}
-                    />
-                )}
-                {activeTab === 'resources' && (
-                    <div className="h-full overflow-y-auto custom-scrollbar">
-                        <Resources 
-                            resources={resources}
-                            onAddResource={addResource}
-                            onDeleteResource={deleteResource}
-                            onUpdateResourceCategory={updateResourceCategory}
-                            onUpdateResourceRegion={updateResourceRegion}
-                            onUpdateResourceType={updateResourceType}
-                            onUpdateResourceName={updateResourceName}
-                            onAddIndividualHoliday={addIndividualHolidays}
-                            onDeleteIndividualHoliday={deleteIndividualHoliday}
-                            isReadOnly={isReadOnlyMode}
-                        />
-                    </div>
-                )}
-                 {activeTab === 'holidays' && (
-                    <div className="h-full overflow-y-auto custom-scrollbar max-w-4xl mx-auto">
-                        <AdminSettings 
-                            holidays={holidays}
-                            onAddHolidays={addHoliday}
-                            onDeleteHoliday={deleteHoliday}
-                            onDeleteHolidaysByCountry={deleteHolidaysByCountry}
-                            onUpdateHolidayDuration={updateHolidayDuration}
-                            isReadOnly={isReadOnlyMode}
-                        />
-                    </div>
-                )}
-                {activeTab === 'settings' && (
-                    <div className="h-full overflow-y-auto custom-scrollbar max-w-2xl mx-auto">
-                        <Settings 
-                            isDebugLogEnabled={isDebugLogEnabled}
-                            setIsDebugLogEnabled={setIsDebugLogEnabled}
-                            isAIEnabled={isAIEnabled}
-                            setIsAIEnabled={setIsAIEnabled}
-                            onOpenDatabaseFix={() => setDbError({ code: 'FORCE_FIX', message: 'User forced fix' })}
-                        />
-                    </div>
-                )}
-             </main>
-        </div>
-
-        {/* Modals & Overlays */}
-        {showShareModal && currentProject && (
-            <ShareModal 
-                projectId={currentProject.id} 
-                onClose={() => setShowShareModal(false)}
-                session={session}
-            />
-        )}
-
-        {showHistory && (
-            <VersionHistory 
-                onClose={() => setShowHistory(false)}
-                onRestore={restoreVersion}
-                onSaveCurrent={saveCurrentVersion}
-            />
-        )}
-
-        {isDebugLogEnabled && (
-            <DebugLog entries={logEntries} setEntries={setLogEntries} />
-        )}
-
-        {isAIEnabled && (
-            <AIAssistant 
-                projects={projects}
-                resources={resources}
-                onAddTask={addTask}
-                onAssignResource={updateAssignmentResourceName}
-            />
-        )}
-    </div>
-  );
-};
-
-export default App;
+    <div

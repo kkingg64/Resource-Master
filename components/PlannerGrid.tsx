@@ -140,17 +140,18 @@ interface PlannerGridProps {
 
 const SaveStatusIndicator: React.FC<{ status: PlannerGridProps['saveStatus'] }> = ({ status }) => {
   const statusConfig = {
-    saving: { icon: <RotateCw size={16} className="animate-spin" />, text: 'Saving...', style: 'text-slate-600 bg-slate-100' },
-    success: { icon: <CheckCircle size={16} />, text: 'Saved!', style: 'text-green-700 bg-green-100' },
-    error: { icon: <AlertTriangle size={16} />, text: 'Error!', style: 'text-red-700 bg-red-100' },
-    idle: { icon: <CheckCircle size={16} />, text: 'Up to date', style: 'text-slate-500 bg-white' },
+    saving: { icon: <RotateCw size={14} className="animate-spin" />, text: 'Saving...', style: 'text-slate-600 bg-slate-100' },
+    success: { icon: <CheckCircle size={14} />, text: 'Saved!', style: 'text-green-700 bg-green-100' },
+    error: { icon: <AlertTriangle size={14} />, text: 'Error!', style: 'text-red-700 bg-red-100' },
+    idle: { icon: <CheckCircle size={14} />, text: 'Up to date', style: 'text-slate-500 bg-white' },
   };
   
   const current = statusConfig[status];
 
   return (
-    <div className={`flex items-center justify-center p-2 rounded-lg border border-slate-200 transition-all ${current.style}`} title={current.text}>
+    <div className={`flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 transition-all ${current.style}`}>
       {current.icon}
+      <span>{current.text}</span>
     </div>
   );
 };
@@ -1079,8 +1080,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           <div className="flex items-center gap-4">
              <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-slate-500" /><span className="text-sm font-semibold text-slate-700">Timeline</span></div>
              <div className="relative">
-                <button ref={toggleButtonRef} onClick={(e) => { e.stopPropagation(); setShowToggleMenu(!showToggleMenu); }} className="flex items-center justify-center gap-0.5 bg-white text-slate-600 p-2 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors" title="View Options">
-                  <Eye size={16} /> <ChevronDown size={10} />
+                <button ref={toggleButtonRef} onClick={(e) => { e.stopPropagation(); setShowToggleMenu(!showToggleMenu); }} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors">
+                  <Eye size={14} /> View Options <ChevronDown size={12} />
                 </button>
                 {showToggleMenu && (
                   <div className="toggle-menu absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50 py-1 animate-in fade-in zoom-in-95 duration-200">
@@ -1095,11 +1096,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                 <button 
                     ref={filterButtonRef}
                     onClick={() => setShowResourceFilter(!showResourceFilter)}
-                    className={`flex items-center justify-center p-2 rounded-lg border transition-colors relative ${selectedResources.length > 0 ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}
-                    title="Filter Resources"
+                    className={`text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors ${selectedResources.length > 0 ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}
                 >
-                    <Filter size={16} />
-                    {selectedResources.length > 0 && <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-indigo-600 rounded-full"></span>}
+                    <Filter size={14} /> 
+                    {selectedResources.length > 0 ? `${selectedResources.length} Selected` : 'Filter'}
+                    <ChevronDown size={12} />
                 </button>
                 {showResourceFilter && (
                     <div className="filter-menu absolute top-full left-0 mt-1 w-56 bg-white border border-slate-200 rounded-lg shadow-xl z-[100] animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-64">
@@ -1144,9 +1145,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
           </div>
           <div className="flex gap-4 items-center">
             <div className="flex items-center gap-2">
-                <button onClick={onRefresh} disabled={isRefreshing} className="flex items-center justify-center bg-white text-slate-600 p-2 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Refresh data">
-                    <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
-                </button>
+                <button onClick={onRefresh} disabled={isRefreshing} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Refresh data from server"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh</button>
                 <SaveStatusIndicator status={saveStatus} />
                 <input type="file" ref={importInputRef} accept=".xlsx, .xls" className="hidden" />
             </div>
