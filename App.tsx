@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabaseClient';
-import { Project, Resource, Holiday, Role, ModuleType, LogEntry, WeekPoint, ProjectModule, ProjectTask, TaskAssignment, ComplexityLevel, ProjectRole, ProjectMember } from './types';
+import { Project, Resource, Holiday, Role, ModuleType, LogEntry, ProjectModule, ProjectTask, TaskAssignment, ComplexityLevel, ProjectRole, ProjectMember } from './types';
 import { Dashboard } from './components/Dashboard';
 import { PlannerGrid } from './components/PlannerGrid';
 import { Estimator } from './components/Estimator';
@@ -10,7 +10,7 @@ import { Settings } from './components/Settings';
 import { AIAssistant } from './components/AIAssistant';
 import { DebugLog } from './components/DebugLog';
 import { VersionHistory } from './components/VersionHistory';
-import { DEFAULT_START, DEFAULT_END, addWeeksToPoint, getWeekIdFromDate } from './constants';
+import { DEFAULT_START, DEFAULT_END, addWeeksToPoint, getWeekIdFromDate, WeekPoint } from './constants';
 import { BarChart3, Calendar, Calculator, Users, Globe, Settings as SettingsIcon, Menu, History, User, Share2, X, Copy, Check, Trash2, UserPlus, ChevronDown, Link as LinkIcon, LogOut } from 'lucide-react';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
@@ -625,6 +625,50 @@ export const App: React.FC = () => {
                     timelineEnd={timelineEnd}
                     onExtendTimeline={handleTimelineBounds}
                     onUpdateAllocation={async (pid, mid, tid, aid, wid, val: number, day) => {
+                         // Optimistic Update
+                         setProjects(prev => {
+                             return prev.map(p => {
+                                 if (p.id !== pid) return p;
+                                 return {
+                                     ...p,
+                                     modules: p.modules.map(m => {
+                                         if (m.id !== mid) return m;
+                                         return {
+                                             ...m,
+                                             tasks: m.tasks.map(t => {
+                                                 if (t.id !== tid) return t;
+                                                 return {
+                                                     ...t,
+                                                     assignments: t.assignments.map(a => {
+                                                         if (a.id !== aid) return a;
+                                                         
+                                                         // Calculate new allocation state
+                                                         const existingAlloc = a.allocations.find(al => al.weekId === wid);
+                                                         let newAlloc;
+                                                         
+                                                         if (day) {
+                                                             const days = { ...(existingAlloc?.days || {}), [day]: val };
+                                                             const newCount = Object.values(days).reduce((sum: number, v: number) => sum + v, 0);
+                                                             newAlloc = { weekId: wid, count: newCount, days };
+                                                         } else {
+                                                             newAlloc = { weekId: wid, count: val, days: existingAlloc?.days };
+                                                         }
+
+                                                         const newAllocations = existingAlloc 
+                                                            ? a.allocations.map(al => al.weekId === wid ? newAlloc : al)
+                                                            : [...a.allocations, newAlloc];
+
+                                                         return { ...a, allocations: newAllocations };
+                                                     })
+                                                 };
+                                             })
+                                         };
+                                     })
+                                 };
+                             });
+                         });
+
+                         // Database Update (Async)
                          let payload: any = { count: val };
                          if (day) {
                              const alloc = projects.find(p=>p.id===pid)?.modules.find(m=>m.id===mid)?.tasks.find(t=>t.id===tid)?.assignments.find(a=>a.id===aid)?.allocations.find(a=>a.weekId===wid);
@@ -632,18 +676,99 @@ export const App: React.FC = () => {
                              payload = { count: Object.values(days).reduce((a: number, b: number) => a + b, 0), days };
                          }
                          await callSupabase('Allocation', payload, supabase.from('resource_allocations').upsert({ assignment_id: aid, week_id: wid, user_id: session.user.id, ...payload }, { onConflict: 'assignment_id, week_id' }));
-                         fetchData(true);
                     }}
-                    onUpdateAssignmentResourceName={(pid, mid, tid, aid, name) => genericUpdate('task_assignments', aid, { resource_name: name })}
+                    onUpdateAssignmentResourceName={async (pid, mid, tid, aid, name) => {
+                        // Optimistic Update
+                        setProjects(prev => prev.map(p => {
+                            if (p.id !== pid) return p;
+                            return {
+                                ...p,
+                                modules: p.modules.map(m => {
+                                    if (m.id !== mid) return m;
+                                    return {
+                                        ...m,
+                                        tasks: m.tasks.map(t => {
+                                            if (t.id !== tid) return t;
+                                            return {
+                                                ...t,
+                                                assignments: t.assignments.map(a => {
+                                                    if (a.id !== aid) return a;
+                                                    return { ...a, resourceName: name };
+                                                })
+                                            };
+                                        })
+                                    };
+                                })
+                            };
+                        }));
+                        await genericUpdate('task_assignments', aid, { resource_name: name }, false);
+                    }}
                     onUpdateAssignmentDependency={(aid, pid) => genericUpdate('task_assignments', aid, { parent_assignment_id: pid })}
                     onAddTask={async (pid, mid, tid, name, role) => {
                         await callSupabase('New Task', {name}, supabase.from('tasks').insert({ id: tid, module_id: mid, name, user_id: session.user.id }));
-                        await callSupabase('New Assign', {role}, supabase.from('task_assignments').insert({ task_id: tid, role, resource_name: 'Unassigned', start_date: new Date().toISOString().split('T')[0], duration: 5, user_id: session.user.id }));
-                        fetchData(true);
+                        const { data: newAssign } = await callSupabase('New Assign', {role}, supabase.from('task_assignments').insert({ task_id: tid, role, resource_name: 'Unassigned', start_date: new Date().toISOString().split('T')[0], duration: 5, user_id: session.user.id }).select().single());
+                        
+                        if (newAssign) {
+                            setProjects(prev => prev.map(p => {
+                                if (p.id !== pid) return p;
+                                return {
+                                    ...p,
+                                    modules: p.modules.map(m => {
+                                        if (m.id !== mid) return m;
+                                        return {
+                                            ...m,
+                                            tasks: [...m.tasks, {
+                                                id: tid,
+                                                name: name,
+                                                assignments: [{
+                                                    id: newAssign.id,
+                                                    role: newAssign.role,
+                                                    resourceName: newAssign.resource_name,
+                                                    startDate: newAssign.start_date,
+                                                    duration: newAssign.duration,
+                                                    progress: 0,
+                                                    allocations: []
+                                                }],
+                                                // ... defaults
+                                            }]
+                                        };
+                                    })
+                                };
+                            }));
+                        }
                     }}
                     onAddAssignment={async (pid, mid, tid, role) => {
-                        await callSupabase('Add Assign', {role}, supabase.from('task_assignments').insert({ task_id: tid, role, resource_name: 'Unassigned', start_date: new Date().toISOString().split('T')[0], duration: 5, user_id: session.user.id }));
-                        fetchData(true);
+                        const { data: newAssign } = await callSupabase('Add Assign', {role}, supabase.from('task_assignments').insert({ task_id: tid, role, resource_name: 'Unassigned', start_date: new Date().toISOString().split('T')[0], duration: 5, user_id: session.user.id }).select().single());
+                        
+                        if (newAssign) {
+                            setProjects(prev => prev.map(p => {
+                                if (p.id !== pid) return p;
+                                return {
+                                    ...p,
+                                    modules: p.modules.map(m => {
+                                        if (m.id !== mid) return m;
+                                        return {
+                                            ...m,
+                                            tasks: m.tasks.map(t => {
+                                                if (t.id !== tid) return t;
+                                                return {
+                                                    ...t,
+                                                    assignments: [...t.assignments, {
+                                                        id: newAssign.id,
+                                                        role: newAssign.role,
+                                                        resourceName: newAssign.resource_name,
+                                                        startDate: newAssign.start_date,
+                                                        duration: newAssign.duration,
+                                                        progress: 0,
+                                                        allocations: []
+                                                    }]
+                                                };
+                                            })
+                                        };
+                                    })
+                                };
+                            }));
+                        }
                     }}
                     onCopyAssignment={async (pid, mid, tid, aid) => {
                         const { data: org } = await supabase.from('task_assignments').select('*').eq('id', aid).single();
