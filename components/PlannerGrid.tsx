@@ -480,12 +480,18 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     if (selectedResources.length === 0) return projects;
     
     return projects.map(p => {
-        // Check if project has relevant modules/tasks
         const modules = p.modules.map(m => {
-            const tasks = m.tasks.filter(t => {
-                // Check if any assignment matches selected resources
-                return t.assignments.some(a => selectedResources.includes(a.resourceName || 'Unassigned'));
-            });
+            const tasks = m.tasks.map(t => {
+                // strict resource filtering on assignments
+                const relevantAssignments = t.assignments.filter(a => selectedResources.includes(a.resourceName || 'Unassigned'));
+                
+                if (relevantAssignments.length > 0) {
+                    // return task with ONLY the relevant assignments
+                    return { ...t, assignments: relevantAssignments };
+                }
+                return null;
+            }).filter(Boolean) as ProjectTask[];
+            
             if (tasks.length > 0) return { ...m, tasks };
             return null;
         }).filter(Boolean) as ProjectModule[];
@@ -1093,11 +1099,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     className={`text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors ${selectedResources.length > 0 ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'}`}
                 >
                     <Filter size={14} /> 
-                    {selectedResources.length > 0 ? `${selectedResources.length} Selected` : 'Filter Resources'}
+                    {selectedResources.length > 0 ? `${selectedResources.length} Selected` : 'Filter'}
                     <ChevronDown size={12} />
                 </button>
                 {showResourceFilter && (
-                    <div className="filter-menu absolute top-full left-0 mt-1 w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50 animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-64">
+                    <div className="filter-menu absolute top-full left-0 mt-1 w-56 bg-white border border-slate-200 rounded-lg shadow-xl z-[100] animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-64">
                         <div className="p-2 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-lg">
                             <span className="text-xs font-semibold text-slate-600">Select Resources</span>
                             {selectedResources.length > 0 && (
@@ -1123,8 +1129,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             </div>
 
             <div className="flex items-center gap-2 bg-slate-200 rounded-lg p-1">
-                <button onClick={() => setDisplayMode('allocation')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'allocation' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Grid View (Allocations)"><LayoutList size={14} /> Grid</button>
                 <button onClick={() => setDisplayMode('gantt')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'gantt' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Gantt View (Timeline Bars)"><CalendarRange size={14} /> Gantt</button>
+                <button onClick={() => setDisplayMode('allocation')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'allocation' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Grid View (Allocations)"><LayoutList size={14} /> Grid</button>
             </div>
             <div className="h-4 w-px bg-slate-300"></div>
             <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden">
@@ -1308,7 +1314,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               }}
                           >
                               <div className="h-full bg-slate-400" style={{ width: `${projectProgress}%` }}></div>
-                              <span className="absolute inset-0 flex items-center justify-center text-[8px] text-white font-bold opacity-0 group-hover/projbar:opacity-100">{projectProgress}%</span>
+                              <span className="absolute inset-0 flex items-center justify-center text-[8px] text-white font-bold">{projectProgress}%</span>
                           </div>
                       )}
                       {timeline.map(col => { const total = getProjectTotal(project, col); return ( <div key={col.id} className={`flex-shrink-0 border-r border-slate-600 flex items-center justify-center bg-slate-700`} style={{ width: `${colWidth}px` }}>{total > 0 && displayMode === 'allocation' && (<span className="text-[10px] font-bold text-slate-200">{formatValue(total)}</span>)}</div> ); })}
@@ -1412,7 +1418,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                     title={`Duration: ${moduleTotalDuration} working days`}
                                 >
                                     <div className="h-full bg-black/10" style={{ width: `${moduleProgress}%` }}></div>
-                                    <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white/90 font-bold opacity-0 group-hover/modbar:opacity-100 select-none pointer-events-none drop-shadow-md">
+                                    <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white/90 font-bold select-none pointer-events-none drop-shadow-md">
                                         {moduleProgress}%
                                     </span>
                                 </div>
@@ -1501,7 +1507,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                             title={`Duration: ${totalDuration} working days`}
                                         >
                                             <div className="h-full bg-slate-600" style={{ width: `${taskProgress}%` }}></div>
-                                            <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white font-bold opacity-0 group-hover/taskbar:opacity-100 drop-shadow-md select-none pointer-events-none">
+                                            <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white font-bold drop-shadow-md select-none pointer-events-none">
                                                 {taskProgress}%
                                             </span>
                                         </div>
@@ -1659,7 +1665,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                                 ></div>
                                                 
                                                 {/* Percentage Text (visible on hover) */}
-                                                <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white/90 font-bold opacity-0 group-hover/bar:opacity-100 drop-shadow-md select-none pointer-events-none">
+                                                <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white/90 font-bold drop-shadow-md select-none pointer-events-none">
                                                     {calculatedProgress}%
                                                 </span>
                                             </div>
