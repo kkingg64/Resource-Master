@@ -1258,7 +1258,7 @@ export const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans text-slate-900">
       {/* Sidebar */}
-      <aside className={`bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-16' : 'w-64'} h-full flex-shrink-0 z-50 shadow-xl`}>
+      <aside className={`bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'w-16' : 'w-64'} h-full flex-shrink-0 z-50 shadow-xl relative`}>
         <div className="h-16 flex items-center justify-center border-b border-slate-800">
           <div className="flex items-center gap-2 font-bold text-white text-lg overflow-hidden">
              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">R</div>
@@ -1296,19 +1296,39 @@ export const App: React.FC = () => {
            </button>
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
-           <div className="flex items-center gap-3 overflow-hidden">
+        <div className="p-4 border-t border-slate-800 relative">
+           {/* Share Button (moved above avatar) */}
+           {isOwner && (
+               <button 
+                   onClick={() => setShowShareModal(true)} 
+                   className={`flex items-center gap-3 w-full rounded-lg transition-colors hover:bg-slate-800 text-indigo-400 hover:text-indigo-300 mb-4 ${isSidebarCollapsed ? 'justify-center p-2' : 'px-2 py-2'}`}
+                   title="Share Project"
+               >
+                   <Share2 size={20} />
+                   {!isSidebarCollapsed && <span className="text-sm font-medium">Share</span>}
+               </button>
+           )}
+
+           <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'} overflow-hidden`}>
                <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold flex-shrink-0">
                   {session.user.email?.charAt(0).toUpperCase()}
                </div>
                {!isSidebarCollapsed && (
                    <div className="flex flex-col overflow-hidden">
                        <span className="text-sm font-medium text-white truncate">{session.user.email}</span>
-                       <button onClick={() => supabase.auth.signOut()} className="text-xs text-slate-400 hover:text-white flex items-center gap-1 mt-1"><LogOut size={12}/> Sign Out</button>
                    </div>
                )}
            </div>
-           <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="absolute top-1/2 -right-3 w-6 h-6 bg-slate-800 border border-slate-600 rounded-full flex items-center justify-center text-slate-400 hover:text-white shadow-sm z-50">
+           
+           {/* Logout (moved below avatar) */}
+           <div className={`mt-3 flex ${isSidebarCollapsed ? 'justify-center' : ''}`}>
+               <button onClick={() => supabase.auth.signOut()} className={`text-slate-400 hover:text-white flex items-center gap-2 transition-colors ${isSidebarCollapsed ? '' : 'text-xs'}`}>
+                   <LogOut size={isSidebarCollapsed ? 18 : 14}/> 
+                   {!isSidebarCollapsed && <span>Sign Out</span>}
+               </button>
+           </div>
+
+           <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="absolute top-1/2 -right-3 w-6 h-6 bg-slate-800 border border-slate-600 rounded-full flex items-center justify-center text-slate-400 hover:text-white shadow-sm z-50 transform -translate-y-1/2">
                {isSidebarCollapsed ? <ChevronRight size={14}/> : <ChevronLeft size={14}/>}
            </button>
         </div>
@@ -1322,14 +1342,8 @@ export const App: React.FC = () => {
                  {isReadOnlyMode && <span className="bg-slate-100 text-slate-500 text-xs px-2 py-1 rounded font-medium border border-slate-200">Read Only</span>}
              </div>
              <div className="flex items-center gap-2">
-                 <button onClick={() => setShowHistory(true)} className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg transition-colors">
-                     <History size={16} /> History
-                 </button>
-                 {isOwner && (
-                     <button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 rounded-lg transition-colors">
-                         <Share2 size={16} /> Share
-                     </button>
-                 )}
+                 {/* Removed History Button */}
+                 {/* Removed Share Button (moved to sidebar) */}
              </div>
          </header>
 
