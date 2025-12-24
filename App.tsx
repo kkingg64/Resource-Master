@@ -552,13 +552,50 @@ const App: React.FC = () => {
   }, [session]);
 
   const calculateTimelineBounds = (currentProjects: Project[], currentResources: Resource[], currentHolidays: Holiday[]) => {
-    // ... existing logic ...
-    // Shortened for brevity as this function was correct in previous version
-    if (currentProjects.length === 0) { setTimelineStart(DEFAULT_START); setTimelineEnd(DEFAULT_END); return; }
-    // ... rest of the function ...
-    // Using simple defaults if logic fails to keep it concise
-    setTimelineStart(DEFAULT_START);
-    setTimelineEnd(DEFAULT_END);
+    let minDate: Date | null = null;
+    let maxDate: Date | null = null;
+
+    // Helper to process dates
+    const processDate = (d: Date) => {
+        if (!minDate || d < minDate) minDate = d;
+        if (!maxDate || d > maxDate) maxDate = d;
+    };
+
+    currentProjects.forEach(p => {
+        p.modules.forEach(m => {
+            m.tasks.forEach(t => {
+                t.assignments.forEach(a => {
+                    if (a.startDate) {
+                        const start = new Date(a.startDate.replace(/-/g, '/'));
+                        processDate(start);
+                        if (a.duration) {
+                            const end = new Date(start);
+                            end.setDate(end.getDate() + (a.duration * 1.5)); 
+                            processDate(end);
+                        }
+                    }
+                });
+            });
+        });
+    });
+
+    if (minDate && maxDate) {
+        const startWeekId = getWeekIdFromDate(minDate);
+        const endWeekId = getWeekIdFromDate(maxDate as Date);
+        
+        const [startYear, startWeek] = startWeekId.split('-').map(Number);
+        const [endYear, endWeek] = endWeekId.split('-').map(Number);
+
+        if (!isNaN(startYear) && !isNaN(startWeek)) {
+            setTimelineStart(addWeeksToPoint({ year: startYear, week: startWeek }, -2));
+        }
+        if (!isNaN(endYear) && !isNaN(endWeek)) {
+            setTimelineEnd(addWeeksToPoint({ year: endYear, week: endWeek }, 8));
+        }
+    } else {
+        setTimelineStart(DEFAULT_START);
+        setTimelineEnd(DEFAULT_END);
+    }
   };
   
   const fetchData = async (isRefresh: boolean = false) => {
@@ -654,7 +691,7 @@ const App: React.FC = () => {
     
     // Recalculate bounds only if data loaded
     if (structuredProjects.length > 0) {
-        // Simple recalculation or existing logic
+        calculateTimelineBounds(structuredProjects, freshResources, freshHolidays);
     }
 
     if (isRefresh) setIsRefreshing(false);
@@ -1219,164 +1256,4 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen w-full bg-slate-100 overflow-hidden text-slate-900 font-sans">
-       <aside className={`${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 flex-shrink-0 z-50 border-r border-slate-800 shadow-xl`}>
-          <div className="p-4 flex items-center gap-3 border-b border-slate-800 h-16">
-            <div className="w-8 h-8 rounded bg-indigo-600 flex items-center justify-center flex-shrink-0 text-white font-bold shadow-lg shadow-indigo-900/50">RP</div>
-            {!isSidebarCollapsed && <span className="font-bold text-white tracking-tight animate-in fade-in duration-300">ResourcePlan</span>}
-          </div>
-          
-          <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
-            <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Dashboard">
-               <LayoutDashboard size={20} /> {!isSidebarCollapsed && <span>Dashboard</span>}
-            </button>
-            <button onClick={() => setActiveTab('planner')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'planner' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Planner Grid">
-               <Calendar size={20} /> {!isSidebarCollapsed && <span>Planner</span>}
-            </button>
-            <button onClick={() => setActiveTab('estimator')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'estimator' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Estimator">
-               <Calculator size={20} /> {!isSidebarCollapsed && <span>Estimator</span>}
-            </button>
-            <div className="h-px bg-slate-800 my-2 mx-2"></div>
-            <button onClick={() => setActiveTab('resources')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'resources' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Resources">
-               <Users size={20} /> {!isSidebarCollapsed && <span>Resources</span>}
-            </button>
-            <button onClick={() => setActiveTab('holidays')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'holidays' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Holidays">
-               <Globe size={20} /> {!isSidebarCollapsed && <span>Holidays</span>}
-            </button>
-            <div className="h-px bg-slate-800 my-2 mx-2"></div>
-            {isOwner && (
-                <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 p-2 rounded-lg transition-all duration-200 ${activeTab === 'settings' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800 hover:text-white'}`} title="Settings">
-                <SettingsIcon size={20} /> {!isSidebarCollapsed && <span>Settings</span>}
-                </button>
-            )}
-          </nav>
-          
-          <div className="p-2 border-t border-slate-800">
-             <div className={`mb-2 ${isSidebarCollapsed ? 'flex justify-center' : ''}`}>
-                <div className={`flex items-center gap-3 p-2 rounded-lg bg-slate-800/50 border border-slate-700/50 transition-all ${isSidebarCollapsed ? 'justify-center w-10 h-10 p-0 rounded-full' : 'w-full'}`}>
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs flex-shrink-0 shadow-sm border border-white/10" title={session?.user?.email}>
-                        {session?.user?.email?.substring(0, 2).toUpperCase() || 'U'}
-                    </div>
-                    {!isSidebarCollapsed && (
-                        <div className="overflow-hidden flex-1 min-w-0">
-                            <p className="text-xs font-medium text-white truncate" title={session?.user?.email}>
-                                {session?.user?.email}
-                            </p>
-                            <p className="text-[10px] text-slate-400 truncate capitalize flex items-center gap-1">
-                                <span className={`w-1.5 h-1.5 rounded-full ${isOwner ? 'bg-green-500' : 'bg-amber-500'}`}></span>
-                                {currentRole}
-                            </p>
-                        </div>
-                    )}
-                </div>
-             </div>
-
-             <button onClick={() => setShowShareModal(true)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 hover:text-white text-slate-400 mb-1" title="Share">
-                <Share2 size={18} /> {!isSidebarCollapsed && <span className="text-sm">Share</span>}
-             </button>
-             <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 hover:text-white text-slate-400 mb-1" title={isSidebarCollapsed ? "Expand" : "Collapse"}>
-               {isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />} {!isSidebarCollapsed && <span className="text-sm">Collapse</span>}
-             </button>
-             <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-red-900/30 hover:text-red-400 text-slate-400 transition-colors" title="Sign Out">
-               <LogOut size={18} /> {!isSidebarCollapsed && <span className="text-sm">Sign Out</span>}
-             </button>
-          </div>
-       </aside>
-
-       <main className={`flex-1 flex flex-col min-w-0 h-full bg-white relative custom-scrollbar ${['planner', 'estimator'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'}`}>
-          <div className={`flex-1 h-full ${['planner', 'estimator'].includes(activeTab) ? 'p-0 overflow-hidden' : 'p-4'}`}>
-            {activeTab === 'dashboard' && <Dashboard projects={projects} resources={activeProjectResources} holidays={activeProjectHolidays} />}
-            
-            {activeTab === 'planner' && <div className="h-full p-4 overflow-hidden"><PlannerGrid 
-              projects={projects} 
-              holidays={activeProjectHolidays}
-              resources={activeProjectResources}
-              timelineStart={timelineStart}
-              timelineEnd={timelineEnd}
-              onExtendTimeline={handleExtendTimeline}
-              onUpdateAllocation={updateAllocation}
-              onUpdateAssignmentResourceName={updateAssignmentResourceName}
-              onUpdateAssignmentDependency={updateAssignmentDependency}
-              onAddTask={addTask}
-              onAddAssignment={addAssignment}
-              onCopyAssignment={onCopyAssignment}
-              onReorderModules={reorderModules}
-              onReorderTasks={reorderTasks}
-              onMoveTask={moveTask}
-              onUpdateModuleType={updateModuleType}
-              onReorderAssignments={reorderAssignments}
-              onShiftTask={onShiftTask}
-              onUpdateAssignmentSchedule={updateAssignmentSchedule}
-              onUpdateAssignmentProgress={updateAssignmentProgress}
-              onAddProject={addProject}
-              onAddModule={addModule}
-              onUpdateProjectName={updateProjectName}
-              onUpdateModuleName={updateModuleName}
-              onUpdateTaskName={updateTaskName}
-              onDeleteProject={deleteProject}
-              onDeleteModule={deleteModule}
-              onDeleteTask={deleteTask}
-              onDeleteAssignment={deleteAssignment}
-              onImportPlan={onImportPlan}
-              onShowHistory={() => setShowHistory(true)}
-              onRefresh={() => fetchData(true)}
-              saveStatus={saveStatus}
-              isRefreshing={isRefreshing}
-              isReadOnly={isReadOnlyMode}
-            /></div>}
-            
-            {activeTab === 'estimator' && <div className="h-full p-4 overflow-hidden"><Estimator 
-              projects={projects} 
-              holidays={activeProjectHolidays} 
-              onUpdateModuleEstimates={updateModuleEstimates}
-              onUpdateTaskEstimates={updateTaskEstimates}
-              onUpdateModuleComplexity={updateModuleComplexity}
-              onUpdateModuleStartDate={updateModuleStartDate}
-              onUpdateModuleDeliveryTask={updateModuleDeliveryTask}
-              onUpdateModuleStartTask={updateModuleStartTask}
-              onReorderModules={reorderModules}
-              onDeleteModule={deleteModule}
-              isReadOnly={isReadOnlyMode}
-            /></div>}
-            
-            {activeTab === 'resources' && <Resources 
-              resources={activeProjectResources} 
-              onAddResource={addResource} 
-              onDeleteResource={deleteResource}
-              onUpdateResourceCategory={updateResourceCategory}
-              onUpdateResourceRegion={updateResourceRegion}
-              onUpdateResourceType={updateResourceType}
-              onUpdateResourceName={updateResourceName}
-              onAddIndividualHoliday={addIndividualHolidays}
-              onDeleteIndividualHoliday={deleteIndividualHoliday}
-              isReadOnly={false} 
-            />}
-            
-            {activeTab === 'settings' && isOwner && <Settings 
-              isDebugLogEnabled={isDebugLogEnabled}
-              setIsDebugLogEnabled={setIsDebugLogEnabled}
-              isAIEnabled={isAIEnabled}
-              setIsAIEnabled={setIsAIEnabled}
-              onOpenDatabaseFix={() => setDbError({ code: 'MANUAL_FIX', message: 'User requested manual fix' })}
-            />}
-            
-            {activeTab === 'holidays' && <AdminSettings 
-              holidays={activeProjectHolidays}
-              onAddHolidays={addHoliday}
-              onDeleteHoliday={deleteHoliday}
-              onDeleteHolidaysByCountry={deleteHolidaysByCountry}
-              onUpdateHolidayDuration={updateHolidayDuration}
-              isReadOnly={false}
-            />}
-          </div>
-       </main>
-
-       {isAIEnabled && <AIAssistant projects={projects} resources={activeProjectResources} onAddTask={addTask} onAssignResource={updateAssignmentResourceName} />}
-       {isDebugLogEnabled && <DebugLog entries={logEntries} setEntries={setLogEntries} />}
-       {showShareModal && <ShareModal onClose={() => setShowShareModal(false)} projectId={selectedProjectId} session={session} />}
-       {showHistory && <VersionHistory onClose={() => setShowHistory(false)} onRestore={restoreVersion} onSaveCurrent={saveCurrentVersion} />}
-    </div>
-  );
-};
-
-export default App;
+    <div
