@@ -2,8 +2,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween, calculateTimeBasedProgress } from '../constants';
-import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, Download, Upload, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server, Search, X, Filter, CheckSquare, Square } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server, Search, X, Filter, CheckSquare, Square } from 'lucide-react';
 import { DependencyLines } from './DependencyLines';
 
 // --- Custom DatePicker Component ---
@@ -414,7 +413,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
 
   const [viewMode, setViewMode] = useState<ViewMode>('day');
-  const [displayMode, setDisplayMode] = useState<'allocation' | 'gantt'>('gantt'); // Default to Gantt
+  const [displayMode, setDisplayMode] = useState<'allocation' | 'gantt'>('gantt'); 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   
@@ -766,26 +765,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     }
   };
 
-  const handleExportExcel = () => {
-    const planData: any[] = [];
-    const weekHeaders = getTimeline('week', timelineStart, timelineEnd).map(w => w.id);
-    projects.forEach(p => {
-      p.modules.forEach(m => {
-        m.tasks.forEach(t => {
-          t.assignments.forEach(a => {
-            const row: any = { 'Project': p.name, 'Module': m.name, 'Task': t.name, 'Role': a.role, 'Resource': a.resourceName || 'Unassigned' };
-            a.allocations.forEach(alloc => { if (weekHeaders.includes(alloc.weekId)) { row[alloc.weekId] = alloc.count; } });
-            planData.push(row);
-          });
-        });
-      });
-    });
-    const wb = XLSX.utils.book_new();
-    const planWs = XLSX.utils.json_to_sheet(planData, { header: ['Project', 'Module', 'Task', 'Role', 'Resource', ...weekHeaders] });
-    XLSX.utils.book_append_sheet(wb, planWs, 'Resource Plan');
-    XLSX.writeFile(wb, `oms-resource-plan-${new Date().toISOString().split('T')[0]}.xlsx`);
-  };
-
   const timeline = useMemo(() => getTimeline(viewMode, timelineStart, timelineEnd), [viewMode, timelineStart, timelineEnd]);
 
   const today = new Date();
@@ -1056,6 +1035,31 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
     return { map, totalHeight: HEADER_HEIGHT + rowIndex * ROW_HEIGHT };
   }, [filteredProjects, collapsedProjects, collapsedModules, collapsedTasks, holidays, resources, showMonthRow, showYearRow]);
 
+  const getColumnIndex = (dateStr: string): number => {
+    if (!dateStr || timeline.length === 0) return -1;
+    
+    // 1. Try exact date match (Day View)
+    const dayIndex = timeline.findIndex(col => col.date && formatDateForInput(col.date) === dateStr);
+    if (dayIndex !== -1) return dayIndex;
+
+    const date = new Date(dateStr.replace(/-/g, '/'));
+    const weekId = getWeekIdFromDate(date);
+
+    // 2. Try Week match (Week View)
+    const weekIndex = timeline.findIndex(col => col.id === weekId);
+    if (weekIndex !== -1) return weekIndex;
+
+    // 3. Try Month match (Month View)
+    const monthIndex = timeline.findIndex(col => col.weekIds?.includes(weekId));
+    if (monthIndex !== -1) return monthIndex;
+
+    // Boundary Logic
+    const firstColDate = timeline[0].date || (timeline[0].id.includes('-W') ? getDateFromWeek(parseInt(timeline[0].id.split('-')[0]), parseInt(timeline[0].id.split('-')[1])) : new Date(timeline[0].id));
+    if (date < firstColDate) return -1;
+    
+    return timeline.length - 1; // Default to end if after (clamping)
+  };
+
   return (
     <>
       <div className="flex flex-col h-full bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden relative">
@@ -1081,7 +1085,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                 )}
             </div>
             
-            {/* Filter Input - Replaced with Multi-select Dropdown */}
+            {/* Filter Input - Multi-select Dropdown */}
             <div className="relative">
                 <button 
                     ref={filterButtonRef}
@@ -1119,8 +1123,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             </div>
 
             <div className="flex items-center gap-2 bg-slate-200 rounded-lg p-1">
-                <button onClick={() => setDisplayMode('gantt')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'gantt' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Gantt View (Timeline Bars)"><CalendarRange size={14} /> Gantt</button>
                 <button onClick={() => setDisplayMode('allocation')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'allocation' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Grid View (Allocations)"><LayoutList size={14} /> Grid</button>
+                <button onClick={() => setDisplayMode('gantt')} className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-all ${displayMode === 'gantt' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`} title="Gantt View (Timeline Bars)"><CalendarRange size={14} /> Gantt</button>
             </div>
             <div className="h-4 w-px bg-slate-300"></div>
             <div className="flex items-center gap-1 bg-white border border-slate-300 rounded overflow-hidden">
@@ -1137,8 +1141,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             <div className="flex items-center gap-2">
                 <button onClick={onRefresh} disabled={isRefreshing} className="text-xs flex items-center gap-1.5 bg-white text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Refresh data from server"><RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh</button>
                 <SaveStatusIndicator status={saveStatus} />
-                <div className="w-px h-4 bg-slate-300"></div>
-                <button onClick={handleExportExcel} className="text-xs flex items-center gap-1 bg-white text-slate-600 px-2 py-1 rounded hover:bg-slate-100 border border-slate-200 transition-colors" title="Export the current plan as an Excel file"><Download size={12} /></button>
                 <input type="file" ref={importInputRef} accept=".xlsx, .xls" className="hidden" />
             </div>
             <div className="w-px h-4 bg-slate-300"></div>
@@ -1247,6 +1249,39 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
             {filteredProjects.map((project) => {
               const isProjectCollapsed = collapsedProjects[project.id];
               const isEditingProject = editingId === `project::${project.id}`;
+              
+              // Calculate Project Summary Data
+              let projectEarliestStart: string | null = null;
+              let projectLatestEnd: Date | null = null;
+              
+              if (displayMode === 'gantt' && isProjectCollapsed) {
+                  project.modules.forEach(m => {
+                      m.tasks.forEach(t => {
+                          t.assignments.forEach(a => {
+                              if (a.startDate && a.duration) {
+                                  const resourceName = a.resourceName || 'Unassigned';
+                                  const assignmentHolidaysMap = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
+                                  const endDateStr = calculateEndDate(a.startDate, a.duration, assignmentHolidaysMap);
+                                  const endDate = new Date(endDateStr.replace(/-/g, '/'));
+                                  
+                                  if (!projectEarliestStart || a.startDate < projectEarliestStart) projectEarliestStart = a.startDate;
+                                  if (!projectLatestEnd || endDate > projectLatestEnd) projectLatestEnd = endDate;
+                              }
+                          });
+                      });
+                  });
+              }
+              
+              const projectProgress = (projectEarliestStart && projectLatestEnd) 
+                  ? calculateTimeBasedProgress(projectEarliestStart, formatDateForInput(projectLatestEnd)) 
+                  : 0;
+                  
+              const { projectStartIndex, projectEndIndex } = (() => {
+                  if (!projectEarliestStart || !projectLatestEnd) return { projectStartIndex: -1, projectEndIndex: -1 };
+                  const startIdx = getColumnIndex(projectEarliestStart);
+                  const endIdx = getColumnIndex(formatDateForInput(projectLatestEnd));
+                  return { projectStartIndex: startIdx, projectEndIndex: endIdx };
+              })();
 
               return (
                 <React.Fragment key={project.id}>
@@ -1264,6 +1299,18 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                     <div className={`flex-shrink-0 border-r border-slate-600 bg-slate-700 ${isDetailsFrozen ? 'sticky z-[49]' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined }}></div>
                     
                     <div className="flex relative">
+                      {isProjectCollapsed && displayMode === 'gantt' && projectStartIndex > -1 && projectEndIndex > -1 && (
+                          <div
+                              className="absolute top-1/2 -translate-y-1/2 h-3.5 z-10 bg-slate-500 rounded flex items-center overflow-hidden border border-slate-400 group/projbar"
+                              style={{
+                                  left: `${projectStartIndex * colWidth + 2}px`,
+                                  width: `${(projectEndIndex - projectStartIndex + 1) * colWidth - 4}px`,
+                              }}
+                          >
+                              <div className="h-full bg-slate-400" style={{ width: `${projectProgress}%` }}></div>
+                              <span className="absolute inset-0 flex items-center justify-center text-[8px] text-white font-bold opacity-0 group-hover/projbar:opacity-100">{projectProgress}%</span>
+                          </div>
+                      )}
                       {timeline.map(col => { const total = getProjectTotal(project, col); return ( <div key={col.id} className={`flex-shrink-0 border-r border-slate-600 flex items-center justify-center bg-slate-700`} style={{ width: `${colWidth}px` }}>{total > 0 && displayMode === 'allocation' && (<span className="text-[10px] font-bold text-slate-200">{formatValue(total)}</span>)}</div> ); })}
                     </div>
                   </div>
@@ -1304,49 +1351,16 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                             moduleTotalDuration = calculateWorkingDaysBetween(moduleEarliestStartDate, formatDateForInput(moduleLatestEndDate), projectHolidayMap);
                         }
                     }
+                    
+                    const moduleProgress = (moduleEarliestStartDate && moduleLatestEndDate)
+                        ? calculateTimeBasedProgress(moduleEarliestStartDate, formatDateForInput(moduleLatestEndDate))
+                        : 0;
 
                     const { moduleStartIndex, moduleEndIndex } = (() => {
                         if (!moduleEarliestStartDate || !moduleLatestEndDate) return { moduleStartIndex: -1, moduleEndIndex: -1 };
                         
-                        let startIdx = -1, endIdx = -1;
-                        const modEndDateStr = formatDateForInput(moduleLatestEndDate);
-
-                        if (viewMode === 'day') {
-                            startIdx = timeline.findIndex(c => c.date && formatDateForInput(c.date) === moduleEarliestStartDate!);
-                            endIdx = timeline.findIndex(c => c.date && formatDateForInput(c.date) === modEndDateStr);
-                        } else if (viewMode === 'week') {
-                            const startWeekId = getWeekIdFromDate(new Date(moduleEarliestStartDate!.replace(/-/g, '/')));
-                            const endWeekId = getWeekIdFromDate(new Date(modEndDateStr.replace(/-/g, '/')));
-                            startIdx = timeline.findIndex(c => c.id === startWeekId);
-                            endIdx = timeline.findIndex(c => c.id === endWeekId);
-                        } else if (viewMode === 'month') {
-                            const startWeekId = getWeekIdFromDate(new Date(moduleEarliestStartDate!.replace(/-/g, '/')));
-                            const endWeekId = getWeekIdFromDate(new Date(modEndDateStr.replace(/-/g, '/')));
-                            startIdx = timeline.findIndex(c => c.weekIds?.includes(startWeekId));
-                            endIdx = timeline.findIndex(c => c.weekIds?.includes(endWeekId));
-                        }
-
-                        if (startIdx !== -1 && endIdx === -1) {
-                            const lastCol = timeline[timeline.length - 1];
-                            if (viewMode === 'day' && lastCol.date) {
-                                const endD = new Date(modEndDateStr.replace(/-/g, '/'));
-                                if (endD > lastCol.date) {
-                                    endIdx = timeline.length - 1;
-                                } else {
-                                    for (let i = timeline.length - 1; i >= startIdx; i--) {
-                                        if (timeline[i].date && timeline[i].date! < endD) {
-                                            endIdx = i;
-                                            break;
-                                        }
-                                    }
-                                }
-                            } else {
-                                endIdx = timeline.length - 1;
-                            }
-                        }
-                        if (endIdx !== -1 && startIdx === -1) {
-                            startIdx = 0;
-                        }
+                        const startIdx = getColumnIndex(moduleEarliestStartDate);
+                        const endIdx = getColumnIndex(formatDateForInput(moduleLatestEndDate));
 
                         return { moduleStartIndex: startIdx, moduleEndIndex: endIdx };
                     })();
@@ -1390,13 +1404,18 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                           <div className="flex relative">
                              {isModuleCollapsed && displayMode === 'gantt' && moduleStartIndex > -1 && moduleEndIndex > -1 && (
                                 <div
-                                    className={`absolute top-1/2 -translate-y-1/2 h-4 z-10 ${style.ganttBarColor} rounded-md flex items-center overflow-hidden`}
+                                    className={`absolute top-1/2 -translate-y-1/2 h-4 z-10 ${style.ganttBarColor} rounded-md flex items-center overflow-hidden group/modbar`}
                                     style={{
                                         left: `${moduleStartIndex * colWidth + 2}px`,
                                         width: `${(moduleEndIndex - moduleStartIndex + 1) * colWidth - 4}px`,
                                     }}
                                     title={`Duration: ${moduleTotalDuration} working days`}
-                                />
+                                >
+                                    <div className="h-full bg-black/10" style={{ width: `${moduleProgress}%` }}></div>
+                                    <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white/90 font-bold opacity-0 group-hover/modbar:opacity-100 select-none pointer-events-none drop-shadow-md">
+                                        {moduleProgress}%
+                                    </span>
+                                </div>
                              )}
                             {timeline.map(col => {
                                 const total = getModuleTotal(module, col);
@@ -1438,47 +1457,14 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                               }
                           }
                           
+                          const taskProgress = (earliestStartDate && latestEndDate)
+                            ? calculateTimeBasedProgress(earliestStartDate, formatDateForInput(latestEndDate))
+                            : 0;
+                          
                           const { taskStartIndex, taskEndIndex } = (() => {
                                 if (!earliestStartDate || !latestEndDate) return { taskStartIndex: -1, taskEndIndex: -1 };
-                                let startIdx = -1, endIdx = -1;
-                                const tEndDateStr = formatDateForInput(latestEndDate);
-                                if (viewMode === 'day') {
-                                    startIdx = timeline.findIndex(c => c.date && formatDateForInput(c.date) === earliestStartDate);
-                                    endIdx = timeline.findIndex(c => c.date && formatDateForInput(c.date) === tEndDateStr);
-                                } else if (viewMode === 'week') {
-                                    const startWeekId = getWeekIdFromDate(new Date(earliestStartDate.replace(/-/g, '/')));
-                                    const endWeekId = getWeekIdFromDate(new Date(tEndDateStr.replace(/-/g, '/')));
-                                    startIdx = timeline.findIndex(c => c.id === startWeekId);
-                                    endIdx = timeline.findIndex(c => c.id === endWeekId);
-                                } else if (viewMode === 'month') {
-                                    const startWeekId = getWeekIdFromDate(new Date(earliestStartDate.replace(/-/g, '/')));
-                                    const endWeekId = getWeekIdFromDate(new Date(tEndDateStr.replace(/-/g, '/')));
-                                    startIdx = timeline.findIndex(c => c.weekIds?.includes(startWeekId));
-                                    endIdx = timeline.findIndex(c => c.weekIds?.includes(endWeekId));
-                                }
-
-                                if (startIdx !== -1 && endIdx === -1) {
-                                    const lastCol = timeline[timeline.length - 1];
-                                    if (viewMode === 'day' && lastCol.date) {
-                                        const endD = new Date(tEndDateStr.replace(/-/g, '/'));
-                                        if (endD > lastCol.date) {
-                                            endIdx = timeline.length - 1;
-                                        } else {
-                                            for (let i = timeline.length - 1; i >= startIdx; i--) {
-                                                if (timeline[i].date && timeline[i].date! < endD) {
-                                                    endIdx = i;
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        endIdx = timeline.length - 1;
-                                    }
-                                }
-                                if (endIdx !== -1 && startIdx === -1) {
-                                    startIdx = 0;
-                                }
-
+                                const startIdx = getColumnIndex(earliestStartDate);
+                                const endIdx = getColumnIndex(formatDateForInput(latestEndDate));
                                 return { taskStartIndex: startIdx, taskEndIndex: endIdx };
                           })();
 
@@ -1507,13 +1493,18 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 <div className="flex relative">
                                     {isTaskCollapsed && displayMode === 'gantt' && taskStartIndex > -1 && taskEndIndex > -1 && (
                                         <div
-                                            className="absolute top-1/2 -translate-y-1/2 h-4 z-10 bg-slate-400 rounded-md flex items-center overflow-hidden"
+                                            className="absolute top-1/2 -translate-y-1/2 h-4 z-10 bg-slate-400 rounded-md flex items-center overflow-hidden group/taskbar"
                                             style={{
                                                 left: `${taskStartIndex * colWidth + 2}px`,
                                                 width: `${(taskEndIndex - taskStartIndex + 1) * colWidth - 4}px`,
                                             }}
                                             title={`Duration: ${totalDuration} working days`}
-                                        />
+                                        >
+                                            <div className="h-full bg-slate-600" style={{ width: `${taskProgress}%` }}></div>
+                                            <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white font-bold opacity-0 group-hover/taskbar:opacity-100 drop-shadow-md select-none pointer-events-none">
+                                                {taskProgress}%
+                                            </span>
+                                        </div>
                                     )}
                                     {timeline.map(col => {
                                       const total = getTaskTotal(task, col);
@@ -1544,62 +1535,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 
                                 const { startIndex, endIndex } = (() => {
                                     if (!hasSchedule) return { startIndex: -1, endIndex: -1 };
-                                    
-                                    let startIdx = -1, endIdx = -1;
-                                    if (viewMode === 'day') {
-                                        const startDateStr = formatDateForInput(assignmentStartDate!);
-                                        startIdx = timeline.findIndex(c => c.date && formatDateForInput(c.date) === startDateStr);
-                                        endIdx = timeline.findIndex(c => c.date && formatDateForInput(c.date) === endDateStr);
-                                    } else if (viewMode === 'week') {
-                                        const startWeekId = getWeekIdFromDate(assignmentStartDate!);
-                                        const endWeekId = getWeekIdFromDate(assignmentEndDate!);
-                                        startIdx = timeline.findIndex(c => c.id === startWeekId);
-                                        endIdx = timeline.findIndex(c => c.id === endWeekId);
-                                    } else if (viewMode === 'month') {
-                                        const startWeekId = getWeekIdFromDate(assignmentStartDate!);
-                                        const endWeekId = getWeekIdFromDate(assignmentEndDate!);
-                                        startIdx = timeline.findIndex(c => c.weekIds?.includes(startWeekId));
-                                        endIdx = timeline.findIndex(c => c.weekIds?.includes(endWeekId));
-                                    }
-
-                                    // Auto-clamp for partial visibility
-                                    if (startIdx !== -1 && endIdx === -1) {
-                                        const lastCol = timeline[timeline.length - 1];
-                                        if (viewMode === 'day' && lastCol.date) {
-                                            const endD = new Date(endDateStr.replace(/-/g, '/'));
-                                            if (endD > lastCol.date) {
-                                                // Off-screen right
-                                                endIdx = timeline.length - 1;
-                                            } else {
-                                                // Inside timeline, but date missing (weekend/holiday gap)
-                                                // Clamp to nearest previous day
-                                                for (let i = timeline.length - 1; i >= startIdx; i--) {
-                                                    if (timeline[i].date && timeline[i].date! < endD) {
-                                                        endIdx = i;
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                        } else {
-                                            endIdx = timeline.length - 1;
-                                        }
-                                    }
-                                    if (endIdx !== -1 && startIdx === -1) {
-                                        startIdx = 0;
-                                    }
-                                    
-                                    // Handle full span (both off-screen, but overlapping)
-                                    if (startIdx === -1 && endIdx === -1 && timeline.length > 0) {
-                                        const viewStart = getDateFromWeek(timelineStart.year, timelineStart.week);
-                                        const viewEnd = getDateFromWeek(timelineEnd.year, timelineEnd.week);
-                                        viewEnd.setDate(viewEnd.getDate() + 7);
-
-                                        if (assignmentStartDate! < viewStart && assignmentEndDate! > viewEnd) {
-                                            startIdx = 0;
-                                            endIdx = timeline.length - 1;
-                                        }
-                                    }
-
+                                    const startIdx = getColumnIndex(formatDateForInput(assignmentStartDate!));
+                                    const endIdx = getColumnIndex(endDateStr);
                                     return { startIndex: startIdx, endIndex: endIdx };
                                 })();
 
