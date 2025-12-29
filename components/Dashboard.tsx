@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation, Resource, Holiday } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
 import { getTimeline, DEFAULT_START, DEFAULT_END, calculateWorkingDaysBetween, formatDateForInput, getWeekIdFromDate, getWeekdaysForWeekId, calculateEndDate, calculateTimeBasedProgress } from '../constants';
-import { AlertCircle, CheckCircle2, Clock, Users, Briefcase, ChevronRight, AlertTriangle, AlertOctagon, CalendarDays, Activity, CalendarOff, ArrowRight } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Users, Briefcase, ChevronRight, AlertTriangle, AlertOctagon, CalendarDays, Activity, CalendarOff, ArrowRight, Globe } from 'lucide-react';
 
 interface DashboardProps {
   projects: Project[];
@@ -266,27 +266,53 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     const todayDate = new Date();
     const todayStr = formatDateForInput(todayDate);
     
-    const onLeave: { resource: string, reason: string, type: 'Public' | 'Personal' }[] = [];
+    // Separate lists for grouped public holidays and individual leaves
+    const groupedPublicLeaves: { entity: string, reason: string, type: 'Public' | 'Personal', count?: number }[] = [];
+    const personalLeaves: { entity: string, reason: string, type: 'Public' | 'Personal', count?: number }[] = [];
 
-    resources.forEach(r => {
-        // Public Holiday Check
-        const region = r.holiday_region || 'HK'; // Defaulting to HK logic as per other components
-        const regionalHolidays = holidays.filter(h => h.country === region);
-        const publicHol = regionalHolidays.find(h => h.date === todayStr);
-        
-        if (publicHol) {
-            onLeave.push({ resource: r.name, reason: publicHol.name, type: 'Public' });
-            return;
-        }
+    // Map to track if a resource is already counted in a public holiday
+    const resourceHasPublicHoliday = new Set<string>();
 
-        // Individual Holiday Check
-        const personalHol = r.individual_holidays?.find(h => h.date === todayStr);
-        if (personalHol) {
-            onLeave.push({ resource: r.name, reason: personalHol.name, type: 'Personal' });
+    // 1. Identify active public holidays for today per region
+    const activeRegionalHolidays: Record<string, string> = {}; // Region -> Holiday Name
+    holidays.forEach(h => {
+        if (h.date === todayStr) {
+            activeRegionalHolidays[h.country] = h.name;
         }
     });
 
-    return onLeave;
+    // 2. Count resources per region for active holidays
+    const regionCounts: Record<string, number> = {};
+    
+    resources.forEach(r => {
+        const region = r.holiday_region || 'HK';
+        if (activeRegionalHolidays[region]) {
+            resourceHasPublicHoliday.add(r.id);
+            regionCounts[region] = (regionCounts[region] || 0) + 1;
+        } else {
+            // Check individual holiday
+            const personalHol = r.individual_holidays?.find(h => h.date === todayStr);
+            if (personalHol) {
+                personalLeaves.push({
+                    entity: r.name,
+                    reason: personalHol.name,
+                    type: 'Personal'
+                });
+            }
+        }
+    });
+
+    // 3. Convert region counts to display items
+    Object.entries(regionCounts).forEach(([region, count]) => {
+        groupedPublicLeaves.push({
+            entity: `${region} Team`,
+            reason: activeRegionalHolidays[region],
+            type: 'Public',
+            count
+        });
+    });
+
+    return [...groupedPublicLeaves, ...personalLeaves];
   }, [resources, holidays]);
 
   // 8. Upcoming Tasks Logic (Next 2 Weeks) - Grouped by Task
@@ -629,10 +655,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                                 <li key={idx} className="px-6 py-3 hover:bg-slate-50 flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
-                                            {l.resource.charAt(0)}
+                                            {l.type === 'Public' ? <Globe size={16} /> : l.entity.charAt(0)}
                                         </div>
                                         <div>
-                                            <p className="text-sm font-medium text-slate-700">{l.resource}</p>
+                                            <p className="text-sm font-medium text-slate-700">
+                                                {l.entity}
+                                                {l.count && l.count > 0 && <span className="ml-2 text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">{l.count} Staff</span>}
+                                            </p>
                                             <p className="text-[10px] text-slate-400">{l.type} • {l.reason}</p>
                                         </div>
                                     </div>
