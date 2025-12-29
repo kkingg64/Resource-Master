@@ -780,11 +780,123 @@ export const App: React.FC = () => {
                             fetchData(true);
                         }
                     }}
-                    onReorderModules={()=>{}} // Simplified placeholder
-                    onReorderTasks={()=>{}} // Simplified placeholder
-                    onMoveTask={async (pid, sMid, tMid, sIdx, tIdx) => { /* logic to update module_id on task */ }}
+                    onReorderModules={async (pid, sIdx, tIdx) => {
+                        if (sIdx === tIdx) return;
+                        setProjects(prev => prev.map(p => {
+                            if (p.id !== pid) return p;
+                            const newModules = [...p.modules];
+                            const [moved] = newModules.splice(sIdx, 1);
+                            newModules.splice(tIdx, 0, moved);
+                            return { ...p, modules: newModules.map((m, i) => ({ ...m, sort_order: i })) };
+                        }));
+                        const p = projects.find(x => x.id === pid);
+                        if(p) {
+                            const newModules = [...p.modules];
+                            const [moved] = newModules.splice(sIdx, 1);
+                            newModules.splice(tIdx, 0, moved);
+                            const updates = newModules.map((m, i) => supabase.from('modules').update({ sort_order: i }).eq('id', m.id));
+                            await callSupabase('Reorder Modules', null, Promise.all(updates).then(()=>({data:'ok', error:null})));
+                        }
+                    }}
+                    onReorderTasks={async (pid, mid, sIdx, tIdx) => {
+                        if (sIdx === tIdx) return;
+                        setProjects(prev => prev.map(p => {
+                            if (p.id !== pid) return p;
+                            return {
+                                ...p,
+                                modules: p.modules.map(m => {
+                                    if (m.id !== mid) return m;
+                                    const newTasks = [...m.tasks];
+                                    const [moved] = newTasks.splice(sIdx, 1);
+                                    newTasks.splice(tIdx, 0, moved);
+                                    return { ...m, tasks: newTasks.map((t, i) => ({ ...t, sort_order: i })) };
+                                })
+                            };
+                        }));
+                        const p = projects.find(x => x.id === pid);
+                        const m = p?.modules.find(x => x.id === mid);
+                        if(m) {
+                            const newTasks = [...m.tasks];
+                            const [moved] = newTasks.splice(sIdx, 1);
+                            newTasks.splice(tIdx, 0, moved);
+                            const updates = newTasks.map((t, i) => supabase.from('tasks').update({ sort_order: i }).eq('id', t.id));
+                            await callSupabase('Reorder Tasks', null, Promise.all(updates).then(()=>({data:'ok', error:null})));
+                        }
+                    }}
+                    onMoveTask={async (pid, sMid, tMid, sIdx, tIdx) => {
+                        let movedTask: any = null;
+                        setProjects(prev => prev.map(p => {
+                            if (p.id !== pid) return p;
+                            const sourceMod = p.modules.find(m => m.id === sMid);
+                            if(!sourceMod) return p;
+                            const taskToMove = sourceMod.tasks[sIdx];
+                            movedTask = taskToMove;
+                            return {
+                                ...p,
+                                modules: p.modules.map(m => {
+                                    if (m.id === sMid) {
+                                        const newTasks = [...m.tasks];
+                                        newTasks.splice(sIdx, 1);
+                                        return { ...m, tasks: newTasks };
+                                    }
+                                    if (m.id === tMid) {
+                                        const newTasks = [...m.tasks];
+                                        newTasks.splice(tIdx, 0, taskToMove);
+                                        return { ...m, tasks: newTasks };
+                                    }
+                                    return m;
+                                })
+                            };
+                        }));
+                        const p = projects.find(x => x.id === pid);
+                        const sM = p?.modules.find(x => x.id === sMid);
+                        const tM = p?.modules.find(x => x.id === tMid);
+                        if (sM && tM) {
+                            const task = sM.tasks[sIdx];
+                            if (task) {
+                                 await callSupabase('Move Task', null, supabase.from('tasks').update({ module_id: tMid }).eq('id', task.id));
+                                 fetchData(true);
+                            }
+                        }
+                    }}
                     onUpdateModuleType={(pid, mid, type) => genericUpdate('modules', mid, { type })}
-                    onReorderAssignments={()=>{}}
+                    onReorderAssignments={async (pid, mid, tid, sIdx, tIdx) => {
+                        if (sIdx === tIdx) return;
+                        setProjects(prev => prev.map(p => {
+                            if (p.id !== pid) return p;
+                            return {
+                                ...p,
+                                modules: p.modules.map(m => {
+                                    if (m.id !== mid) return m;
+                                    return {
+                                        ...m,
+                                        tasks: m.tasks.map(t => {
+                                            if (t.id !== tid) return t;
+                                            const newAssignments = [...t.assignments];
+                                            const [moved] = newAssignments.splice(sIdx, 1);
+                                            newAssignments.splice(tIdx, 0, moved);
+                                            return {
+                                                ...t,
+                                                assignments: newAssignments
+                                            };
+                                        })
+                                    };
+                                })
+                            };
+                        }));
+                        const project = projects.find(p => p.id === pid);
+                        const module = project?.modules.find(m => m.id === mid);
+                        const task = module?.tasks.find(t => t.id === tid);
+                        if(task) {
+                            const newAssignments = [...task.assignments];
+                            const [moved] = newAssignments.splice(sIdx, 1);
+                            newAssignments.splice(tIdx, 0, moved);
+                            const updates = newAssignments.map((a, i) => 
+                                supabase.from('task_assignments').update({ sort_order: i }).eq('id', a.id)
+                            );
+                            await Promise.all(updates);
+                        }
+                    }}
                     onShiftTask={async (pid, mid, tid, dir) => { /* Shift logic */ fetchData(true); }}
                     onUpdateAssignmentSchedule={async (aid, start, dur) => {
                         setProjects(prev => prev.map(p => ({
