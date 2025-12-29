@@ -701,7 +701,7 @@ export const App: React.FC = () => {
                                 })
                             };
                         }));
-                        await genericUpdate('task_assignments', aid, { resource_name: name }, false);
+                        await callSupabase('Update Resource', {resource_name: name}, supabase.from('task_assignments').update({ resource_name: name }).eq('id', aid));
                     }}
                     onUpdateAssignmentDependency={(aid, pid) => genericUpdate('task_assignments', aid, { parent_assignment_id: pid })}
                     onAddTask={async (pid, mid, tid, name, role) => {
@@ -786,13 +786,52 @@ export const App: React.FC = () => {
                     onUpdateModuleType={(pid, mid, type) => genericUpdate('modules', mid, { type })}
                     onReorderAssignments={()=>{}}
                     onShiftTask={async (pid, mid, tid, dir) => { /* Shift logic */ fetchData(true); }}
-                    onUpdateAssignmentSchedule={(aid, start, dur) => genericUpdate('task_assignments', aid, { start_date: start, duration: dur }, true)}
+                    onUpdateAssignmentSchedule={async (aid, start, dur) => {
+                        setProjects(prev => prev.map(p => ({
+                            ...p,
+                            modules: p.modules.map(m => ({
+                                ...m,
+                                tasks: m.tasks.map(t => ({
+                                    ...t,
+                                    assignments: t.assignments.map(a => a.id === aid ? { ...a, startDate: start, duration: dur } : a)
+                                }))
+                            }))
+                        })));
+                        await callSupabase('Update Schedule', {start_date: start, duration: dur}, supabase.from('task_assignments').update({ start_date: start, duration: dur }).eq('id', aid));
+                    }}
                     onUpdateAssignmentProgress={(aid, val) => genericUpdate('task_assignments', aid, { progress: val })}
                     onAddProject={async () => { await callSupabase('New Project', {}, supabase.from('projects').insert({ name: 'New Project', user_id: session.user.id })); fetchData(true); }}
                     onAddModule={async (pid) => { await callSupabase('New Module', {}, supabase.from('modules').insert({ project_id: pid, name: 'New Module', user_id: session.user.id })); fetchData(true); }}
-                    onUpdateProjectName={(id, name) => genericUpdate('projects', id, { name })}
-                    onUpdateModuleName={(pid, mid, name) => genericUpdate('modules', mid, { name })}
-                    onUpdateTaskName={(pid, mid, tid, name) => genericUpdate('tasks', tid, { name })}
+                    onUpdateProjectName={async (id, name) => {
+                        setProjects(prev => prev.map(p => p.id === id ? { ...p, name } : p));
+                        await callSupabase('Update Project Name', {name}, supabase.from('projects').update({ name }).eq('id', id));
+                    }}
+                    onUpdateModuleName={async (pid, mid, name) => {
+                        setProjects(prev => prev.map(p => {
+                            if (p.id !== pid) return p;
+                            return {
+                                ...p,
+                                modules: p.modules.map(m => m.id === mid ? { ...m, name } : m)
+                            };
+                        }));
+                        await callSupabase('Update Module Name', {name}, supabase.from('modules').update({ name }).eq('id', mid));
+                    }}
+                    onUpdateTaskName={async (pid, mid, tid, name) => {
+                        setProjects(prev => prev.map(p => {
+                            if (p.id !== pid) return p;
+                            return {
+                                ...p,
+                                modules: p.modules.map(m => {
+                                    if (m.id !== mid) return m;
+                                    return {
+                                        ...m,
+                                        tasks: m.tasks.map(t => t.id === tid ? { ...t, name } : t)
+                                    };
+                                })
+                            };
+                        }));
+                        await callSupabase('Update Task Name', {name}, supabase.from('tasks').update({ name }).eq('id', tid));
+                    }}
                     onDeleteProject={async (id) => { if(confirm('Delete?')) { await supabase.from('projects').delete().eq('id', id); fetchData(true); } }}
                     onDeleteModule={async (pid, mid) => { if(confirm('Delete?')) { await supabase.from('modules').delete().eq('id', mid); fetchData(true); } }}
                     onDeleteTask={async (pid, mid, tid) => { if(confirm('Delete?')) { await supabase.from('tasks').delete().eq('id', tid); fetchData(true); } }}

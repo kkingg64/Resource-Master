@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation, Resource, Holiday } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
@@ -12,6 +11,8 @@ interface DashboardProps {
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+
+type UsageData = { total: number, modules: Set<string> };
 
 export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holidays }) => {
   
@@ -162,7 +163,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
 
   // 5. Conflict Detection (Grouped by Resource)
   const conflictsByResource = useMemo((): Record<string, { weekId: string, total: number, modules: string[] }[]> => {
-    type UsageData = { total: number, modules: Set<string> };
     const usage: Record<string, Record<string, UsageData>> = {};
     
     projects.forEach(p => {
@@ -627,9 +627,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                         <ul className="divide-y divide-slate-100">
                             {todayLeaves.map((l, idx) => (
                                 <li key={idx} className="px-6 py-3 hover:bg-slate-50 flex items-center justify-between">
-                                    <span className="text-sm font-medium text-slate-700">{l.resource}</span>
-                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${l.type === 'Public' ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>
-                                        {l.reason}
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
+                                            {l.resource.charAt(0)}
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium text-slate-700">{l.resource}</p>
+                                            <p className="text-[10px] text-slate-400">{l.type} • {l.reason}</p>
+                                        </div>
+                                    </div>
+                                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${l.type === 'Public' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}`}>
+                                        {l.type}
                                     </span>
                                 </li>
                             ))}
@@ -638,111 +646,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                 </div>
              </div>
 
-             {/* Unassigned Tasks / Alerts */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col lg:h-auto min-h-[200px]">
-                 <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+             {/* Conflicts / Overload */}
+             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col max-h-80">
+                <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
                     <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                        <AlertTriangle size={16} className="text-amber-500" />
-                        Unassigned Work
+                        <AlertTriangle size={16} className="text-red-500" />
+                        Resource Conflicts
                     </h3>
                 </div>
                 <div className="flex-1 overflow-auto custom-scrollbar p-0">
-                    {stats.unassignedTasks.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
+                    {Object.keys(conflictsByResource).length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8 min-h-[150px]">
                             <CheckCircle2 size={32} className="text-green-500 mb-2" />
-                            <p className="text-sm">All tasks assigned!</p>
+                            <p className="text-sm">No scheduling conflicts</p>
                         </div>
                     ) : (
                         <ul className="divide-y divide-slate-100">
-                            {stats.unassignedTasks.map((t, idx) => (
-                                <li key={idx} className="px-6 py-3 hover:bg-slate-50 flex flex-col gap-0.5">
-                                    <span className="text-sm font-medium text-slate-700">{t.taskName}</span>
-                                    <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                                        <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{t.projectName}</span>
-                                        <ChevronRight size={10} />
-                                        <span>{t.moduleName}</span>
+                            {Object.entries(conflictsByResource).map(([name, weeks]) => (
+                                <li key={name} className="px-6 py-3 hover:bg-slate-50">
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="text-sm font-bold text-slate-700">{name}</span>
+                                        <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-bold">{weeks.length} Weeks</span>
+                                    </div>
+                                    <div className="space-y-1">
+                                        {weeks.slice(0, 2).map((w, i) => (
+                                            <div key={i} className="text-[10px] text-slate-500 flex items-center gap-1">
+                                                <span className="font-mono bg-slate-100 px-1 rounded">{w.weekId}</span>
+                                                <span className="truncate max-w-[150px]" title={w.modules.join(', ')}>{w.modules.join(', ')}</span>
+                                            </div>
+                                        ))}
+                                        {weeks.length > 2 && <div className="text-[10px] text-slate-400 italic">+ {weeks.length - 2} more weeks</div>}
                                     </div>
                                 </li>
                             ))}
                         </ul>
                     )}
                 </div>
-            </div>
+             </div>
         </div>
       </div>
-
-      {/* Resource Conflict & Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Conflict Detection Card (Grouped by Resource) */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-80">
-             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                    <AlertOctagon size={16} className="text-red-500" />
-                    Resource Overlap/Conflicts
-                </h3>
-            </div>
-            <div className="flex-1 overflow-auto custom-scrollbar">
-                 {Object.keys(conflictsByResource).length === 0 ? (
-                     <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
-                        <CheckCircle2 size={32} className="text-green-500 mb-2" />
-                        <p className="text-sm">No cross-module conflicts detected.</p>
-                    </div>
-                 ) : (
-                     <div className="divide-y divide-slate-100">
-                        {Object.entries(conflictsByResource).map(([resource, weeks]) => (
-                            <div key={resource} className="bg-white p-0">
-                                <div className="bg-slate-50/50 px-4 py-2 border-b border-slate-100 flex justify-between items-center">
-                                    <span className="font-bold text-sm text-slate-700">{resource}</span>
-                                    <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">{weeks.length} Weeks</span>
-                                </div>
-                                <table className="w-full text-sm text-left">
-                                    <tbody className="divide-y divide-slate-50">
-                                        {weeks.map((c, idx) => (
-                                            <tr key={`${resource}-${c.weekId}`} className="hover:bg-red-50/20">
-                                                <td className="px-4 py-2 w-24 font-mono text-xs text-slate-500 border-r border-slate-50">{c.weekId}</td>
-                                                <td className="px-4 py-2">
-                                                    <div className="flex flex-col gap-1">
-                                                        {c.modules.map(m => (
-                                                            <span key={m} className="text-[10px] bg-red-50 text-red-700 px-1.5 py-0.5 rounded w-fit truncate max-w-[200px]" title={m}>{m}</span>
-                                                        ))}
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 py-2 text-right">
-                                                    <span className={`font-bold text-xs ${c.total > 5 ? 'text-red-600' : 'text-orange-600'}`}>{c.total.toFixed(1)}d</span>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ))}
-                     </div>
-                 )}
-            </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm h-80">
-          <h3 className="text-lg font-bold text-slate-800 mb-4">Resource Allocation by Role</h3>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{top: 5, right: 30, left: 20, bottom: 5}}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis dataKey="name" hide />
-              <YAxis stroke="#94a3b8" fontSize={12} />
-              <Tooltip 
-                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-              />
-              <Legend />
-              <Bar dataKey={Role.DEV} stackId="a" fill="#4f46e5" name="Dev Team" radius={[0, 0, 4, 4]} />
-              <Bar dataKey={Role.PREP_DEV} stackId="a" fill="#14b8a6" name="Prep & Dev" />
-              <Bar dataKey={Role.BA} stackId="a" fill="#8b5cf6" name="BA" />
-              <Bar dataKey={Role.APP_SUPPORT} stackId="a" fill="#ef4444" name="App Support" />
-              <Bar dataKey={Role.BRAND_SOLUTIONS} stackId="a" fill="#f97316" name="Brand Solutions" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
     </div>
   );
 };
