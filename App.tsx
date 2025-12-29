@@ -10,7 +10,7 @@ import { Settings } from './components/Settings';
 import { AIAssistant } from './components/AIAssistant';
 import { DebugLog } from './components/DebugLog';
 import { VersionHistory } from './components/VersionHistory';
-import { DEFAULT_START, DEFAULT_END, addWeeksToPoint, getWeekIdFromDate, WeekPoint } from './constants';
+import { DEFAULT_START, DEFAULT_END, addWeeksToPoint, getWeekIdFromDate, WeekPoint, calculateEndDate } from './constants';
 import { BarChart3, Calendar, Calculator, Users, Globe, Settings as SettingsIcon, Menu, History, User, Share2, X, Copy, Check, Trash2, UserPlus, ChevronDown, Link as LinkIcon, LogOut } from 'lucide-react';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
@@ -505,6 +505,78 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (session) fetchData(false);
   }, [session]);
+
+  // Auto-expand timeline effect
+  useEffect(() => {
+    if (!projects.length) return;
+
+    let minDateStr: string | null = null;
+    let maxDateStr: string | null = null;
+
+    // Build minimal holiday map for calculation
+    const hMap = new Map<string, number>();
+    holidays.filter(h => h.country === 'HK').forEach(h => hMap.set(h.date, h.duration || 1));
+
+    projects.forEach(p => {
+      p.modules.forEach(m => {
+        m.tasks.forEach(t => {
+          t.assignments.forEach(a => {
+            if (a.startDate) {
+              if (!minDateStr || a.startDate < minDateStr) minDateStr = a.startDate;
+              
+              let endStr = a.startDate;
+              if (a.duration && a.duration > 0) {
+                 endStr = calculateEndDate(a.startDate, a.duration, hMap);
+              }
+              
+              if (!maxDateStr || endStr > maxDateStr) maxDateStr = endStr;
+            }
+          });
+        });
+      });
+    });
+
+    if (minDateStr && maxDateStr) {
+       const minDate = new Date((minDateStr as string).replace(/-/g, '/'));
+       const maxDate = new Date((maxDateStr as string).replace(/-/g, '/'));
+
+       const minWeekId = getWeekIdFromDate(minDate);
+       const [minY, minW] = minWeekId.split('-').map(Number);
+       
+       const maxWeekId = getWeekIdFromDate(maxDate);
+       const [maxY, maxW] = maxWeekId.split('-').map(Number);
+
+       // Buffer: Start 2 weeks early, End 4 weeks late
+       const startPoint = addWeeksToPoint({ year: minY, week: minW }, -2);
+       const endPoint = addWeeksToPoint({ year: maxY, week: maxW }, 4);
+
+       // Convert to absolute index for comparison (Year * 100 + Week approx)
+       const getScore = (wp: WeekPoint) => wp.year * 100 + wp.week;
+
+       const currentStartScore = getScore(timelineStart);
+       const currentEndScore = getScore(timelineEnd);
+       const newStartScore = getScore(startPoint);
+       const newEndScore = getScore(endPoint);
+
+       let nextStart = timelineStart;
+       let nextEnd = timelineEnd;
+       let needsUpdate = false;
+
+       if (newStartScore < currentStartScore) {
+           nextStart = startPoint;
+           needsUpdate = true;
+       }
+       if (newEndScore > currentEndScore) {
+           nextEnd = endPoint;
+           needsUpdate = true;
+       }
+
+       if (needsUpdate) {
+           setTimelineStart(nextStart);
+           setTimelineEnd(nextEnd);
+       }
+    }
+  }, [projects, holidays, timelineStart, timelineEnd]);
 
   const handleTimelineBounds = (direction: 'start' | 'end') => {
     if (direction === 'start') setTimelineStart(prev => addWeeksToPoint(prev, -4));
