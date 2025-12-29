@@ -315,6 +315,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     return [...groupedPublicLeaves, ...personalLeaves];
   }, [resources, holidays]);
 
+  // Common Holiday Logic for Tasks
+  const { resourceHolidaysMap, defaultHolidays } = useMemo(() => {
+    const rMap = new Map<string, Map<string, number>>();
+    const dHolidays = new Map<string, number>();
+    holidays.filter(h => h.country === 'HK').forEach(h => dHolidays.set(h.date, h.duration || 1));
+    rMap.set('Unassigned', dHolidays);
+    resources.forEach(res => {
+      const regional = holidays.filter(h => h.country === (res.holiday_region || 'HK'));
+      const individual = res.individual_holidays || [];
+      const map = new Map<string, number>();
+      regional.forEach(h => map.set(h.date, h.duration || 1));
+      individual.forEach(h => map.set(h.date, h.duration || 1));
+      rMap.set(res.name, map);
+    });
+    return { resourceHolidaysMap: rMap, defaultHolidays: dHolidays };
+  }, [resources, holidays]);
+
   // 8. Upcoming Tasks Logic (Next 2 Weeks) - Grouped by Task
   const upcomingTasks = useMemo(() => {
     const todayDate = new Date();
@@ -324,20 +341,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     const twoWeeksLater = new Date();
     twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
     const twoWeeksLaterStr = formatDateForInput(twoWeeksLater);
-
-    // Build efficient holiday map for end date calculation
-    const resourceHolidaysMap = new Map<string, Map<string, number>>();
-    const defaultHolidays = new Map<string, number>();
-    holidays.filter(h => h.country === 'HK').forEach(h => defaultHolidays.set(h.date, h.duration || 1));
-    resourceHolidaysMap.set('Unassigned', defaultHolidays);
-    resources.forEach(res => {
-      const regional = holidays.filter(h => h.country === (res.holiday_region || 'HK'));
-      const individual = res.individual_holidays || [];
-      const map = new Map<string, number>();
-      regional.forEach(h => map.set(h.date, h.duration || 1));
-      individual.forEach(h => map.set(h.date, h.duration || 1));
-      resourceHolidaysMap.set(res.name, map);
-    });
 
     const tasks: any[] = [];
 
@@ -401,7 +404,68 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     });
 
     return tasks.sort((a, b) => a.startObj.getTime() - b.startObj.getTime());
-  }, [projects, resources, holidays]);
+  }, [projects, resourceHolidaysMap, defaultHolidays]);
+
+  // 9. Completed Tasks Logic (Last 2 Weeks)
+  const completedTasks = useMemo(() => {
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    const todayStr = formatDateForInput(todayDate);
+    
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const twoWeeksAgoStr = formatDateForInput(twoWeeksAgo);
+
+    const tasks: any[] = [];
+
+    projects.forEach(p => {
+        p.modules.forEach(m => {
+            m.tasks.forEach(t => {
+                let earliestStart: string | null = null;
+                let latestEnd: string | null = null;
+                let totalProgress = 0;
+                let assignmentCount = 0;
+
+                t.assignments.forEach(a => {
+                    if (a.startDate && a.duration && a.duration > 0) {
+                        const start = a.startDate;
+                        const resourceName = a.resourceName || 'Unassigned';
+                        const holidayMap = resourceHolidaysMap.get(resourceName) || defaultHolidays;
+                        const end = calculateEndDate(start, a.duration, holidayMap);
+
+                        if (!earliestStart || start < earliestStart) earliestStart = start;
+                        if (!latestEnd || end > latestEnd) latestEnd = end;
+                        
+                        const progress = calculateTimeBasedProgress(start, end);
+                        totalProgress += progress;
+                        assignmentCount++;
+                    }
+                });
+
+                if (earliestStart && latestEnd && assignmentCount > 0) {
+                    const avgProgress = Math.round(totalProgress / assignmentCount);
+                    
+                    // Check if completed (100% progress) AND ended recently
+                    if (avgProgress === 100 && latestEnd >= twoWeeksAgoStr && latestEnd <= todayStr) {
+                        tasks.push({
+                            id: t.id,
+                            project: p.name,
+                            module: m.name,
+                            task: t.name,
+                            start: earliestStart,
+                            end: latestEnd,
+                            progress: avgProgress,
+                            status: 'Completed',
+                            endObj: new Date(latestEnd)
+                        });
+                    }
+                }
+            });
+        });
+    });
+
+    return tasks.sort((a, b) => b.endObj.getTime() - a.endObj.getTime());
+  }, [projects, resourceHolidaysMap, defaultHolidays]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-12">
@@ -470,7 +534,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
         </div>
       </div>
 
-      {/* NEW: Upcoming Tasks Section (Moved above Weekly Pulse) */}
+      {/* Upcoming Tasks Section (Next 2 Weeks) */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
             <h3 className="font-bold text-slate-800 flex items-center gap-2">
@@ -527,6 +591,71 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
                                             <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${t.progress}%` }}></div>
                                         </div>
                                         <span className={`text-xs font-bold w-8 text-right ${t.progress > 0 ? 'text-slate-600' : 'text-slate-300'}`}>{t.progress}%</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))
+                    )}
+                </tbody>
+            </table>
+        </div>
+      </div>
+
+      {/* Completed Tasks Section */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <CheckCircle2 size={18} className="text-green-600" />
+                Completed Tasks (Last 2 Weeks)
+            </h3>
+            <span className="text-xs text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded">Sorted by Completion Date</span>
+        </div>
+        <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+                    <tr>
+                        <th className="px-6 py-3 w-1/3">Task</th>
+                        <th className="px-6 py-3 w-1/4">Context</th>
+                        <th className="px-6 py-3 w-24">Status</th>
+                        <th className="px-6 py-3 w-48">Actual Dates</th>
+                        <th className="px-6 py-3">Result</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                    {completedTasks.length === 0 ? (
+                        <tr>
+                            <td colSpan={5} className="p-8 text-center text-slate-400">
+                                No tasks completed in the last 2 weeks.
+                            </td>
+                        </tr>
+                    ) : (
+                        completedTasks.map((t) => (
+                            <tr key={`${t.id}`} className="hover:bg-slate-50 group">
+                                <td className="px-6 py-3 font-medium text-slate-700">
+                                    <span className="line-through text-slate-500 decoration-slate-400">{t.task}</span>
+                                </td>
+                                <td className="px-6 py-3">
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-semibold text-slate-600">{t.module}</span>
+                                        <span className="text-[10px] text-slate-400">{t.project}</span>
+                                    </div>
+                                </td>
+                                <td className="px-6 py-3">
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-green-100 text-green-700">
+                                        Done
+                                    </span>
+                                </td>
+                                <td className="px-6 py-3 font-mono text-xs text-slate-500">
+                                    <div className="flex items-center gap-1">
+                                        <span>{new Date(t.start).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>
+                                        <ArrowRight size={10} className="text-slate-300" />
+                                        <span className="text-slate-700 font-bold">{new Date(t.end).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>
+                                    </div>
+                                </td>
+                                <td className="px-6 py-3">
+                                    <div className="flex items-center gap-2">
+                                        <CheckCircle2 size={16} className="text-green-500" />
+                                        <span className="text-xs font-medium text-green-700">100%</span>
                                     </div>
                                 </td>
                             </tr>
