@@ -1087,7 +1087,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                   <Eye size={16} /> <ChevronDown size={10} />
                 </button>
                 {showToggleMenu && (
-                  <div className="toggle-menu absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50 py-1 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="toggle-menu absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-[100] py-1 animate-in fade-in zoom-in-95 duration-200">
                     <button onClick={() => { handleToggleModules(); setShowToggleMenu(false); }} className="w-full text-left px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 flex items-center gap-2"><ChevronsDownUp size={14} /> Toggle All Modules</button>
                     <button onClick={() => { handleToggleResources(); setShowToggleMenu(false); }} className="w-full text-left px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 flex items-center gap-2"><EyeOff size={14} /> Toggle Resources Only</button>
                   </div>
@@ -1599,7 +1599,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                                 {assignment.startDate}
                                             </button>
                                             {datePickerState.assignmentId === assignment.id && (
-                                                <div ref={datePickerContainerRef} className="absolute top-full left-0 mt-1 z-50">
+                                                <div ref={datePickerContainerRef} className="absolute top-full left-0 mt-1 z-[80]">
                                                     <DatePicker 
                                                         value={new Date(assignment.startDate.replace(/-/g, '/'))} 
                                                         onChange={(date) => {
@@ -1756,7 +1756,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
         {/* Context Menu */}
         {contextMenu && (
-          <div className="fixed bg-white border border-slate-200 shadow-xl rounded-lg py-1 z-50 text-sm min-w-[160px] animate-in fade-in zoom-in-95 duration-100" style={{ top: contextMenu.y, left: contextMenu.x }}>
+          <div className="fixed bg-white border border-slate-200 shadow-xl rounded-lg py-1 z-[200] text-sm min-w-[160px] animate-in fade-in zoom-in-95 duration-100" style={{ top: contextMenu.y, left: contextMenu.x }}>
             {contextMenu.type === 'project' && (
               <>
                 <button onClick={() => { onAddModule(contextMenu.projectId); setContextMenu(null); }} className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center gap-2"><Plus size={14} /> Add Module</button>
