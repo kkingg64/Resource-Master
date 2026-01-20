@@ -3,7 +3,6 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Project, ProjectModule, ProjectTask, TaskAssignment, Role, ViewMode, TimelineColumn, Holiday, Resource, IndividualHoliday, ResourceAllocation, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
 import { getTimeline, GOV_HOLIDAYS_DB, WeekPoint, getDateFromWeek, getWeekIdFromDate, formatDateForInput, calculateEndDate, calculateWorkingDaysBetween, calculateTimeBasedProgress } from '../constants';
 import { Layers, Calendar, ChevronRight, ChevronDown, GripVertical, Plus, UserPlus, Folder, Settings2, Trash2, History, RefreshCw, CheckCircle, AlertTriangle, RotateCw, ChevronsDownUp, Copy, Pin, PinOff, Link, Link2, EyeOff, Eye, LayoutList, CalendarRange, Percent, ChevronLeft, Gem, ShieldCheck, Rocket, Server, Search, X, Filter, CheckSquare, Square } from 'lucide-react';
-import { DependencyLines } from './DependencyLines';
 
 // --- Custom DatePicker Component ---
 interface DatePickerProps {
@@ -1002,48 +1001,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
   const currentColumnIndex = timeline.findIndex(c => isCurrentColumn(c));
   const stickyLeftOffset = sidebarWidth + startColWidth + durationColWidth + dependencyColWidth;
 
-  const assignmentRenderInfo = useMemo<{
-    map: Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>;
-    totalHeight: number;
-  }>(() => {
-    const map = new Map<string, { rowIndex: number, y: number, startDate: string | undefined, endDate: string }>();
-    let rowIndex = 0;
-    const HEADER_HEIGHT = (showYearRow ? 32 : 0) + (showMonthRow ? 32 : 0) + 32;
-    const ROW_HEIGHT = 33;
-
-    filteredProjects.forEach(project => {
-        rowIndex++; // Project header
-        if (!collapsedProjects[project.id]) {
-            project.modules.forEach(module => {
-                rowIndex++; // Module header
-                if (!collapsedModules[module.id]) {
-                    module.tasks.forEach(task => {
-                        rowIndex++; // Task header
-                        if (!collapsedTasks[task.id]) {
-                            task.assignments.forEach(assignment => {
-                                if (assignment.startDate && assignment.duration) {
-                                    const resourceName = assignment.resourceName || 'Unassigned';
-                                    const assignmentHolidaysMap = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
-                                    const endDateStr = calculateEndDate(assignment.startDate, assignment.duration, assignmentHolidaysMap);
-                                    
-                                    map.set(assignment.id, {
-                                        rowIndex,
-                                        y: HEADER_HEIGHT + (rowIndex * ROW_HEIGHT) + (ROW_HEIGHT / 2),
-                                        startDate: assignment.startDate,
-                                        endDate: endDateStr,
-                                    });
-                                }
-                                rowIndex++; // Assignment row
-                            });
-                        }
-                    });
-                }
-            });
-        }
-    });
-    return { map, totalHeight: HEADER_HEIGHT + rowIndex * ROW_HEIGHT };
-  }, [filteredProjects, collapsedProjects, collapsedModules, collapsedTasks, holidays, resources, showMonthRow, showYearRow]);
-
   const getColumnIndex = (dateStr: string): number => {
     if (!dateStr || timeline.length === 0) return -1;
     
@@ -1182,16 +1139,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
         </div>
 
         <div className="overflow-auto custom-scrollbar flex-1 relative">
-           {displayMode === 'gantt' && (
-            <DependencyLines 
-              allAssignmentsMap={allAssignmentsMap}
-              assignmentRenderInfo={assignmentRenderInfo.map}
-              timeline={timeline}
-              colWidth={colWidth}
-              totalHeight={assignmentRenderInfo.totalHeight}
-              sidebarWidth={sidebarWidth + startColWidth + durationColWidth + dependencyColWidth}
-            />
-          )}
           <div className="min-w-max relative">
               <>
                 {/* Header Rows */}
@@ -1569,8 +1516,6 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
                                 })();
 
 
-                                const possibleParents = allAssignmentsForDependencies.filter(parent => parent.id !== assignment.id && !isCircularDependency(assignment.id, parent.id)); 
-                                const groupedParents = possibleParents.reduce((acc, parent) => { if (!acc[parent.groupLabel]) acc[parent.groupLabel] = []; acc[parent.groupLabel].push(parent); return acc; }, {} as Record<string, typeof possibleParents>);
                                 const isEditingDuration = editingId === `duration::${assignment.id}`; 
                                 const roleStyle = getRoleStyle(assignment.role);
                                 const currentRowIndex = gridRowIndex++;
@@ -1639,28 +1584,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = ({
 
                                   <div className={`flex-shrink-0 border-r border-slate-200 bg-white flex items-center justify-center px-1 overflow-hidden relative group/dep ${isDetailsFrozen ? 'sticky z-[35]' : ''}`} style={{ width: dependencyColWidth, minWidth: dependencyColWidth, maxWidth: dependencyColWidth, left: isDetailsFrozen ? dependencyColLeft : undefined }}>
                                      {assignment.parentAssignmentId ? (
-                                         <div className="flex items-center gap-1 w-full" title={`Depends on: ${allAssignmentsMap.get(assignment.parentAssignmentId)?.resourceName || 'Unknown'}`}>
+                                         <div className="flex items-center gap-1 w-full" title={`Depends on assignment`}>
                                             <Link2 size={10} className="text-indigo-500 flex-shrink-0" />
-                                            <span className="text-[9px] text-slate-500 truncate flex-1">
-                                                {allAssignmentsMap.get(assignment.parentAssignmentId)?.resourceName || '...'}
-                                            </span>
                                             {!isReadOnly && <button onClick={() => onUpdateAssignmentDependency(assignment.id, null)} className="opacity-0 group-hover/dep:opacity-100 p-0.5 hover:text-red-500 rounded"><Trash2 size={8}/></button>}
                                          </div>
                                      ) : (
                                          !isReadOnly && (
                                             <div className="opacity-0 group-hover/dep:opacity-100 w-full flex justify-center">
-                                                <select 
-                                                    className="w-4 h-4 opacity-0 absolute inset-0 cursor-pointer" 
-                                                    value="" 
-                                                    onChange={(e) => onUpdateAssignmentDependency(assignment.id, e.target.value)}
-                                                >
-                                                    <option value="">Add Dependency...</option>
-                                                    {Object.entries(groupedParents).map(([group, opts]) => (
-                                                        <optgroup key={group} label={group}>
-                                                            {opts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                                        </optgroup>
-                                                    ))}
-                                                </select>
                                                 <Link size={10} className="text-slate-300 hover:text-indigo-500" />
                                             </div>
                                          )
