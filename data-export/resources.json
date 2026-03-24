@@ -1,0 +1,353 @@
+[
+  {
+    "id": "63d05d36-67c2-4b8f-920d-4544d95fe8a3",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Dinithi Priyashiroma",
+    "category": "BA",
+    "holiday_region": "LK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "969d0a3d-9f1c-42f5-9761-fbae02402496",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Marco Candellero",
+    "category": "BA",
+    "holiday_region": "CE",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "22ad2ab2-25ae-42aa-be44-b3199f536149",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "David Xu",
+    "category": "Brand Solutions",
+    "holiday_region": "US",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "3ee249f4-bae6-452a-bb21-090d4bb9e93c",
+    "user_id": "e2161dc3-763e-44be-903c-5487743e6376",
+    "name": "Clemmy",
+    "category": "CS",
+    "holiday_region": "CN",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "99358c2e-d4fe-42ed-8b85-ce87b689ca5f",
+    "user_id": "e2161dc3-763e-44be-903c-5487743e6376",
+    "name": "Joseph",
+    "category": "Production",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "7e9ee51e-5dcf-4e34-a93f-f8fc2a1a01a5",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Frankie",
+    "category": "COE",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "3724a919-5a10-4dfb-b5b9-c5cd4b975422",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Hilary Duan",
+    "category": "BA",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "d5212f40-6ffd-48f7-85d4-50ac5cbae228",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Kiwi",
+    "category": "DM",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "547f394c-a59d-4b03-8414-cfcc92f7daad",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Xue Huayong",
+    "category": "Application Support",
+    "holiday_region": "CN",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "ef4c5303-ea20-4215-8363-19858aa6c4a8",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Xueling",
+    "category": "BA",
+    "holiday_region": "CN",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "0d4b6492-6daa-4b78-b618-ad2fec8f61d0",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Yaoshan Xu",
+    "category": "BA",
+    "holiday_region": "CN",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "a3cc39de-435f-4758-9887-20aee9506460",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Zita",
+    "category": "PLM & D365",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "0a1d66bd-dace-4796-b4f1-1430b4775271",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "AK",
+    "category": "UI/UX Design",
+    "holiday_region": "HK",
+    "type": "External",
+    "program": null
+  },
+  {
+    "id": "5192e92b-e43b-4e48-a3cd-fa40b88d98c3",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Sam",
+    "category": "Brand Solutions",
+    "holiday_region": "UK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "94d6d91a-3bd5-4b06-9d40-9aa8f13577e0",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Thomas",
+    "category": "DM",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "35a56d12-bba1-4b9c-ae11-9fee36d33980",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Julian",
+    "category": "Brand Solutions",
+    "holiday_region": "UK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "9dd299bf-15f1-4092-bebf-af238d990f48",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Carol",
+    "category": "BA",
+    "holiday_region": "CN",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "c7c6fbef-7345-441d-abf9-406a859f0221",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Kaisy",
+    "category": "BA",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "acfc1cfa-0a5c-499a-b029-ce3c9292ec00",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Winsy",
+    "category": "BA",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "47f9e824-7dab-4e54-a4a2-297e8f86b7d5",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Andy",
+    "category": "BA",
+    "holiday_region": "CN",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "96c65a03-138f-4014-9df4-b55dcf897a47",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "YaoShan Xu",
+    "category": "Application Support",
+    "holiday_region": "CN",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "d3e3d872-694e-4b45-afa7-6fdf15bd6768",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Ron",
+    "category": "Brand Solutions",
+    "holiday_region": "CE",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "c5606f4d-8e57-4e62-9d3f-9286441ff938",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Eric Cu",
+    "category": "Application Support",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "62a43442-a86e-4f80-baf5-58296a5d7e97",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Nicky",
+    "category": "COE",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "57c60211-c34e-4fd9-a569-8c0712b36c6e",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Howard",
+    "category": "COE",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "299c1c91-b83a-414d-b02f-603f7907f5a9",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Jemmy",
+    "category": "EP Dev Team",
+    "holiday_region": "CN",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "85340208-fb2e-4d9e-8f8b-8c2f34363e93",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Jeremy",
+    "category": "EP Dev Team",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "124c4ff1-763f-4f1a-bb51-cc68597d574b",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Frank",
+    "category": "Enterprise Architecture",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "8506bbfe-27b2-48e9-a5fc-d5f04c0f8e2b",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "King",
+    "category": "Enterprise Architecture",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "a320dfaa-0b0a-4c40-8b8a-c806de11da17",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "MJ",
+    "category": "Enterprise Architecture",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "a72158f3-e196-47f9-8563-2b2b147eed35",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Vince",
+    "category": "Enterprise Architecture",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "1ead5ca9-cec4-439e-b25d-4bf7a54dbb0b",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Xavier",
+    "category": "Enterprise Architecture",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "5ee64a6a-1cf3-4e45-81c5-32ffa637337c",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Shing",
+    "category": "Enterprise Architecture",
+    "holiday_region": "HK",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "0b22b454-c511-4b46-aede-b201a392fdfe",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Wei Yan",
+    "category": "Application Support",
+    "holiday_region": "CN",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "eb8f78c9-05f3-4e4a-be1f-b99c6ba8bbf4",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "JinFeng Sun",
+    "category": "BA",
+    "holiday_region": "CN",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "966e0854-c6c9-4c0c-8cf8-b6d83e6f7bd2",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Huan Liu",
+    "category": "BA",
+    "holiday_region": "CN",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "37d248eb-5e54-4f6f-bc0e-0871ccb005fd",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Meidy He",
+    "category": "BA",
+    "holiday_region": "CN",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "5313ba69-e22e-42fa-9334-9b3a0f269364",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Vishwanath Hiremath",
+    "category": "BA",
+    "holiday_region": "CE",
+    "type": "Internal",
+    "program": null
+  },
+  {
+    "id": "55b8d7d7-78b1-418a-9a2e-cfbaa4b31e4b",
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "name": "Rathini Ravindran",
+    "category": "BA",
+    "holiday_region": "LK",
+    "type": "Internal",
+    "program": null
+  }
+]

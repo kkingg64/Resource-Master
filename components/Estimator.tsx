@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, ProjectModule, ComplexityLevel, Holiday, Role, ProjectTask, ModuleType, MODULE_TYPE_DISPLAY_NAMES } from '../types';
-import { Calculator, GripVertical, ChevronRight, ChevronDown, Calendar as CalendarIcon, Link2, AlertCircle, CheckCircle2, Layers, Gem, ShieldCheck, Rocket, Server } from 'lucide-react';
+import { Calculator, GripVertical, ChevronRight, ChevronDown, Calendar as CalendarIcon, Link2, AlertCircle, CheckCircle2, Layers, Gem, ShieldCheck, Rocket, Server, Upload } from 'lucide-react';
 import { calculateEndDate, formatDateForInput, calculateWorkingDaysBetween, getTaskBaseName } from '../constants';
+import { SmartsheetImportModal } from './SmartsheetImportModal';
+import { SmartsheetImportRow } from '../lib/smartsheetImporter';
 
 interface EstimatorProps {
   projects: Project[];
   holidays: Holiday[];
+  smartsheetToken?: string;
   onUpdateModuleEstimates: (projectId: string, moduleId: string, legacyFp: number, prepVelocity: number, prepTeamSize: number, feVelocity: number, feTeamSize: number, beVelocity: number, beTeamSize: number) => void;
   onUpdateTaskEstimates: (projectId: string, moduleId: string, taskId: string, updates: Partial<Omit<ProjectTask, 'id' | 'name' | 'assignments'>>) => void;
   onUpdateModuleComplexity: (projectId: string, moduleId: string, type: 'frontend' | 'backend' | 'prep', complexity: ComplexityLevel) => void;
@@ -14,6 +17,7 @@ interface EstimatorProps {
   onUpdateModuleStartTask: (projectId: string, moduleId: string, startTaskId: string | null) => void;
   onReorderModules: (projectId: string, startIndex: number, endIndex: number) => void;
   onDeleteModule: (projectId: string, moduleId: string) => void;
+  onBulkImportTasks?: (projectId: string, rows: SmartsheetImportRow[]) => void;
   isReadOnly?: boolean;
 }
 
@@ -135,9 +139,10 @@ const EstimatorNumberInput: React.FC<EstimatorNumberInputProps> = ({ value, onCh
 };
 
 
-export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpdateModuleEstimates, onDeleteModule, onUpdateTaskEstimates, onUpdateModuleComplexity, onUpdateModuleStartDate, onUpdateModuleDeliveryTask, onUpdateModuleStartTask, onReorderModules, isReadOnly = false }) => {
+export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, smartsheetToken, onUpdateModuleEstimates, onDeleteModule, onUpdateTaskEstimates, onUpdateModuleComplexity, onUpdateModuleStartDate, onUpdateModuleDeliveryTask, onUpdateModuleStartTask, onReorderModules, onBulkImportTasks, isReadOnly = false }) => {
   const [selectedProjectId, setSelectedProjectId] = useState<string>(projects[0]?.id || '');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [showSmartsheetModal, setShowSmartsheetModal] = useState(false);
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; moduleId: string; } | null>(null);
 
@@ -415,6 +420,15 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
                 <span className="text-[10px] text-slate-400 ml-2">(Est. based on HK Holidays)</span>
             </div>
         </div>
+        {smartsheetToken && onBulkImportTasks && !isReadOnly && (
+          <button
+            onClick={() => setShowSmartsheetModal(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 transition"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Import from Smartsheet
+          </button>
+        )}
       </div>
 
       <div className="flex-1 overflow-auto bg-white relative">
@@ -649,6 +663,18 @@ export const Estimator: React.FC<EstimatorProps> = ({ projects, holidays, onUpda
             </tbody>
         </table>
       </div>
+
+      {showSmartsheetModal && smartsheetToken && (
+        <SmartsheetImportModal
+          token={smartsheetToken}
+          onClose={() => setShowSmartsheetModal(false)}
+          onImport={(rows) => {
+            if (onBulkImportTasks) {
+              onBulkImportTasks(selectedProjectId, rows);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

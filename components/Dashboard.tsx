@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Project, Role, WeeklySummary, ResourceAllocation, Resource, Holiday } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
 import { getTimeline, DEFAULT_START, DEFAULT_END, calculateWorkingDaysBetween, formatDateForInput, getWeekIdFromDate, getWeekdaysForWeekId, calculateEndDate, calculateTimeBasedProgress } from '../constants';
-import { AlertCircle, CheckCircle2, Clock, Users, Briefcase, ChevronRight, AlertTriangle, AlertOctagon, CalendarDays, Activity, CalendarOff, ArrowRight, Globe } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Users, Briefcase, ChevronRight, AlertTriangle, AlertOctagon, CalendarDays, Activity, CalendarOff, ArrowRight, Globe, Download, FileText } from 'lucide-react';
+import { toPng } from 'html-to-image';
 
 interface DashboardProps {
   projects: Project[];
@@ -15,6 +16,8 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'
 type UsageData = { total: number, modules: Set<string> };
 
 export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holidays }) => {
+    const slideRef = useRef<HTMLDivElement>(null);
+    const [isExportingSlide, setIsExportingSlide] = useState(false);
   
   const GLOBAL_TIMELINE_DATA = useMemo(() => getTimeline('week', DEFAULT_START, DEFAULT_END), []);
   const today = new Date();
@@ -467,8 +470,178 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
     return tasks.sort((a, b) => b.endObj.getTime() - a.endObj.getTime());
   }, [projects, resourceHolidaysMap, defaultHolidays]);
 
+    const executiveSummary = useMemo(() => {
+        const totalProjects = projectProgress.length;
+        const completed = projectProgress.filter((project) => project.progress >= 100).length;
+        const delayed = projectProgress.filter((project) => project.end !== '-' && project.progress < 100 && project.end < todayStr).length;
+        const atRisk = projectProgress.filter((project) => (
+            project.start !== '-' &&
+            project.end !== '-' &&
+            project.end >= todayStr &&
+            project.progress > 0 &&
+            project.progress < 45
+        )).length;
+        const onTrack = Math.max(0, totalProjects - completed - delayed - atRisk);
+
+        const conflictResources = Object.keys(conflictsByResource).length;
+        const unassignedItems = stats.unassignedCount;
+        const healthScoreBase = Math.round(((onTrack + (completed * 0.8)) / Math.max(1, totalProjects)) * 100);
+        const healthScore = Math.max(0, Math.min(100, healthScoreBase - delayed * 8 - conflictResources * 2));
+
+        const topRisks: string[] = [];
+        if (delayed > 0) topRisks.push(`${delayed} project(s) delayed`);
+        if (conflictResources > 0) topRisks.push(`${conflictResources} resource(s) overloaded`);
+        if (unassignedItems > 0) topRisks.push(`${unassignedItems} unassigned task(s)`);
+        if (topRisks.length === 0) topRisks.push('No major blockers detected this week');
+
+        return {
+            totalProjects,
+            completed,
+            onTrack,
+            atRisk,
+            delayed,
+            conflictResources,
+            unassignedItems,
+            upcomingCount: upcomingTasks.length,
+            completedRecentCount: completedTasks.length,
+            healthScore,
+            topRisks,
+        };
+    }, [projectProgress, todayStr, conflictsByResource, stats.unassignedCount, upcomingTasks.length, completedTasks.length]);
+
+    const handleExportExecutiveSlide = useCallback(async () => {
+        if (!slideRef.current || isExportingSlide) return;
+
+        setIsExportingSlide(true);
+        try {
+            const dataUrl = await toPng(slideRef.current, {
+                cacheBust: true,
+                pixelRatio: 2,
+                backgroundColor: '#ffffff',
+            });
+
+            const link = document.createElement('a');
+            const stamp = new Date().toISOString().slice(0, 10);
+            link.download = `OMS_Executive_Summary_${stamp}.png`;
+            link.href = dataUrl;
+            link.click();
+        } catch (error) {
+            console.error('Failed to export executive slide', error);
+            alert('Failed to export slide image. Please try again.');
+        } finally {
+            setIsExportingSlide(false);
+        }
+    }, [isExportingSlide]);
+
+    const handleExportExecutiveText = useCallback(() => {
+        const generatedDate = new Date();
+        const generatedDateText = generatedDate.toLocaleDateString();
+        const stamp = generatedDate.toISOString().slice(0, 10);
+
+        const projectLines = projectProgress.length > 0
+            ? projectProgress.map((project) => {
+                    const timeline = project.start !== '-' && project.end !== '-'
+                        ? `${project.start} -> ${project.end}`
+                        : 'TBD';
+                    return `- ${project.name}: ${project.status}, ${project.progress.toFixed(0)}% (Timeline: ${timeline})`;
+                })
+            : ['- No projects available'];
+
+        const upcomingLines = upcomingTasks.length > 0
+            ? upcomingTasks.slice(0, 8).map((task) => (
+                    `- ${task.task} (${task.project} / ${task.module}) | ${task.status} | ${task.start} -> ${task.end} | ${task.progress}%`
+                ))
+            : ['- No upcoming/active tasks in next 2 weeks'];
+
+        const completedLines = completedTasks.length > 0
+            ? completedTasks.slice(0, 8).map((task) => (
+                    `- ${task.task} (${task.project} / ${task.module}) | Completed | ${task.start} -> ${task.end}`
+                ))
+            : ['- No completed tasks in last 2 weeks'];
+
+        const summaryTone = executiveSummary.delayed > 0
+            ? 'Overall portfolio is under schedule pressure and requires mitigation.'
+            : executiveSummary.atRisk > 0
+                ? 'Overall portfolio is mostly stable with targeted risks to manage.'
+                : 'Overall portfolio health is stable and progressing as planned.';
+
+        const lines = [
+            'OMS PROJECT SUMMARY REPORT',
+            `Generated: ${generatedDateText}`,
+            '',
+            '1) EXECUTIVE WORDING SUMMARY',
+            summaryTone,
+            `- Total Projects: ${executiveSummary.totalProjects}`,
+            `- On Track: ${executiveSummary.onTrack}`,
+            `- At Risk: ${executiveSummary.atRisk}`,
+            `- Delayed: ${executiveSummary.delayed}`,
+            `- Completed (Last 2 Weeks): ${executiveSummary.completedRecentCount}`,
+            `- Upcoming (Next 2 Weeks): ${executiveSummary.upcomingCount}`,
+            `- Resource Conflicts: ${executiveSummary.conflictResources}`,
+            `- Unassigned Tasks: ${executiveSummary.unassignedItems}`,
+            `- Health Score: ${executiveSummary.healthScore}/100`,
+            '',
+            '2) PROJECT STATUS SUMMARY',
+            ...projectLines,
+            '',
+            '3) TIMELINE SUMMARY (NEXT 2 WEEKS)',
+            ...upcomingLines,
+            '',
+            '4) COMPLETED SUMMARY (LAST 2 WEEKS)',
+            ...completedLines,
+            '',
+            '5) TOP RISKS',
+            ...executiveSummary.topRisks.slice(0, 5).map((risk) => `- ${risk}`),
+            '',
+            'End of Report',
+        ];
+
+        const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `OMS_Project_Summary_${stamp}.txt`;
+        link.click();
+        URL.revokeObjectURL(url);
+    }, [completedTasks, executiveSummary, projectProgress, upcomingTasks]);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-12">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between gap-4">
+                    <div>
+                        <h3 className="font-bold text-slate-800">Executive Summary</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">Portfolio health snapshot with one-click 16:9 export for PPT.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleExportExecutiveText}
+                            className="h-9 px-3 inline-flex items-center gap-2 rounded-md bg-white border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50"
+                            title="Export wording + timeline summary"
+                        >
+                            <FileText size={14} /> Export Summary TXT
+                        </button>
+                        <button
+                            onClick={handleExportExecutiveSlide}
+                            disabled={isExportingSlide}
+                            className="h-9 px-3 inline-flex items-center gap-2 rounded-md bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
+                            title="Export one-slide PNG"
+                        >
+                            <Download size={14} /> {isExportingSlide ? 'Exporting...' : 'Export 1-Slide PNG'}
+                        </button>
+                    </div>
+                </div>
+                <div className="p-5 grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-slate-500">Projects</div><div className="text-lg font-bold text-slate-800">{executiveSummary.totalProjects}</div></div>
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-emerald-700">On Track</div><div className="text-lg font-bold text-emerald-700">{executiveSummary.onTrack}</div></div>
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-amber-700">At Risk</div><div className="text-lg font-bold text-amber-700">{executiveSummary.atRisk}</div></div>
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-red-700">Delayed</div><div className="text-lg font-bold text-red-700">{executiveSummary.delayed}</div></div>
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-slate-500">Completed 2w</div><div className="text-lg font-bold text-slate-800">{executiveSummary.completedRecentCount}</div></div>
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-slate-500">Upcoming 2w</div><div className="text-lg font-bold text-slate-800">{executiveSummary.upcomingCount}</div></div>
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-slate-500">Conflicts</div><div className="text-lg font-bold text-slate-800">{executiveSummary.conflictResources}</div></div>
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-slate-500">Health Score</div><div className="text-lg font-bold text-indigo-700">{executiveSummary.healthScore}</div></div>
+                </div>
+            </div>
       
       {/* Top Cards Row */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -843,6 +1016,58 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, resources, holid
              </div>
         </div>
       </div>
+
+            {/* Hidden 16:9 slide canvas for export */}
+            <div className="fixed -left-[9999px] top-0 pointer-events-none opacity-0">
+                <div
+                    ref={slideRef}
+                    style={{ width: 1600, height: 900 }}
+                    className="bg-white p-12 flex flex-col"
+                >
+                    <div className="flex items-start justify-between border-b border-slate-200 pb-6">
+                        <div>
+                            <h1 className="text-4xl font-bold text-slate-900">OMS Executive Summary</h1>
+                            <p className="text-slate-500 mt-2">Portfolio status snapshot for presentation</p>
+                        </div>
+                        <div className="text-right">
+                            <div className="text-xs uppercase tracking-wide text-slate-400">Generated</div>
+                            <div className="text-sm font-semibold text-slate-700">{new Date().toLocaleDateString()}</div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-4 mt-8">
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><div className="text-xs uppercase text-emerald-700">On Track</div><div className="text-4xl font-bold text-emerald-700 mt-2">{executiveSummary.onTrack}</div></div>
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4"><div className="text-xs uppercase text-amber-700">At Risk</div><div className="text-4xl font-bold text-amber-700 mt-2">{executiveSummary.atRisk}</div></div>
+                        <div className="rounded-xl border border-red-200 bg-red-50 p-4"><div className="text-xs uppercase text-red-700">Delayed</div><div className="text-4xl font-bold text-red-700 mt-2">{executiveSummary.delayed}</div></div>
+                        <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4"><div className="text-xs uppercase text-indigo-700">Health Score</div><div className="text-4xl font-bold text-indigo-700 mt-2">{executiveSummary.healthScore}</div></div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-6 mt-8 flex-1">
+                        <div className="rounded-xl border border-slate-200 p-5">
+                            <h2 className="text-lg font-semibold text-slate-800 mb-4">Delivery Snapshot</h2>
+                            <div className="space-y-3 text-sm">
+                                <div className="flex justify-between"><span className="text-slate-500">Total Projects</span><span className="font-semibold text-slate-800">{executiveSummary.totalProjects}</span></div>
+                                <div className="flex justify-between"><span className="text-slate-500">Completed (2 weeks)</span><span className="font-semibold text-slate-800">{executiveSummary.completedRecentCount}</span></div>
+                                <div className="flex justify-between"><span className="text-slate-500">Upcoming (2 weeks)</span><span className="font-semibold text-slate-800">{executiveSummary.upcomingCount}</span></div>
+                                <div className="flex justify-between"><span className="text-slate-500">Resource Conflicts</span><span className="font-semibold text-slate-800">{executiveSummary.conflictResources}</span></div>
+                                <div className="flex justify-between"><span className="text-slate-500">Unassigned Tasks</span><span className="font-semibold text-slate-800">{executiveSummary.unassignedItems}</span></div>
+                            </div>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 p-5">
+                            <h2 className="text-lg font-semibold text-slate-800 mb-4">Top Risks & Actions</h2>
+                            <ul className="space-y-3 text-sm">
+                                {executiveSummary.topRisks.slice(0, 3).map((risk, index) => (
+                                    <li key={risk} className="flex items-start gap-2">
+                                        <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 text-xs font-bold inline-flex items-center justify-center mt-0.5">{index + 1}</span>
+                                        <span className="text-slate-700">{risk}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
     </div>
   );
 };

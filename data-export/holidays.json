@@ -1,0 +1,1842 @@
+[
+  {
+    "id": 1,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2024-12-25",
+    "name": "Christmas Day",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 2,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2024-12-26",
+    "name": "Boxing Day",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 3,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-01",
+    "name": "New Year Day",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 4,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-29",
+    "name": "Lunar New Year (Day 1)",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 5,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-30",
+    "name": "Lunar New Year (Day 2)",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 6,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-31",
+    "name": "Lunar New Year (Day 3)",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 7,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-04-04",
+    "name": "Ching Ming Festival",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 8,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-04-18",
+    "name": "Good Friday",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 9,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-04-21",
+    "name": "Easter Monday",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 10,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-05-01",
+    "name": "Labour Day",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 11,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-07-01",
+    "name": "HKSAR Establishment Day",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 12,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-10-01",
+    "name": "National Day",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 13,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-12-25",
+    "name": "Christmas Day",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 14,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-12-26",
+    "name": "Boxing Day",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 15,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-01-01",
+    "name": "New Year Day",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 16,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-17",
+    "name": "Lunar New Year (Day 1)",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 17,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-18",
+    "name": "Lunar New Year (Day 2)",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 18,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-19",
+    "name": "Lunar New Year (Day 3)",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 19,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-04-03",
+    "name": "Good Friday",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 20,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-04-04",
+    "name": "Holy Saturday / Ching Ming",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 21,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-04-06",
+    "name": "Easter Monday",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 22,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-05-01",
+    "name": "Labour Day",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 23,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-12-25",
+    "name": "Christmas Day",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 24,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-12-26",
+    "name": "Boxing Day",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 25,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-01-01",
+    "name": "New Year Day",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 26,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-02-06",
+    "name": "Lunar New Year (Day 1)",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 27,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-02-07",
+    "name": "Lunar New Year (Day 2)",
+    "country": "Global",
+    "duration": 1
+  },
+  {
+    "id": 28,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-16",
+    "name": "CNY",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 29,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-01",
+    "name": "New Year Day",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 30,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-29",
+    "name": "Spring Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 31,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-30",
+    "name": "Spring Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 32,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-10-01",
+    "name": "National Day",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 33,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-01-01",
+    "name": "New Year Day",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 34,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-17",
+    "name": "Spring Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 35,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-18",
+    "name": "Spring Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 36,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-19",
+    "name": "Spring Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 37,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-01",
+    "name": "New Year's Day",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 38,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-04-18",
+    "name": "Good Friday",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 39,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-04-21",
+    "name": "Easter Monday",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 40,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-05-05",
+    "name": "Early May bank holiday",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 41,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-05-26",
+    "name": "Spring bank holiday",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 42,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-08-25",
+    "name": "Summer bank holiday",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 43,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-12-25",
+    "name": "Christmas Day",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 44,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-12-26",
+    "name": "Boxing Day",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 45,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-01-01",
+    "name": "New Year's Day",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 46,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-04-03",
+    "name": "Good Friday",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 47,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-04-06",
+    "name": "Easter Monday",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 48,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-05-04",
+    "name": "Early May bank holiday",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 49,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-05-25",
+    "name": "Spring bank holiday",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 50,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-08-31",
+    "name": "Summer bank holiday",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 51,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-12-25",
+    "name": "Christmas Day",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 52,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-12-28",
+    "name": "Boxing Day (substitute day)",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 53,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-01",
+    "name": "New Year's Day",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 54,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-04-18",
+    "name": "Good Friday",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 55,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-04-21",
+    "name": "Easter Monday",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 56,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-05-01",
+    "name": "Labour Day",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 57,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-05-29",
+    "name": "Ascension Day",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 58,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-06-09",
+    "name": "Whit Monday",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 59,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-10-03",
+    "name": "Day of German Unity",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 60,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-12-25",
+    "name": "Christmas Day",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 61,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-12-26",
+    "name": "St. Stephen's Day",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 62,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-01-01",
+    "name": "New Year's Day",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 63,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-04-03",
+    "name": "Good Friday",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 64,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-04-06",
+    "name": "Easter Monday",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 65,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-05-01",
+    "name": "Labour Day",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 66,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-05-14",
+    "name": "Ascension Day",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 67,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-05-25",
+    "name": "Whit Monday",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 68,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-10-03",
+    "name": "Day of German Unity",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 69,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-12-25",
+    "name": "Christmas Day",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 70,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-12-26",
+    "name": "St. Stephen's Day",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 71,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-28",
+    "name": "Spring Festival Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 72,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-04-05",
+    "name": "Qingming Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 73,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-05-01",
+    "name": "Labour Day",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 74,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-05-31",
+    "name": "Dragon Boat Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 75,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-10-02",
+    "name": "National Day Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 76,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-10-03",
+    "name": "National Day Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 77,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-10-06",
+    "name": "Mid-Autumn Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 78,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-04-05",
+    "name": "Qingming Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 79,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-05-01",
+    "name": "Labour Day",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 80,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-06-19",
+    "name": "Dragon Boat Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 81,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-09-25",
+    "name": "Mid-Autumn Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 82,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-10-01",
+    "name": "National Day",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 83,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-10-02",
+    "name": "National Day Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 84,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-01-01",
+    "name": "New Year's Day",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 85,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-02-06",
+    "name": "Spring Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 86,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-02-07",
+    "name": "Spring Festival Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 87,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-02-08",
+    "name": "Spring Festival Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 88,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-04-05",
+    "name": "Qingming Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 89,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-05-01",
+    "name": "Labour Day",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 90,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-06-09",
+    "name": "Dragon Boat Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 91,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-09-15",
+    "name": "Mid-Autumn Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 92,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-10-01",
+    "name": "National Day",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 93,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-10-02",
+    "name": "National Day Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 94,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2024-12-25",
+    "name": "Christmas Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 95,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2024-12-26",
+    "name": "Boxing Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 96,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-01",
+    "name": "New Year's Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 97,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-29",
+    "name": "Lunar New Year's Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 98,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-30",
+    "name": "Second day of Lunar New Year",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 99,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-31",
+    "name": "Third day of Lunar New Year",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 100,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-04-04",
+    "name": "Ching Ming Festival",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 101,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-04-18",
+    "name": "Good Friday",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 102,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-04-19",
+    "name": "The day following Good Friday",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 103,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-04-21",
+    "name": "Easter Monday",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 104,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-05-01",
+    "name": "Labour Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 105,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-05-05",
+    "name": "The Birthday of the Buddha",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 106,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-05-31",
+    "name": "Tuen Ng Festival",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 107,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-07-01",
+    "name": "HKSAR Establishment Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 108,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-10-01",
+    "name": "National Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 109,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-10-07",
+    "name": "The day following Mid-Autumn Festival",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 110,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-10-29",
+    "name": "Chung Yeung Festival",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 111,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-12-25",
+    "name": "Christmas Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 112,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-12-26",
+    "name": "Boxing Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 113,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-01-01",
+    "name": "New Year's Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 114,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-17",
+    "name": "Lunar New Year's Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 115,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-18",
+    "name": "Second day of Lunar New Year",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 116,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-19",
+    "name": "Third day of Lunar New Year",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 117,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-04-03",
+    "name": "Good Friday",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 118,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-04-04",
+    "name": "The day following Good Friday",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 119,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-04-06",
+    "name": "Easter Monday",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 120,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-04-05",
+    "name": "Ching Ming Festival",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 121,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-05-01",
+    "name": "Labour Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 122,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-05-25",
+    "name": "The Birthday of the Buddha",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 123,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-06-19",
+    "name": "Tuen Ng Festival",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 124,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-07-01",
+    "name": "HKSAR Establishment Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 125,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-09-26",
+    "name": "The day following Mid-Autumn Festival",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 126,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-10-01",
+    "name": "National Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 127,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-10-02",
+    "name": "The day following National Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 128,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-10-19",
+    "name": "Chung Yeung Festival",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 129,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-12-25",
+    "name": "Christmas Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 130,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-12-26",
+    "name": "Boxing Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 131,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-01-01",
+    "name": "New Year's Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 132,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-02-06",
+    "name": "Lunar New Year's Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 133,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-02-08",
+    "name": "Second day of Lunar New Year",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 134,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-02-09",
+    "name": "Third day of Lunar New Year",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 135,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-03-26",
+    "name": "Good Friday",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 136,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-03-27",
+    "name": "The day following Good Friday",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 137,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-03-29",
+    "name": "Easter Monday",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 138,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-04-05",
+    "name": "Ching Ming Festival",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 139,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-05-01",
+    "name": "Labour Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 140,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-05-14",
+    "name": "The Birthday of the Buddha",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 141,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-06-09",
+    "name": "Tuen Ng Festival",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 142,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-07-01",
+    "name": "HKSAR Establishment Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 143,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-09-16",
+    "name": "The day following Mid-Autumn Festival",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 144,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-10-01",
+    "name": "National Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 145,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-10-08",
+    "name": "Chung Yeung Festival",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 146,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-12-25",
+    "name": "Christmas Day",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 147,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-12-27",
+    "name": "Boxing Day (substitute day)",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 148,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-01",
+    "name": "New Year's Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 149,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-20",
+    "name": "Martin Luther King, Jr. Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 150,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-02-17",
+    "name": "Washington's Birthday",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 151,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-05-26",
+    "name": "Memorial Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 152,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-06-19",
+    "name": "Juneteenth",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 153,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-07-04",
+    "name": "Independence Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 154,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-09-01",
+    "name": "Labor Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 155,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-10-13",
+    "name": "Columbus Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 156,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-11-11",
+    "name": "Veterans Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 157,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-11-27",
+    "name": "Thanksgiving Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 158,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-12-25",
+    "name": "Christmas Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 159,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-01-01",
+    "name": "New Year's Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 160,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-01-19",
+    "name": "Martin Luther King, Jr. Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 161,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-16",
+    "name": "Washington's Birthday",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 162,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-05-25",
+    "name": "Memorial Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 163,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-06-19",
+    "name": "Juneteenth",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 164,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-07-03",
+    "name": "Independence Day (observed)",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 165,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-09-07",
+    "name": "Labor Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 166,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-10-12",
+    "name": "Columbus Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 167,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-11-11",
+    "name": "Veterans Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 168,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-11-26",
+    "name": "Thanksgiving Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 169,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-12-25",
+    "name": "Christmas Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 170,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-01-01",
+    "name": "New Year's Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 171,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-01-18",
+    "name": "Martin Luther King, Jr. Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 172,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-02-15",
+    "name": "Washington's Birthday",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 173,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-05-31",
+    "name": "Memorial Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 174,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-06-18",
+    "name": "Juneteenth (observed)",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 175,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-07-05",
+    "name": "Independence Day (observed)",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 176,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-09-06",
+    "name": "Labor Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 177,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-10-11",
+    "name": "Columbus Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 178,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-11-11",
+    "name": "Veterans Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 179,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-11-25",
+    "name": "Thanksgiving Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 180,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-12-24",
+    "name": "Christmas Day (observed)",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 181,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-01-01",
+    "name": "New Year's Day",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 182,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-03-26",
+    "name": "Good Friday",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 183,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-03-29",
+    "name": "Easter Monday",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 184,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-05-03",
+    "name": "Early May bank holiday",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 185,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-05-31",
+    "name": "Spring bank holiday",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 186,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-08-30",
+    "name": "Summer bank holiday",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 187,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-12-27",
+    "name": "Christmas Day (substitute day)",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 188,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-12-28",
+    "name": "Boxing Day (substitute day)",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 189,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-01-01",
+    "name": "New Year's Day",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 190,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-03-26",
+    "name": "Good Friday",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 191,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-03-29",
+    "name": "Easter Monday",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 192,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-05-01",
+    "name": "Labour Day",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 193,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-05-06",
+    "name": "Ascension Day",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 194,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-05-17",
+    "name": "Whit Monday",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 195,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-10-03",
+    "name": "Day of German Unity",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 196,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-12-25",
+    "name": "Christmas Day",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 197,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2027-12-26",
+    "name": "St. Stephen's Day",
+    "country": "CE",
+    "duration": 1
+  },
+  {
+    "id": 199,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-20",
+    "name": "CNY",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 200,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-23",
+    "name": "CNY",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 201,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-24",
+    "name": "CNY",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 202,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-05-04",
+    "name": "51",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 203,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-05-05",
+    "name": "51",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 204,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-05-06",
+    "name": "51",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 205,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-05-07",
+    "name": "51",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 206,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-05-08",
+    "name": "51",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 207,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-20",
+    "name": "CNY",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 208,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-16",
+    "name": "CNY",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 209,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-25",
+    "name": "CNY",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 210,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2026-02-13",
+    "name": "CNY",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 217,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-12-31",
+    "name": "New Year",
+    "country": "HK",
+    "duration": 1
+  },
+  {
+    "id": 218,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2024-12-30",
+    "name": "New Year's Day Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 219,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2024-12-31",
+    "name": "New Year's Day Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 220,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-01-31",
+    "name": "Spring Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 221,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-02-01",
+    "name": "Spring Festival Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 222,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-02-02",
+    "name": "Spring Festival Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 223,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-02-03",
+    "name": "Spring Festival Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 224,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-04-04",
+    "name": "Qingming Festival",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 225,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-05-02",
+    "name": "Labour Day Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 226,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-05-03",
+    "name": "Labour Day Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 227,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-10-04",
+    "name": "National Day Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 228,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-10-05",
+    "name": "National Day Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 229,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-10-07",
+    "name": "National Day Holiday",
+    "country": "CN",
+    "duration": 1
+  },
+  {
+    "id": 230,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2024-12-25",
+    "name": "Christmas Day",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 231,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2024-12-26",
+    "name": "Boxing Day",
+    "country": "UK",
+    "duration": 1
+  },
+  {
+    "id": 232,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2024-12-25",
+    "name": "Christmas Day",
+    "country": "US",
+    "duration": 1
+  },
+  {
+    "id": 212,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-12-22",
+    "name": "Xmas",
+    "country": "HK",
+    "duration": 0.5
+  },
+  {
+    "id": 213,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-12-23",
+    "name": "Xmas",
+    "country": "HK",
+    "duration": 0.5
+  },
+  {
+    "id": 214,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-12-24",
+    "name": "Xmas",
+    "country": "HK",
+    "duration": 0.5
+  },
+  {
+    "id": 215,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-12-29",
+    "name": "New Year",
+    "country": "HK",
+    "duration": 0.5
+  },
+  {
+    "id": 216,
+    "user_id": "dbd77e43-4010-4a97-97d3-b5bac3bcfe5d",
+    "date": "2025-12-30",
+    "name": "New Year",
+    "country": "HK",
+    "duration": 0.5
+  }
+]

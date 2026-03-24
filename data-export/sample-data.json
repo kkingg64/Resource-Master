@@ -1,0 +1,201 @@
+{
+  "projects": [
+    {
+      "id": "proj-001",
+      "name": "AI Platform Development",
+      "user_id": "mock-user-001",
+      "created_at": "2026-01-15T10:00:00Z",
+      "updated_at": "2026-03-20T10:00:00Z"
+    },
+    {
+      "id": "proj-002",
+      "name": "Mobile App Redesign",
+      "user_id": "mock-user-001",
+      "created_at": "2026-02-01T10:00:00Z",
+      "updated_at": "2026-03-20T10:00:00Z"
+    }
+  ],
+  "project_members": [
+    {
+      "id": "mem-001",
+      "project_id": "proj-001",
+      "user_email": "dev@localhost",
+      "role": "owner",
+      "created_at": "2026-01-15T10:00:00Z"
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod-001",
+      "project_id": "proj-001",
+      "name": "Requirements & Planning",
+      "type": "MILESTONE",
+      "order": 1,
+      "created_at": "2026-01-15T10:00:00Z"
+    },
+    {
+      "id": "mod-002",
+      "project_id": "proj-001",
+      "name": "Design & Development",
+      "type": "STANDARD",
+      "order": 2,
+      "created_at": "2026-01-20T10:00:00Z"
+    },
+    {
+      "id": "mod-003",
+      "project_id": "proj-001",
+      "name": "Testing & QA",
+      "type": "KEY_PHASE",
+      "order": 3,
+      "created_at": "2026-02-01T10:00:00Z"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-001",
+      "module_id": "mod-001",
+      "name": "Gather Requirements",
+      "description": "Collect all project requirements",
+      "order": 1,
+      "created_at": "2026-01-15T10:00:00Z"
+    },
+    {
+      "id": "task-002",
+      "module_id": "mod-001",
+      "name": "Create Project Plan",
+      "description": "Develop comprehensive project plan",
+      "order": 2,
+      "created_at": "2026-01-16T10:00:00Z"
+    },
+    {
+      "id": "task-003",
+      "module_id": "mod-002",
+      "name": "UI/UX Design",
+      "description": "Design user interface and experience",
+      "order": 1,
+      "created_at": "2026-01-20T10:00:00Z"
+    },
+    {
+      "id": "task-004",
+      "module_id": "mod-002",
+      "name": "Backend Development",
+      "description": "Develop backend services",
+      "order": 2,
+      "created_at": "2026-01-21T10:00:00Z"
+    }
+  ],
+  "task_assignments": [
+    {
+      "id": "assign-001",
+      "task_id": "task-001",
+      "resource_id": "res-001",
+      "startDate": "2026-03-27",
+      "duration": 5,
+      "complexity": "MEDIUM",
+      "order": 1,
+      "created_at": "2026-01-15T10:00:00Z"
+    },
+    {
+      "id": "assign-002",
+      "task_id": "task-002",
+      "resource_id": "res-002",
+      "startDate": "2026-04-03",
+      "duration": 3,
+      "complexity": "HIGH",
+      "order": 1,
+      "created_at": "2026-01-16T10:00:00Z"
+    },
+    {
+      "id": "assign-003",
+      "task_id": "task-003",
+      "resource_id": "res-001",
+      "startDate": "2026-04-10",
+      "duration": 8,
+      "complexity": "MEDIUM",
+      "order": 1,
+      "created_at": "2026-01-20T10:00:00Z"
+    },
+    {
+      "id": "assign-004",
+      "task_id": "task-004",
+      "resource_id": "res-003",
+      "startDate": "2026-04-17",
+      "duration": 10,
+      "complexity": "HIGH",
+      "order": 1,
+      "created_at": "2026-01-21T10:00:00Z"
+    }
+  ],
+  "resources": [
+    {
+      "id": "res-001",
+      "name": "Alice Johnson",
+      "role": "DEV",
+      "team": "EP Dev Team",
+      "capacity": 100,
+      "created_at": "2026-01-01T10:00:00Z"
+    },
+    {
+      "id": "res-002",
+      "name": "Bob Smith",
+      "role": "BA",
+      "team": "BA",
+      "capacity": 100,
+      "created_at": "2026-01-01T10:00:00Z"
+    },
+    {
+      "id": "res-003",
+      "name": "Carol White",
+      "role": "DEV",
+      "team": "EP Dev Team",
+      "capacity": 100,
+      "created_at": "2026-01-01T10:00:00Z"
+    }
+  ],
+  "individual_holidays": [],
+  "holidays": [
+    {
+      "id": "hol-001",
+      "date": "2026-04-04",
+      "name": "Ching Ming Festival",
+      "duration": 1,
+      "country": "HK",
+      "created_at": "2026-01-01T10:00:00Z"
+    },
+    {
+      "id": "hol-002",
+      "date": "2026-04-09",
+      "name": "Easter",
+      "duration": 0.5,
+      "country": "HK",
+      "created_at": "2026-01-01T10:00:00Z"
+    },
+    {
+      "id": "hol-003",
+      "date": "2026-05-01",
+      "name": "Labour Day",
+      "duration": 1,
+      "country": "HK",
+      "created_at": "2026-01-01T10:00:00Z"
+    }
+  ],
+  "resource_allocations": [
+    {
+      "id": "alloc-001",
+      "assignment_id": "assign-001",
+      "week_id": "2026-13",
+      "percentage": 100,
+      "user_id": "mock-user-001",
+      "created_at": "2026-01-15T10:00:00Z"
+    },
+    {
+      "id": "alloc-002",
+      "assignment_id": "assign-001",
+      "week_id": "2026-14",
+      "percentage": 100,
+      "user_id": "mock-user-001",
+      "created_at": "2026-01-15T10:00:00Z"
+    }
+  ],
+  "versions": []
+}

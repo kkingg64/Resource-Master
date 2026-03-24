@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMS Data Loader - For Local Testing</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+        h1 {
+            color: #1f2937;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .subtitle {
+            color: #6b7280;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        .section-title {
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+        .info-box {
+            background: #f0f9ff;
+            border-left: 4px solid #0ea5e9;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            color: #0c4a6e;
+            line-height: 1.5;
+        }
+        .warning-box {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            color: #78350f;
+            line-height: 1.5;
+        }
+        .code-block {
+            background: #1f2937;
+            color: #f3f4f6;
+            padding: 12px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            margin: 12px 0;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+            width: 100%;
+            margin-bottom: 8px;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        button.secondary {
+            background: #e5e7eb;
+            color: #1f2937;
+        }
+        button.secondary:hover {
+            background: #d1d5db;
+        }
+        .status {
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 12px;
+            font-size: 13px;
+        }
+        .status.success {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+        .status.loading {
+            background: #e0e7ff;
+            color: #3730a3;
+            border: 1px solid #c7d2fe;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 OMS Data Loader</h1>
+        <p class="subtitle">For Local Testing - Offline Mode</p>
+
+        <div class="section">
+            <div class="section-title">📥 步驟 1: Export Live Data</div>
+            <div class="info-box">
+                ⏳ 首先係需要export你個live Supabase data到本地JSON files。
+            </div>
+            <div class="warning-box">
+                ⚠️ 注意：呢步需要你個live database credentials係有效嘅
+            </div>
+            <div class="code-block">npm run export-data</div>
+            <p style="color: #6b7280; font-size: 12px; margin-top: 8px;">
+                💡 呢個會生成 <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 3px;">data-export/</code> 資料夾含所有你個data
+            </p>
+        </div>
+
+        <div class="section">
+            <div class="section-title">✅ 步驟 2: Import Data Locally</div>
+            <div class="info-box">
+                Export完成後，按下面個button去load data到browser localStorage (offline mode)
+            </div>
+            <button onclick="loadDataFromDirectory()">📂 Choose data-export folder to import</button>
+            <p style="color: #6b7280; font-size: 12px; margin-top: 8px; text-align: center;">
+                或者 → 打開瀏覽器 Console (F12) 執行下面命令
+            </p>
+            <div class="code-block">window.__loadDataFromExport()</div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">🔌 步驟 3: Enable Offline Mode</div>
+            <div class="info-box">
+                編輯 <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 3px;">.env.local</code> 確保有：<br><br>
+                <code style="background: #1f2937; color: #f3f4f6; padding: 4px 8px; border-radius: 3px; display: inline-block; margin-top: 8px;">VITE_USE_LOCAL_DATA=true</code>
+            </div>
+            <button class="secondary" onclick="copyToClipboard('.env.local config')">📋 Copy Config</button>
+        </div>
+
+        <div class="section">
+            <div class="section-title">🚀 步驟 4: Start Offline</div>
+            <div class="info-box">
+                Refresh browser (F5) 或 restart dev server
+            </div>
+            <button onclick="showAlert()">✨ Ready to test!</button>
+        </div>
+
+        <div id="status"></div>
+    </div>
+
+    <script>
+        function showAlert() {
+            alert('✨ Great! 依照上面3個步驟就可以安心做本地testing咗！\n\n記得check browser console睇有冇error。');
+        }
+
+        function copyToClipboard(text) {
+            const config = 'VITE_USE_LOCAL_DATA=true';
+            navigator.clipboard.writeText(config);
+            alert('✅ Copied to clipboard!\n\n' + config);
+        }
+
+        function showStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.innerHTML = `<div class="status ${type}">${message}</div>`;
+            setTimeout(() => { status.innerHTML = ''; }, 5000);
+        }
+
+        async function loadDataFromDirectory() {
+            try {
+                const handle = await window.showDirectoryPicker();
+                showStatus('⏳ Loading files...', 'loading');
+                
+                const data = {};
+                const tables = [
+                    'projects', 'project_members', 'modules', 'tasks', 
+                    'task_assignments', 'resources', 'individual_holidays', 
+                    'holidays', 'resource_allocations', 'versions'
+                ];
+
+                for (const table of tables) {
+                    try {
+                        const file = await handle.getFileHandle(`${table}.json`);
+                        const text = await file.getFile().then(f => f.text());
+                        data[table] = JSON.parse(text);
+                    } catch (e) {
+                        console.warn(`⚠️ ${table}.json not found`);
+                    }
+                }
+
+                // Import to localStorage
+                for (const [table, records] of Object.entries(data)) {
+                    localStorage.setItem(`oms_data_${table}`, JSON.stringify(records));
+                }
+
+                const totalRecords = Object.values(data).reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0);
+                showStatus(`✅ Successfully imported ${totalRecords} records!`, 'success');
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Make load function available globally
+        window.__loadDataFromExport = async function() {
+            console.log('🔄 Loading data from localStorage...');
+            await loadDataFromDirectory();
+        };
+
+        console.log('%c🎉 OMS Data Loader Ready', 'font-size: 16px; color: #667eea; font-weight: bold');
+        console.log('%cTip: Use window.__loadDataFromExport() to load data from directory', 'color: #6b7280');
+    </script>
+</body>
+</html>
