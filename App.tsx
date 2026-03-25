@@ -1550,7 +1550,7 @@ export const App: React.FC = () => {
                          onClick={() => setIsAIPanelVisible(!isAIPanelVisible)}
                      onMouseEnter={() => preloadChunk('panel:ai', loadAIAssistant)}
                      onFocus={() => preloadChunk('panel:ai', loadAIAssistant)}
-                         className={`absolute bottom-4 right-4 z-10 flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${isAIPanelVisible ? 'text-indigo-600 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100' : 'text-slate-600 bg-white border border-slate-200 hover:bg-slate-50'}`}
+                        className={`absolute bottom-4 right-4 z-[120] flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${isAIPanelVisible ? 'text-indigo-600 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100' : 'text-slate-600 bg-white border border-slate-200 hover:bg-slate-50'}`}
                          title={isAIPanelVisible ? 'Hide AI Copilot' : 'Show AI Copilot'}
                      >
                          <Sparkles size={16} /> {isAIPanelVisible ? 'Hide' : 'Show'} AI

@@ -180,6 +180,7 @@ const TOOLS = [
   { type: 'function' as const, function: { name: 'updateModuleName', description: 'Rename a module.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, name: { type: 'string' } }, required: ['projectId', 'moduleId', 'name'] } } },
   { type: 'function' as const, function: { name: 'updateTaskName', description: 'Rename a task.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, taskId: { type: 'string' }, name: { type: 'string' } }, required: ['projectId', 'moduleId', 'taskId', 'name'] } } },
   { type: 'function' as const, function: { name: 'assignResource', description: 'Assign a person to an assignment.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, taskId: { type: 'string' }, assignmentId: { type: 'string' }, resourceName: { type: 'string' } }, required: ['projectId', 'moduleId', 'taskId', 'assignmentId', 'resourceName'] } } },
+  { type: 'function' as const, function: { name: 'assignResourceBulk', description: 'Assign a person to multiple assignments in one call. Use for requests like "apply to all" or "every assignment".', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, taskId: { type: 'string' }, assignmentIds: { type: 'array', items: { type: 'string' } }, resourceName: { type: 'string' } }, required: ['projectId', 'moduleId', 'taskId', 'assignmentIds', 'resourceName'] } } },
   { type: 'function' as const, function: { name: 'updateSchedule', description: 'Update start date & duration (working days) of an assignment.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, startDate: { type: 'string', description: 'YYYY-MM-DD' }, duration: { type: 'number' } }, required: ['assignmentId', 'startDate', 'duration'] } } },
   { type: 'function' as const, function: { name: 'updateAllocation', description: 'Update allocation value for an assignment at week/day granularity.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, weekId: { type: 'string', description: 'YYYY-WW' }, value: { type: 'number' }, dayDate: { type: 'string', description: 'Optional YYYY-MM-DD for day-level allocation inside the week.' } }, required: ['assignmentId', 'weekId', 'value'] } } },
   { type: 'function' as const, function: { name: 'updateProgress', description: 'Update progress (0-100) of an assignment.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, progress: { type: 'number' } }, required: ['assignmentId', 'progress'] } } },
@@ -214,6 +215,8 @@ Guidelines:
 - Progress is 0–100.
 - Actual completion date is optional and uses YYYY-MM-DD.
 - When user says "assign X to task Y", first look up the task to get assignmentId, then call assignResource.
+- For requests that say "all", "every", or "apply to all", do not stop after one record. Use assignResourceBulk (or multiple assignResource calls) until all matched assignments are updated.
+- For bulk updates, always report requested count, updated count, and skipped count.
 - Confirm destructive actions (delete) before executing.
 - Do not perform any delete actions. Timeline deletions are disabled for AI.
 - If user refers to items by name, use listProjects/getProjectDetails to find IDs first.
@@ -540,6 +543,40 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
           case 'updateModuleName': onUpdateModuleName(args.projectId, args.moduleId, args.name); result = { success: true }; break;
           case 'updateTaskName': onUpdateTaskName(args.projectId, args.moduleId, args.taskId, args.name); result = { success: true }; break;
           case 'assignResource': onUpdateAssignmentResourceName(args.projectId, args.moduleId, args.taskId, args.assignmentId, args.resourceName); result = { success: true }; break;
+          case 'assignResourceBulk': {
+            const assignmentIds = Array.isArray(args.assignmentIds)
+              ? Array.from(new Set(args.assignmentIds.map((id: any) => String(id).trim()).filter(Boolean)))
+              : [];
+            if (assignmentIds.length === 0) {
+              result = { error: 'assignmentIds must be a non-empty array of IDs.' };
+              break;
+            }
+
+            const project = projectsRef.current.find((p) => p.id === args.projectId);
+            const module = project?.modules.find((m) => m.id === args.moduleId);
+            const task = module?.tasks.find((t) => t.id === args.taskId);
+            if (!task) {
+              result = { error: 'Project/module/task not found. Use getProjectDetails to retrieve correct IDs.' };
+              break;
+            }
+
+            const taskAssignmentIds = new Set(task.assignments.map((a) => a.id));
+            const validIds = assignmentIds.filter((id) => taskAssignmentIds.has(id));
+            const skippedIds = assignmentIds.filter((id) => !taskAssignmentIds.has(id));
+
+            for (const assignmentId of validIds) {
+              await Promise.resolve(onUpdateAssignmentResourceName(args.projectId, args.moduleId, args.taskId, assignmentId, args.resourceName) as any);
+            }
+
+            result = {
+              success: true,
+              requested: assignmentIds.length,
+              updated: validIds.length,
+              skipped: skippedIds.length,
+              skippedIds,
+            };
+            break;
+          }
           case 'updateSchedule': onUpdateAssignmentSchedule(args.assignmentId, args.startDate, args.duration); result = { success: true }; break;
           case 'updateAllocation': {
             if (!onUpdateAllocationByAssignment) {
@@ -719,7 +756,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
       let turns = 0;
       let finalContent = '';
       let modelIndex = 0;
-      while (turns < 8) {
+      while (turns < 16) {
         const modelHistory = prepareHistoryForModel(conversationHistory.current);
         const model = MODEL_CANDIDATES[modelIndex];
         const res = await fetch('/api/github-models', {
