@@ -6,6 +6,26 @@
       "destination": "https://api.groq.com/openai/v1/chat/completions"
     },
     {
+      "source": "/api/github-models",
+      "destination": "https://models.inference.ai.azure.com/chat/completions"
+    },
+    {
+      "source": "/api/github-device-code",
+      "destination": "https://github.com/login/device/code"
+    },
+    {
+      "source": "/api/github-oauth-token",
+      "destination": "https://github.com/login/oauth/access_token"
+    },
+    {
+      "source": "/api/github-user",
+      "destination": "https://api.github.com/user"
+    },
+    {
+      "source": "/api/smartsheet/:path*",
+      "destination": "https://api.smartsheet.com/2.0/:path*"
+    },
+    {
       "source": "/assets/:path*",
       "destination": "/assets/:path*"
     },
@@ -29,7 +49,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co https://api.groq.com; img-src 'self' data: blob:;"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co https://api.groq.com https://github.com https://api.github.com https://models.inference.ai.azure.com https://api.smartsheet.com; img-src 'self' data: blob:;"
         },
         {
           "key": "X-Frame-Options",
