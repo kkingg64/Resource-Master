@@ -55,6 +55,7 @@ export interface TaskAssignment {
   startWeekId?: string; // DEPRECATED: Auto-scheduler start
   duration?: number;    // Auto-scheduler duration in DAYS
   progress?: number;    // 0 to 100 percentage
+  actualDate?: string;  // YYYY-MM-DD Actual completion date (source of truth in DB)
   parentAssignmentId?: string; // ID of the task this one depends on
   sort_order?: number;
 }

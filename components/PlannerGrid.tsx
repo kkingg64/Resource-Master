@@ -137,6 +137,7 @@ interface PlannerGridProps {
   isRefreshing: boolean;
   isReadOnly?: boolean;
   collapseResourceRowsSignal?: number;
+  onSetActualDate?: (assignmentId: string, actualDate: string | null) => void;
 }
 
 const SaveStatusIndicator: React.FC<{ status: PlannerGridProps['saveStatus'] }> = ({ status }) => {
@@ -400,6 +401,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
   isRefreshing,
   isReadOnly = false,
   collapseResourceRowsSignal = 0,
+  onSetActualDate,
 }) => {
   // Ref to always access the latest projects without adding projects as a dep in signal-based effects.
   const projectsRef = useRef(projects);
@@ -578,6 +580,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
   const actualDateOverrides = useRef<Map<string, string>>(null!);
   if (actualDateOverrides.current === null) {
     const map = new Map<string, string>();
+    // Seed from localStorage (offline/cached values)
     try {
       const saved = localStorage.getItem('oms_assignment_actual_dates_v1');
       if (saved) {
@@ -589,8 +592,25 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
         });
       }
     } catch {}
+    // Seed from DB values (source of truth — overrides localStorage)
+    projects.forEach((p) => p.modules.forEach((m) => m.tasks.forEach((t) => t.assignments.forEach((a) => {
+      if (a.actualDate) map.set(a.id, a.actualDate);
+    }))));
     actualDateOverrides.current = map;
   }
+
+  useEffect(() => {
+    // When projects reload from DB, re-seed the map with fresh DB values
+    const map = new Map(actualDateOverrides.current);
+    projects.forEach((p) => p.modules.forEach((m) => m.tasks.forEach((t) => t.assignments.forEach((a) => {
+      if (a.actualDate) {
+        map.set(a.id, a.actualDate);
+      }
+    }))));
+    actualDateOverrides.current = map;
+    setActualDateVersion((prev) => prev + 1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects]);
 
   useEffect(() => {
     const syncActualDatesFromStorage = () => {
@@ -608,6 +628,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
       } catch {
         // Ignore malformed storage data.
       }
+      // Merge DB values on top (DB wins)
+      projects.forEach((p) => p.modules.forEach((m) => m.tasks.forEach((t) => t.assignments.forEach((a) => {
+        if (a.actualDate) map.set(a.id, a.actualDate);
+      }))));
       actualDateOverrides.current = map;
       setActualDateVersion((prev) => prev + 1);
     };
@@ -615,6 +639,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
     if (typeof window === 'undefined') return;
     window.addEventListener('oms-actual-date-updated', syncActualDatesFromStorage);
     return () => window.removeEventListener('oms-actual-date-updated', syncActualDatesFromStorage);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const persistWaypointOverrides = useCallback(() => {
@@ -1928,14 +1953,16 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
     actualDateOverrides.current.set(assignment.id, normalizedDate);
     persistActualDateOverrides();
     setActualDateVersion(prev => prev + 1);
-  }, [isReadOnly, persistActualDateOverrides]);
+    onSetActualDate?.(assignment.id, normalizedDate);
+  }, [isReadOnly, persistActualDateOverrides, onSetActualDate]);
 
   const clearActualCompletionDate = useCallback((assignment: TaskAssignment) => {
     if (isReadOnly) return;
     actualDateOverrides.current.delete(assignment.id);
     persistActualDateOverrides();
     setActualDateVersion(prev => prev + 1);
-  }, [isReadOnly, persistActualDateOverrides]);
+    onSetActualDate?.(assignment.id, null);
+  }, [isReadOnly, persistActualDateOverrides, onSetActualDate]);
 
   const clearActualDatesForAssignments = useCallback((assignments: TaskAssignment[]) => {
     if (isReadOnly || assignments.length === 0) return;

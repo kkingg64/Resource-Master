@@ -387,6 +387,7 @@ const structureProjectsData = (
       progress: typeof a.progress === 'number' && Number.isFinite(a.progress)
         ? Math.max(0, Math.min(100, Math.round(a.progress)))
         : undefined,
+      actualDate: typeof a.actual_date === 'string' && a.actual_date ? a.actual_date : undefined,
       parentAssignmentId: a.parent_assignment_id,
       sort_order: a.sort_order,
       allocations: allocationsByAssignment.get(a.id) || [],
@@ -2209,6 +2210,27 @@ export const App: React.FC = () => {
                     saveStatus={saveStatus}
                     isRefreshing={isRefreshing}
                     isReadOnly={isReadOnlyMode}
+                    onSetActualDate={async (aid, actualDate) => {
+                      const normalized = actualDate && /^\d{4}-\d{2}-\d{2}$/.test(actualDate) ? actualDate : null;
+                      // Optimistic update in state
+                      setProjects(prev => prev.map(p => ({
+                        ...p,
+                        modules: p.modules.map(m => ({
+                          ...m,
+                          tasks: m.tasks.map(t => ({
+                            ...t,
+                            assignments: t.assignments.map(a => a.id === aid ? { ...a, actualDate: normalized ?? undefined } : a)
+                          }))
+                        }))
+                      })));
+                      if (!isOfflineMode) {
+                        await runMutation(
+                          'Set Actual Date',
+                          { assignment_id: aid, actual_date: normalized },
+                          supabase.from('task_assignments').update({ actual_date: normalized }).eq('id', aid)
+                        );
+                      }
+                    }}
                  />
              )}
              {activeTab === 'estimator' && (
@@ -2429,8 +2451,26 @@ export const App: React.FC = () => {
                        setProjects(previousProjects);
                      }
                    }}
-                   onUpdateAssignmentActualDate={(aid, actualDate) => {
+                   onUpdateAssignmentActualDate={async (aid, actualDate) => {
                      const normalized = actualDate && /^\d{4}-\d{2}-\d{2}$/.test(actualDate) ? actualDate : null;
+                     // Optimistic update in state
+                     setProjects(prev => prev.map(p => ({
+                       ...p,
+                       modules: p.modules.map(m => ({
+                         ...m,
+                         tasks: m.tasks.map(t => ({
+                           ...t,
+                           assignments: t.assignments.map(a => a.id === aid ? { ...a, actualDate: normalized ?? undefined } : a)
+                         }))
+                       }))
+                     })));
+                     if (!isOfflineMode) {
+                       await runMutation(
+                         'Set Actual Date (AI Panel)',
+                         { assignment_id: aid, actual_date: normalized },
+                         supabase.from('task_assignments').update({ actual_date: normalized }).eq('id', aid)
+                       );
+                     }
                      try {
                        const raw = localStorage.getItem('oms_assignment_actual_dates_v1');
                        const parsed = raw ? JSON.parse(raw) as Record<string, string> : {};
