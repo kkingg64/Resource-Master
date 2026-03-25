@@ -180,13 +180,13 @@ const TOOLS = [
   { type: 'function' as const, function: { name: 'updateModuleName', description: 'Rename a module.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, name: { type: 'string' } }, required: ['projectId', 'moduleId', 'name'] } } },
   { type: 'function' as const, function: { name: 'updateTaskName', description: 'Rename a task.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, taskId: { type: 'string' }, name: { type: 'string' } }, required: ['projectId', 'moduleId', 'taskId', 'name'] } } },
   { type: 'function' as const, function: { name: 'assignResource', description: 'Assign a person to an assignment.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, taskId: { type: 'string' }, assignmentId: { type: 'string' }, resourceName: { type: 'string' } }, required: ['projectId', 'moduleId', 'taskId', 'assignmentId', 'resourceName'] } } },
-  { type: 'function' as const, function: { name: 'assignResourceBulk', description: 'Assign a person to multiple assignments in one call. Use for requests like "apply to all" or "every assignment".', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, taskId: { type: 'string' }, assignmentIds: { type: 'array', items: { type: 'string' } }, resourceName: { type: 'string' } }, required: ['projectId', 'moduleId', 'taskId', 'assignmentIds', 'resourceName'] } } },
+  { type: 'function' as const, function: { name: 'assignResourceBulk', description: 'Assign a person to multiple assignments in one call. Use for requests like "apply to all" or "every assignment".', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, taskId: { type: 'string' }, assignmentIds: { type: 'array', items: { type: 'string' } }, resourceName: { type: 'string' }, force: { type: 'boolean', description: 'Set true only after confirming the count for large updates.' } }, required: ['projectId', 'moduleId', 'taskId', 'assignmentIds', 'resourceName'] } } },
   { type: 'function' as const, function: { name: 'updateSchedule', description: 'Update start date & duration (working days) of an assignment.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, startDate: { type: 'string', description: 'YYYY-MM-DD' }, duration: { type: 'number' } }, required: ['assignmentId', 'startDate', 'duration'] } } },
   { type: 'function' as const, function: { name: 'updateAllocation', description: 'Update allocation value for an assignment at week/day granularity.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, weekId: { type: 'string', description: 'YYYY-WW' }, value: { type: 'number' }, dayDate: { type: 'string', description: 'Optional YYYY-MM-DD for day-level allocation inside the week.' } }, required: ['assignmentId', 'weekId', 'value'] } } },
   { type: 'function' as const, function: { name: 'updateProgress', description: 'Update progress (0-100) of an assignment.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, progress: { type: 'number' } }, required: ['assignmentId', 'progress'] } } },
   { type: 'function' as const, function: { name: 'updateActualDate', description: 'Set or clear actual completion date for an assignment. To clear it, omit actualDate or pass null.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, actualDate: { type: 'string', description: 'YYYY-MM-DD. Optional; null/omit to clear.' } }, required: ['assignmentId'] } } },
-  { type: 'function' as const, function: { name: 'updateActualDateBulk', description: 'Set or clear actual completion date for multiple assignments in one call. Use this for "clear actual dates" / "apply to all" requests.', parameters: { type: 'object', properties: { assignmentIds: { type: 'array', items: { type: 'string' } }, actualDate: { type: 'string', description: 'YYYY-MM-DD. Omit/null to clear.' } }, required: ['assignmentIds'] } } },
-  { type: 'function' as const, function: { name: 'syncModuleActualDatesToPlannedEnd', description: 'For a module, set each assignment actual completion date to its planned end date based on startDate + duration (working days). Optional resourceNames filter.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, resourceNames: { type: 'array', items: { type: 'string' }, description: 'Optional list of resource names to limit updates.' } }, required: ['projectId', 'moduleId'] } } },
+  { type: 'function' as const, function: { name: 'updateActualDateBulk', description: 'Set or clear actual completion date for multiple assignments in one call. Use this for "clear actual dates" / "apply to all" requests.', parameters: { type: 'object', properties: { assignmentIds: { type: 'array', items: { type: 'string' } }, actualDate: { type: 'string', description: 'YYYY-MM-DD. Omit/null to clear.' }, force: { type: 'boolean', description: 'Set true only after confirming the count for large updates.' } }, required: ['assignmentIds'] } } },
+  { type: 'function' as const, function: { name: 'syncModuleActualDatesToPlannedEnd', description: 'For a module, set each assignment actual completion date to its planned end date based on startDate + duration (working days). Optional resourceNames filter.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, resourceNames: { type: 'array', items: { type: 'string' }, description: 'Optional list of resource names to limit updates.' }, force: { type: 'boolean', description: 'Set true only after confirming the count for large updates.' } }, required: ['projectId', 'moduleId'] } } },
   { type: 'function' as const, function: { name: 'copyAssignment', description: 'Duplicate an assignment (including allocations where available) by assignment ID.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' } }, required: ['assignmentId'] } } },
   { type: 'function' as const, function: { name: 'reorderModules', description: 'Reorder modules within a project.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, startIndex: { type: 'number' }, endIndex: { type: 'number' } }, required: ['projectId', 'startIndex', 'endIndex'] } } },
   { type: 'function' as const, function: { name: 'reorderTasks', description: 'Reorder tasks within a module.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, startIndex: { type: 'number' }, endIndex: { type: 'number' } }, required: ['projectId', 'moduleId', 'startIndex', 'endIndex'] } } },
@@ -221,6 +221,8 @@ Guidelines:
 - For bulk updates, always report requested count, updated count, and skipped count.
 - For "set actual end date to planned end date" requests on a whole module (or all resources in a module), prefer syncModuleActualDatesToPlannedEnd.
 - For "clear actual date" requests, use updateActualDateBulk when multiple assignments are involved and return requested/updated/skipped counts.
+- Bulk safety rule: if matched records are large (>20), do NOT execute immediately unless the user explicitly confirms the count, or use force=true after confirmation.
+- If scope is ambiguous (for example, "user module" could match multiple modules), first call getProjectDetails and resolve exact project/module IDs before making updates.
 - Confirm destructive actions (delete) before executing.
 - Do not perform any delete actions. Timeline deletions are disabled for AI.
 - If user refers to items by name, use listProjects/getProjectDetails to find IDs first.
@@ -607,6 +609,17 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
             const validIds = assignmentIds.filter((id) => taskAssignmentIds.has(id));
             const skippedIds = assignmentIds.filter((id) => !taskAssignmentIds.has(id));
 
+            if (validIds.length > 20 && args.force !== true) {
+              result = {
+                error: `Large bulk update blocked: ${validIds.length} records matched. Confirm scope and retry with force=true if intended.`,
+                requested: assignmentIds.length,
+                matched: validIds.length,
+                skipped: skippedIds.length,
+                skippedIds,
+              };
+              break;
+            }
+
             for (const assignmentId of validIds) {
               await Promise.resolve(onUpdateAssignmentResourceName(args.projectId, args.moduleId, args.taskId, assignmentId, args.resourceName) as any);
             }
@@ -729,6 +742,17 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
             const validIds = ids.filter((id) => validSet.has(id));
             const skippedIds = ids.filter((id) => !validSet.has(id));
 
+            if (validIds.length > 20 && args.force !== true) {
+              result = {
+                error: `Large bulk update blocked: ${validIds.length} records matched. Confirm scope and retry with force=true if intended.`,
+                requested: ids.length,
+                matched: validIds.length,
+                skipped: skippedIds.length,
+                skippedIds,
+              };
+              break;
+            }
+
             for (const assignmentId of validIds) {
               await Promise.resolve(onUpdateAssignmentActualDate(assignmentId, actualDate) as any);
             }
@@ -762,6 +786,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
             let requested = 0;
             let updated = 0;
             const skipped: Array<{ assignmentId: string; reason: string }> = [];
+            const toUpdate: Array<{ assignmentId: string; plannedEndYmd: string }> = [];
 
             for (const task of module.tasks) {
               for (const assignment of task.assignments) {
@@ -778,9 +803,26 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
 
                 const plannedEnd = addWorkingDaysInclusive(parseYmd(assignment.startDate), Number(assignment.duration));
                 const plannedEndYmd = fmt(plannedEnd);
-                await Promise.resolve(onUpdateAssignmentActualDate(assignment.id, plannedEndYmd) as any);
-                updated += 1;
+                toUpdate.push({ assignmentId: assignment.id, plannedEndYmd });
               }
+            }
+
+            if (toUpdate.length > 20 && args.force !== true) {
+              result = {
+                error: `Large bulk update blocked: ${toUpdate.length} records matched in module '${module.name}'. Confirm scope and retry with force=true if intended.`,
+                moduleId: module.id,
+                moduleName: module.name,
+                requested,
+                matched: toUpdate.length,
+                skipped: skipped.length,
+                skippedAssignments: skipped,
+              };
+              break;
+            }
+
+            for (const item of toUpdate) {
+              await Promise.resolve(onUpdateAssignmentActualDate(item.assignmentId, item.plannedEndYmd) as any);
+              updated += 1;
             }
 
             result = {
