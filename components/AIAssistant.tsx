@@ -185,6 +185,7 @@ const TOOLS = [
   { type: 'function' as const, function: { name: 'updateAllocation', description: 'Update allocation value for an assignment at week/day granularity.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, weekId: { type: 'string', description: 'YYYY-WW' }, value: { type: 'number' }, dayDate: { type: 'string', description: 'Optional YYYY-MM-DD for day-level allocation inside the week.' } }, required: ['assignmentId', 'weekId', 'value'] } } },
   { type: 'function' as const, function: { name: 'updateProgress', description: 'Update progress (0-100) of an assignment.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, progress: { type: 'number' } }, required: ['assignmentId', 'progress'] } } },
   { type: 'function' as const, function: { name: 'updateActualDate', description: 'Set or clear actual completion date for an assignment. To clear it, omit actualDate or pass null.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, actualDate: { type: 'string', description: 'YYYY-MM-DD. Optional; null/omit to clear.' } }, required: ['assignmentId'] } } },
+  { type: 'function' as const, function: { name: 'updateActualDateBulk', description: 'Set or clear actual completion date for multiple assignments in one call. Use this for "clear actual dates" / "apply to all" requests.', parameters: { type: 'object', properties: { assignmentIds: { type: 'array', items: { type: 'string' } }, actualDate: { type: 'string', description: 'YYYY-MM-DD. Omit/null to clear.' } }, required: ['assignmentIds'] } } },
   { type: 'function' as const, function: { name: 'syncModuleActualDatesToPlannedEnd', description: 'For a module, set each assignment actual completion date to its planned end date based on startDate + duration (working days). Optional resourceNames filter.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, resourceNames: { type: 'array', items: { type: 'string' }, description: 'Optional list of resource names to limit updates.' } }, required: ['projectId', 'moduleId'] } } },
   { type: 'function' as const, function: { name: 'copyAssignment', description: 'Duplicate an assignment (including allocations where available) by assignment ID.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' } }, required: ['assignmentId'] } } },
   { type: 'function' as const, function: { name: 'reorderModules', description: 'Reorder modules within a project.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, startIndex: { type: 'number' }, endIndex: { type: 'number' } }, required: ['projectId', 'startIndex', 'endIndex'] } } },
@@ -219,6 +220,7 @@ Guidelines:
 - For requests that say "all", "every", or "apply to all", do not stop after one record. Use assignResourceBulk (or multiple assignResource calls) until all matched assignments are updated.
 - For bulk updates, always report requested count, updated count, and skipped count.
 - For "set actual end date to planned end date" requests on a whole module (or all resources in a module), prefer syncModuleActualDatesToPlannedEnd.
+- For "clear actual date" requests, use updateActualDateBulk when multiple assignments are involved and return requested/updated/skipped counts.
 - Confirm destructive actions (delete) before executing.
 - Do not perform any delete actions. Timeline deletions are disabled for AI.
 - If user refers to items by name, use listProjects/getProjectDetails to find IDs first.
@@ -229,7 +231,7 @@ Guidelines:
 - createPhasedProjectTimeline is an atomic tool: after calling it successfully, do NOT call addProject, addModule, addTask, addAssignment, or updateSchedule for that same request unless the user explicitly asks for a separate follow-up change.
 - To remove ALL dependencies in a module, use clearModuleDependencies (pass projectId + moduleId).
 - To remove a single dependency, use setDependency with only childAssignmentId (omit parentAssignmentId).
-- ALWAYS call getProjectDetails before setDependency, updateProgress, updateActualDate, syncModuleActualDatesToPlannedEnd, or clearModuleDependencies to obtain correct IDs.
+- ALWAYS call getProjectDetails before setDependency, updateProgress, updateActualDate, updateActualDateBulk, syncModuleActualDatesToPlannedEnd, or clearModuleDependencies to obtain correct IDs.
 
 CRITICAL FOR TIMELINE CREATION:
 - When creating a project with phases/modules, you MUST also create tasks within those modules and assignments for those tasks with SCHEDULE information.
@@ -624,6 +626,12 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
               result = { error: 'Actual date update is not enabled in this app instance.' };
               break;
             }
+            const allAssignments = projectsRef.current.flatMap((p) => p.modules.flatMap((m) => m.tasks.flatMap((t) => t.assignments)));
+            const target = allAssignments.find((a) => a.id === args.assignmentId);
+            if (!target) {
+              result = { error: `Assignment '${args.assignmentId}' not found. Use getProjectDetails to retrieve correct IDs.` };
+              break;
+            }
             const rawDate = args.actualDate;
             const actualDate = (!rawDate || rawDate === 'null' || rawDate === 'undefined') ? null : String(rawDate).trim();
             if (actualDate && !/^\d{4}-\d{2}-\d{2}$/.test(actualDate)) {
@@ -631,7 +639,46 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
               break;
             }
             onUpdateAssignmentActualDate(args.assignmentId, actualDate);
-            result = { success: true, actualDate: actualDate || null };
+            result = { success: true, assignmentId: args.assignmentId, actualDate: actualDate || null };
+            break;
+          }
+          case 'updateActualDateBulk': {
+            if (!onUpdateAssignmentActualDate) {
+              result = { error: 'Actual date update is not enabled in this app instance.' };
+              break;
+            }
+            const ids = Array.isArray(args.assignmentIds)
+              ? Array.from(new Set(args.assignmentIds.map((id: any) => String(id).trim()).filter(Boolean)))
+              : [];
+            if (ids.length === 0) {
+              result = { error: 'assignmentIds must be a non-empty array of IDs.' };
+              break;
+            }
+
+            const rawDate = args.actualDate;
+            const actualDate = (!rawDate || rawDate === 'null' || rawDate === 'undefined') ? null : String(rawDate).trim();
+            if (actualDate && !/^\d{4}-\d{2}-\d{2}$/.test(actualDate)) {
+              result = { error: 'Invalid actualDate format. Use YYYY-MM-DD.' };
+              break;
+            }
+
+            const allAssignments = projectsRef.current.flatMap((p) => p.modules.flatMap((m) => m.tasks.flatMap((t) => t.assignments)));
+            const validSet = new Set(allAssignments.map((a) => a.id));
+            const validIds = ids.filter((id) => validSet.has(id));
+            const skippedIds = ids.filter((id) => !validSet.has(id));
+
+            for (const assignmentId of validIds) {
+              await Promise.resolve(onUpdateAssignmentActualDate(assignmentId, actualDate) as any);
+            }
+
+            result = {
+              success: true,
+              requested: ids.length,
+              updated: validIds.length,
+              skipped: skippedIds.length,
+              actualDate: actualDate || null,
+              skippedIds,
+            };
             break;
           }
           case 'syncModuleActualDatesToPlannedEnd': {
