@@ -185,6 +185,7 @@ const TOOLS = [
   { type: 'function' as const, function: { name: 'updateAllocation', description: 'Update allocation value for an assignment at week/day granularity.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, weekId: { type: 'string', description: 'YYYY-WW' }, value: { type: 'number' }, dayDate: { type: 'string', description: 'Optional YYYY-MM-DD for day-level allocation inside the week.' } }, required: ['assignmentId', 'weekId', 'value'] } } },
   { type: 'function' as const, function: { name: 'updateProgress', description: 'Update progress (0-100) of an assignment.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, progress: { type: 'number' } }, required: ['assignmentId', 'progress'] } } },
   { type: 'function' as const, function: { name: 'updateActualDate', description: 'Set or clear actual completion date for an assignment. To clear it, omit actualDate or pass null.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, actualDate: { type: 'string', description: 'YYYY-MM-DD. Optional; null/omit to clear.' } }, required: ['assignmentId'] } } },
+  { type: 'function' as const, function: { name: 'syncModuleActualDatesToPlannedEnd', description: 'For a module, set each assignment actual completion date to its planned end date based on startDate + duration (working days). Optional resourceNames filter.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, resourceNames: { type: 'array', items: { type: 'string' }, description: 'Optional list of resource names to limit updates.' } }, required: ['projectId', 'moduleId'] } } },
   { type: 'function' as const, function: { name: 'copyAssignment', description: 'Duplicate an assignment (including allocations where available) by assignment ID.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' } }, required: ['assignmentId'] } } },
   { type: 'function' as const, function: { name: 'reorderModules', description: 'Reorder modules within a project.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, startIndex: { type: 'number' }, endIndex: { type: 'number' } }, required: ['projectId', 'startIndex', 'endIndex'] } } },
   { type: 'function' as const, function: { name: 'reorderTasks', description: 'Reorder tasks within a module.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, startIndex: { type: 'number' }, endIndex: { type: 'number' } }, required: ['projectId', 'moduleId', 'startIndex', 'endIndex'] } } },
@@ -217,6 +218,7 @@ Guidelines:
 - When user says "assign X to task Y", first look up the task to get assignmentId, then call assignResource.
 - For requests that say "all", "every", or "apply to all", do not stop after one record. Use assignResourceBulk (or multiple assignResource calls) until all matched assignments are updated.
 - For bulk updates, always report requested count, updated count, and skipped count.
+- For "set actual end date to planned end date" requests on a whole module (or all resources in a module), prefer syncModuleActualDatesToPlannedEnd.
 - Confirm destructive actions (delete) before executing.
 - Do not perform any delete actions. Timeline deletions are disabled for AI.
 - If user refers to items by name, use listProjects/getProjectDetails to find IDs first.
@@ -227,7 +229,7 @@ Guidelines:
 - createPhasedProjectTimeline is an atomic tool: after calling it successfully, do NOT call addProject, addModule, addTask, addAssignment, or updateSchedule for that same request unless the user explicitly asks for a separate follow-up change.
 - To remove ALL dependencies in a module, use clearModuleDependencies (pass projectId + moduleId).
 - To remove a single dependency, use setDependency with only childAssignmentId (omit parentAssignmentId).
-- ALWAYS call getProjectDetails before setDependency, updateProgress, updateActualDate, or clearModuleDependencies to obtain correct IDs.
+- ALWAYS call getProjectDetails before setDependency, updateProgress, updateActualDate, syncModuleActualDatesToPlannedEnd, or clearModuleDependencies to obtain correct IDs.
 
 CRITICAL FOR TIMELINE CREATION:
 - When creating a project with phases/modules, you MUST also create tasks within those modules and assignments for those tasks with SCHEDULE information.
@@ -313,6 +315,15 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
   const executeTools = useCallback(async (toolCalls: ToolCall[]): Promise<LLMMessage[]> => {
     const results: LLMMessage[] = [];
     let shouldCollapseResourceRows = false;
+    const actualDateMap: Record<string, string> = (() => {
+      try {
+        const raw = localStorage.getItem('oms_assignment_actual_dates_v1');
+        const parsed = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === 'object' ? parsed as Record<string, string> : {};
+      } catch {
+        return {};
+      }
+    })();
 
     const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
     const fmt = (d: Date) => {
@@ -363,7 +374,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
           case 'getProjectDetails': {
             const p = projectsRef.current.find(x => x.id === args.projectId);
             if (!p) { result = { error: 'Project not found' }; break; }
-            result = { id: p.id, name: p.name, modules: p.modules.map(m => ({ id: m.id, name: m.name, type: m.type, tasks: m.tasks.map(t => ({ id: t.id, name: t.name, assignments: t.assignments.map(a => ({ id: a.id, role: a.role, resource: a.resourceName || 'Unassigned', startDate: a.startDate, duration: a.duration, progress: a.progress ?? 0, parentAssignmentId: a.parentAssignmentId || null })) })) })) };
+            result = { id: p.id, name: p.name, modules: p.modules.map(m => ({ id: m.id, name: m.name, type: m.type, tasks: m.tasks.map(t => ({ id: t.id, name: t.name, assignments: t.assignments.map(a => ({ id: a.id, role: a.role, resource: a.resourceName || 'Unassigned', startDate: a.startDate, duration: a.duration, progress: a.progress ?? 0, actualDate: actualDateMap[a.id] || null, parentAssignmentId: a.parentAssignmentId || null })) })) })) };
             break;
           }
           case 'addProject': {
@@ -621,6 +632,57 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
             }
             onUpdateAssignmentActualDate(args.assignmentId, actualDate);
             result = { success: true, actualDate: actualDate || null };
+            break;
+          }
+          case 'syncModuleActualDatesToPlannedEnd': {
+            if (!onUpdateAssignmentActualDate) {
+              result = { error: 'Actual date update is not enabled in this app instance.' };
+              break;
+            }
+            const project = projectsRef.current.find((p) => p.id === args.projectId);
+            const module = project?.modules.find((m) => m.id === args.moduleId);
+            if (!module) {
+              result = { error: 'Module not found. Use getProjectDetails to obtain correct IDs.' };
+              break;
+            }
+
+            const resourceFilter = Array.isArray(args.resourceNames)
+              ? new Set(args.resourceNames.map((n: any) => String(n).trim().toLowerCase()).filter(Boolean))
+              : null;
+
+            let requested = 0;
+            let updated = 0;
+            const skipped: Array<{ assignmentId: string; reason: string }> = [];
+
+            for (const task of module.tasks) {
+              for (const assignment of task.assignments) {
+                const resourceName = String(assignment.resourceName || 'Unassigned');
+                if (resourceFilter && !resourceFilter.has(resourceName.toLowerCase())) {
+                  continue;
+                }
+                requested += 1;
+
+                if (!assignment.startDate || !Number.isFinite(Number(assignment.duration)) || Number(assignment.duration) <= 0) {
+                  skipped.push({ assignmentId: assignment.id, reason: 'Missing or invalid startDate/duration' });
+                  continue;
+                }
+
+                const plannedEnd = addWorkingDaysInclusive(parseYmd(assignment.startDate), Number(assignment.duration));
+                const plannedEndYmd = fmt(plannedEnd);
+                await Promise.resolve(onUpdateAssignmentActualDate(assignment.id, plannedEndYmd) as any);
+                updated += 1;
+              }
+            }
+
+            result = {
+              success: true,
+              moduleId: module.id,
+              moduleName: module.name,
+              requested,
+              updated,
+              skipped: skipped.length,
+              skippedAssignments: skipped,
+            };
             break;
           }
           case 'copyAssignment': {
