@@ -552,10 +552,40 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
             shouldCollapseResourceRows = true;
             break;
           }
-          case 'updateProjectName': onUpdateProjectName(args.projectId, args.name); result = { success: true }; break;
-          case 'updateModuleName': onUpdateModuleName(args.projectId, args.moduleId, args.name); result = { success: true }; break;
-          case 'updateTaskName': onUpdateTaskName(args.projectId, args.moduleId, args.taskId, args.name); result = { success: true }; break;
-          case 'assignResource': onUpdateAssignmentResourceName(args.projectId, args.moduleId, args.taskId, args.assignmentId, args.resourceName); result = { success: true }; break;
+          case 'updateProjectName': {
+            const _proj = projectsRef.current.find((p) => p.id === args.projectId);
+            if (!_proj) { result = { error: `Project '${args.projectId}' not found.` }; break; }
+            onUpdateProjectName(args.projectId, args.name);
+            result = { success: true };
+            break;
+          }
+          case 'updateModuleName': {
+            const _proj = projectsRef.current.find((p) => p.id === args.projectId);
+            const _mod = _proj?.modules.find((m) => m.id === args.moduleId);
+            if (!_mod) { result = { error: `Module '${args.moduleId}' not found in project '${args.projectId}'.` }; break; }
+            onUpdateModuleName(args.projectId, args.moduleId, args.name);
+            result = { success: true };
+            break;
+          }
+          case 'updateTaskName': {
+            const _proj = projectsRef.current.find((p) => p.id === args.projectId);
+            const _mod = _proj?.modules.find((m) => m.id === args.moduleId);
+            const _task = _mod?.tasks.find((t) => t.id === args.taskId);
+            if (!_task) { result = { error: `Task '${args.taskId}' not found.` }; break; }
+            onUpdateTaskName(args.projectId, args.moduleId, args.taskId, args.name);
+            result = { success: true };
+            break;
+          }
+          case 'assignResource': {
+            const _proj = projectsRef.current.find((p) => p.id === args.projectId);
+            const _mod = _proj?.modules.find((m) => m.id === args.moduleId);
+            const _task = _mod?.tasks.find((t) => t.id === args.taskId);
+            const _assign = _task?.assignments.find((a) => a.id === args.assignmentId);
+            if (!_assign) { result = { error: `Assignment '${args.assignmentId}' not found. Use getProjectDetails to retrieve correct IDs.` }; break; }
+            onUpdateAssignmentResourceName(args.projectId, args.moduleId, args.taskId, args.assignmentId, args.resourceName);
+            result = { success: true, assignmentId: args.assignmentId, resourceName: args.resourceName };
+            break;
+          }
           case 'assignResourceBulk': {
             const assignmentIds = Array.isArray(args.assignmentIds)
               ? Array.from(new Set(args.assignmentIds.map((id: any) => String(id).trim()).filter(Boolean)))
@@ -590,10 +620,37 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
             };
             break;
           }
-          case 'updateSchedule': onUpdateAssignmentSchedule(args.assignmentId, args.startDate, args.duration); result = { success: true }; break;
+          case 'updateSchedule': {
+            const _allA = projectsRef.current.flatMap((p) => p.modules.flatMap((m) => m.tasks.flatMap((t) => t.assignments)));
+            if (!_allA.find((a) => a.id === args.assignmentId)) {
+              result = { error: `Assignment '${args.assignmentId}' not found. Use getProjectDetails to retrieve correct IDs.` };
+              break;
+            }
+            if (!args.startDate || !/^\d{4}-\d{2}-\d{2}$/.test(args.startDate)) {
+              result = { error: 'Invalid startDate. Use YYYY-MM-DD.' };
+              break;
+            }
+            const dur = Number(args.duration);
+            if (!Number.isFinite(dur) || dur <= 0) {
+              result = { error: 'Invalid duration. Must be a positive number of working days.' };
+              break;
+            }
+            onUpdateAssignmentSchedule(args.assignmentId, args.startDate, dur);
+            result = { success: true, assignmentId: args.assignmentId };
+            break;
+          }
           case 'updateAllocation': {
             if (!onUpdateAllocationByAssignment) {
               result = { error: 'Allocation update is not enabled in this app instance.' };
+              break;
+            }
+            const _allA2 = projectsRef.current.flatMap((p) => p.modules.flatMap((m) => m.tasks.flatMap((t) => t.assignments)));
+            if (!_allA2.find((a) => a.id === args.assignmentId)) {
+              result = { error: `Assignment '${args.assignmentId}' not found. Use getProjectDetails to retrieve correct IDs.` };
+              break;
+            }
+            if (!args.weekId || !/^\d{4}-\d+$/.test(String(args.weekId))) {
+              result = { error: 'Invalid weekId format. Use YYYY-WW (e.g. 2026-12).' };
               break;
             }
             const value = Number(args.value);
@@ -611,6 +668,11 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
             break;
           }
           case 'updateProgress': {
+            const _allA3 = projectsRef.current.flatMap((p) => p.modules.flatMap((m) => m.tasks.flatMap((t) => t.assignments)));
+            if (!_allA3.find((a) => a.id === args.assignmentId)) {
+              result = { error: `Assignment '${args.assignmentId}' not found. Use getProjectDetails to retrieve correct IDs.` };
+              break;
+            }
             const rawProgress = Number(args.progress);
             if (!Number.isFinite(rawProgress)) {
               result = { error: 'Invalid progress value. Provide a number between 0 and 100.' };
@@ -618,7 +680,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
             }
             const progress = Math.max(0, Math.min(100, Math.round(rawProgress)));
             onUpdateAssignmentProgress(args.assignmentId, progress);
-            result = { success: true, progress };
+            result = { success: true, assignmentId: args.assignmentId, progress };
             break;
           }
           case 'updateActualDate': {
@@ -737,25 +799,39 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
               result = { error: 'Copy assignment is not enabled in this app instance.' };
               break;
             }
+            const _allA4 = projectsRef.current.flatMap((p) => p.modules.flatMap((m) => m.tasks.flatMap((t) => t.assignments)));
+            if (!_allA4.find((a) => a.id === args.assignmentId)) {
+              result = { error: `Assignment '${args.assignmentId}' not found. Use getProjectDetails to retrieve correct IDs.` };
+              break;
+            }
             onCopyAssignmentById(args.assignmentId);
             result = { success: true };
             break;
           }
           case 'reorderModules': {
-            if (!onReorderModules) {
-              result = { error: 'Module reordering is not enabled in this app instance.' };
-              break;
+            if (!onReorderModules) { result = { error: 'Module reordering is not enabled in this app instance.' }; break; }
+            const _rp = projectsRef.current.find((p) => p.id === args.projectId);
+            if (!_rp) { result = { error: `Project '${args.projectId}' not found.` }; break; }
+            const sIdx = Number(args.startIndex);
+            const eIdx = Number(args.endIndex);
+            if (sIdx < 0 || eIdx < 0 || sIdx >= _rp.modules.length || eIdx >= _rp.modules.length) {
+              result = { error: `Index out of range. Project has ${_rp.modules.length} module(s).` }; break;
             }
-            onReorderModules(args.projectId, Number(args.startIndex), Number(args.endIndex));
+            onReorderModules(args.projectId, sIdx, eIdx);
             result = { success: true };
             break;
           }
           case 'reorderTasks': {
-            if (!onReorderTasks) {
-              result = { error: 'Task reordering is not enabled in this app instance.' };
-              break;
+            if (!onReorderTasks) { result = { error: 'Task reordering is not enabled in this app instance.' }; break; }
+            const _rp2 = projectsRef.current.find((p) => p.id === args.projectId);
+            const _rm = _rp2?.modules.find((m) => m.id === args.moduleId);
+            if (!_rm) { result = { error: `Module '${args.moduleId}' not found.` }; break; }
+            const sIdx2 = Number(args.startIndex);
+            const eIdx2 = Number(args.endIndex);
+            if (sIdx2 < 0 || eIdx2 < 0 || sIdx2 >= _rm.tasks.length || eIdx2 >= _rm.tasks.length) {
+              result = { error: `Index out of range. Module has ${_rm.tasks.length} task(s).` }; break;
             }
-            onReorderTasks(args.projectId, args.moduleId, Number(args.startIndex), Number(args.endIndex));
+            onReorderTasks(args.projectId, args.moduleId, sIdx2, eIdx2);
             result = { success: true };
             break;
           }
@@ -783,19 +859,26 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
             break;
           }
           case 'reorderAssignments': {
-            if (!onReorderAssignments) {
-              result = { error: 'Assignment reordering is not enabled in this app instance.' };
-              break;
+            if (!onReorderAssignments) { result = { error: 'Assignment reordering is not enabled in this app instance.' }; break; }
+            const _rp3 = projectsRef.current.find((p) => p.id === args.projectId);
+            const _rm3 = _rp3?.modules.find((m) => m.id === args.moduleId);
+            const _rt3 = _rm3?.tasks.find((t) => t.id === args.taskId);
+            if (!_rt3) { result = { error: `Task '${args.taskId}' not found.` }; break; }
+            const sIdx3 = Number(args.startIndex);
+            const eIdx3 = Number(args.endIndex);
+            if (sIdx3 < 0 || eIdx3 < 0 || sIdx3 >= _rt3.assignments.length || eIdx3 >= _rt3.assignments.length) {
+              result = { error: `Index out of range. Task has ${_rt3.assignments.length} assignment(s).` }; break;
             }
-            onReorderAssignments(args.projectId, args.moduleId, args.taskId, Number(args.startIndex), Number(args.endIndex));
+            onReorderAssignments(args.projectId, args.moduleId, args.taskId, sIdx3, eIdx3);
             result = { success: true };
             break;
           }
           case 'shiftTaskTimeline': {
-            if (!onShiftTask) {
-              result = { error: 'Task timeline shift is not enabled in this app instance.' };
-              break;
-            }
+            if (!onShiftTask) { result = { error: 'Task timeline shift is not enabled in this app instance.' }; break; }
+            const _rp4 = projectsRef.current.find((p) => p.id === args.projectId);
+            const _rm4 = _rp4?.modules.find((m) => m.id === args.moduleId);
+            const _rt4 = _rm4?.tasks.find((t) => t.id === args.taskId);
+            if (!_rt4) { result = { error: `Task '${args.taskId}' not found. Use getProjectDetails to retrieve correct IDs.` }; break; }
             const dir = String(args.direction) as 'left' | 'right' | 'left-working' | 'right-working';
             if (!['left', 'right', 'left-working', 'right-working'].includes(dir)) {
               result = { error: 'Invalid direction. Use left, right, left-working, or right-working.' };
