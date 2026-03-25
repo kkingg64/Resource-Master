@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, X, Bot, Sparkles, User, Loader2, Trash2, Settings, Key, CheckCircle, AlertCircle, LogIn, LogOut, Copy, ExternalLink } from 'lucide-react';
-import { Project, Resource, Role } from '../types';
+import { Project, Resource, Role, ModuleType } from '../types';
 
 // ─── Props ───────────────────────────────────────────────────────────
 export interface AIAssistantProps {
@@ -28,6 +28,15 @@ export interface AIAssistantProps {
   onUpdateAssignmentResourceName: (projectId: string, moduleId: string, taskId: string, assignmentId: string, name: string) => void;
   onUpdateAssignmentSchedule: (assignmentId: string, startDate: string, duration: number) => void;
   onUpdateAssignmentProgress: (assignmentId: string, progress: number) => void;
+  onUpdateAssignmentActualDate?: (assignmentId: string, actualDate: string | null) => void;
+  onUpdateAllocationByAssignment?: (assignmentId: string, weekId: string, value: number, dayDate?: string) => void;
+  onCopyAssignmentById?: (assignmentId: string) => void;
+  onReorderModules?: (projectId: string, startIndex: number, endIndex: number) => void;
+  onReorderTasks?: (projectId: string, moduleId: string, startIndex: number, endIndex: number) => void;
+  onMoveTask?: (projectId: string, sourceModuleId: string, targetModuleId: string, sourceIndex: number, targetIndex: number) => void;
+  onUpdateModuleType?: (projectId: string, moduleId: string, type: ModuleType) => void;
+  onReorderAssignments?: (projectId: string, moduleId: string, taskId: string, startIndex: number, endIndex: number) => void;
+  onShiftTask?: (projectId: string, moduleId: string, taskId: string, direction: 'left' | 'right' | 'left-working' | 'right-working') => void;
   onUpdateAssignmentDependency: (assignmentId: string, parentAssignmentId: string | null) => void;
   onDeleteProject: (projectId: string) => void;
   onDeleteModule: (projectId: string, moduleId: string) => void;
@@ -172,7 +181,16 @@ const TOOLS = [
   { type: 'function' as const, function: { name: 'updateTaskName', description: 'Rename a task.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, taskId: { type: 'string' }, name: { type: 'string' } }, required: ['projectId', 'moduleId', 'taskId', 'name'] } } },
   { type: 'function' as const, function: { name: 'assignResource', description: 'Assign a person to an assignment.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, taskId: { type: 'string' }, assignmentId: { type: 'string' }, resourceName: { type: 'string' } }, required: ['projectId', 'moduleId', 'taskId', 'assignmentId', 'resourceName'] } } },
   { type: 'function' as const, function: { name: 'updateSchedule', description: 'Update start date & duration (working days) of an assignment.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, startDate: { type: 'string', description: 'YYYY-MM-DD' }, duration: { type: 'number' } }, required: ['assignmentId', 'startDate', 'duration'] } } },
+  { type: 'function' as const, function: { name: 'updateAllocation', description: 'Update allocation value for an assignment at week/day granularity.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, weekId: { type: 'string', description: 'YYYY-WW' }, value: { type: 'number' }, dayDate: { type: 'string', description: 'Optional YYYY-MM-DD for day-level allocation inside the week.' } }, required: ['assignmentId', 'weekId', 'value'] } } },
   { type: 'function' as const, function: { name: 'updateProgress', description: 'Update progress (0-100) of an assignment.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, progress: { type: 'number' } }, required: ['assignmentId', 'progress'] } } },
+  { type: 'function' as const, function: { name: 'updateActualDate', description: 'Set or clear actual completion date for an assignment. To clear it, omit actualDate or pass null.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, actualDate: { type: 'string', description: 'YYYY-MM-DD. Optional; null/omit to clear.' } }, required: ['assignmentId'] } } },
+  { type: 'function' as const, function: { name: 'copyAssignment', description: 'Duplicate an assignment (including allocations where available) by assignment ID.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' } }, required: ['assignmentId'] } } },
+  { type: 'function' as const, function: { name: 'reorderModules', description: 'Reorder modules within a project.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, startIndex: { type: 'number' }, endIndex: { type: 'number' } }, required: ['projectId', 'startIndex', 'endIndex'] } } },
+  { type: 'function' as const, function: { name: 'reorderTasks', description: 'Reorder tasks within a module.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, startIndex: { type: 'number' }, endIndex: { type: 'number' } }, required: ['projectId', 'moduleId', 'startIndex', 'endIndex'] } } },
+  { type: 'function' as const, function: { name: 'moveTask', description: 'Move a task between modules or position within a target module.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, sourceModuleId: { type: 'string' }, targetModuleId: { type: 'string' }, sourceIndex: { type: 'number' }, targetIndex: { type: 'number' } }, required: ['projectId', 'sourceModuleId', 'targetModuleId', 'sourceIndex', 'targetIndex'] } } },
+  { type: 'function' as const, function: { name: 'updateModuleType', description: 'Update module type (MILESTONE, STANDARD, KEY_PHASE, MVP, PRODUCTION).', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, type: { type: 'string' } }, required: ['projectId', 'moduleId', 'type'] } } },
+  { type: 'function' as const, function: { name: 'reorderAssignments', description: 'Reorder assignments inside a task.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, taskId: { type: 'string' }, startIndex: { type: 'number' }, endIndex: { type: 'number' } }, required: ['projectId', 'moduleId', 'taskId', 'startIndex', 'endIndex'] } } },
+  { type: 'function' as const, function: { name: 'shiftTaskTimeline', description: 'Shift an entire task timeline. direction: left, right, left-working, right-working.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, taskId: { type: 'string' }, direction: { type: 'string' } }, required: ['projectId', 'moduleId', 'taskId', 'direction'] } } },
   { type: 'function' as const, function: { name: 'setDependency', description: 'Set or clear a finish-to-start dependency. To REMOVE a dependency, call with parentAssignmentId omitted or explicitly null.', parameters: { type: 'object', properties: { childAssignmentId: { type: 'string', description: 'The assignment that depends on another' }, parentAssignmentId: { type: 'string', description: 'The assignment that must finish first. Omit or pass null to REMOVE the dependency.' } }, required: ['childAssignmentId'] } } },
   { type: 'function' as const, function: { name: 'clearModuleDependencies', description: 'Remove ALL dependency links from every assignment inside a specific module. Use this when asked to clear/cancel dependencies in a module.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' } }, required: ['projectId', 'moduleId'] } } },
   { type: 'function' as const, function: { name: 'deleteProject', description: 'Delete a project.', parameters: { type: 'object', properties: { projectId: { type: 'string' } }, required: ['projectId'] } } },
@@ -194,6 +212,7 @@ Guidelines:
 - Default role is 'EP Dev Team' if not specified.
 - Dates are YYYY-MM-DD. Duration is in working days.
 - Progress is 0–100.
+- Actual completion date is optional and uses YYYY-MM-DD.
 - When user says "assign X to task Y", first look up the task to get assignmentId, then call assignResource.
 - Confirm destructive actions (delete) before executing.
 - Do not perform any delete actions. Timeline deletions are disabled for AI.
@@ -205,7 +224,7 @@ Guidelines:
 - createPhasedProjectTimeline is an atomic tool: after calling it successfully, do NOT call addProject, addModule, addTask, addAssignment, or updateSchedule for that same request unless the user explicitly asks for a separate follow-up change.
 - To remove ALL dependencies in a module, use clearModuleDependencies (pass projectId + moduleId).
 - To remove a single dependency, use setDependency with only childAssignmentId (omit parentAssignmentId).
-- ALWAYS call getProjectDetails before setDependency or clearModuleDependencies to obtain correct IDs.
+- ALWAYS call getProjectDetails before setDependency, updateProgress, updateActualDate, or clearModuleDependencies to obtain correct IDs.
 
 CRITICAL FOR TIMELINE CREATION:
 - When creating a project with phases/modules, you MUST also create tasks within those modules and assignments for those tasks with SCHEDULE information.
@@ -234,7 +253,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
     onAddProject, onAddModule, onAddTask, onAddAssignment,
     onUpdateProjectName, onUpdateModuleName, onUpdateTaskName,
     onUpdateAssignmentResourceName, onUpdateAssignmentSchedule,
-    onUpdateAssignmentProgress, onUpdateAssignmentDependency,
+    onUpdateAssignmentProgress, onUpdateAssignmentActualDate, onUpdateAllocationByAssignment,
+    onCopyAssignmentById, onReorderModules, onReorderTasks, onMoveTask, onUpdateModuleType,
+    onReorderAssignments, onShiftTask, onUpdateAssignmentDependency,
     onDeleteProject, onDeleteModule, onDeleteTask, onDeleteAssignment,
     onCollapseAllResourceRows,
   } = props;
@@ -520,7 +541,124 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
           case 'updateTaskName': onUpdateTaskName(args.projectId, args.moduleId, args.taskId, args.name); result = { success: true }; break;
           case 'assignResource': onUpdateAssignmentResourceName(args.projectId, args.moduleId, args.taskId, args.assignmentId, args.resourceName); result = { success: true }; break;
           case 'updateSchedule': onUpdateAssignmentSchedule(args.assignmentId, args.startDate, args.duration); result = { success: true }; break;
-          case 'updateProgress': onUpdateAssignmentProgress(args.assignmentId, args.progress); result = { success: true }; break;
+          case 'updateAllocation': {
+            if (!onUpdateAllocationByAssignment) {
+              result = { error: 'Allocation update is not enabled in this app instance.' };
+              break;
+            }
+            const value = Number(args.value);
+            if (!Number.isFinite(value)) {
+              result = { error: 'Invalid allocation value. Provide a numeric value.' };
+              break;
+            }
+            const dayDate = args.dayDate ? String(args.dayDate).trim() : undefined;
+            if (dayDate && !/^\d{4}-\d{2}-\d{2}$/.test(dayDate)) {
+              result = { error: 'Invalid dayDate format. Use YYYY-MM-DD.' };
+              break;
+            }
+            onUpdateAllocationByAssignment(args.assignmentId, args.weekId, value, dayDate);
+            result = { success: true };
+            break;
+          }
+          case 'updateProgress': {
+            const rawProgress = Number(args.progress);
+            if (!Number.isFinite(rawProgress)) {
+              result = { error: 'Invalid progress value. Provide a number between 0 and 100.' };
+              break;
+            }
+            const progress = Math.max(0, Math.min(100, Math.round(rawProgress)));
+            onUpdateAssignmentProgress(args.assignmentId, progress);
+            result = { success: true, progress };
+            break;
+          }
+          case 'updateActualDate': {
+            if (!onUpdateAssignmentActualDate) {
+              result = { error: 'Actual date update is not enabled in this app instance.' };
+              break;
+            }
+            const rawDate = args.actualDate;
+            const actualDate = (!rawDate || rawDate === 'null' || rawDate === 'undefined') ? null : String(rawDate).trim();
+            if (actualDate && !/^\d{4}-\d{2}-\d{2}$/.test(actualDate)) {
+              result = { error: 'Invalid actualDate format. Use YYYY-MM-DD.' };
+              break;
+            }
+            onUpdateAssignmentActualDate(args.assignmentId, actualDate);
+            result = { success: true, actualDate: actualDate || null };
+            break;
+          }
+          case 'copyAssignment': {
+            if (!onCopyAssignmentById) {
+              result = { error: 'Copy assignment is not enabled in this app instance.' };
+              break;
+            }
+            onCopyAssignmentById(args.assignmentId);
+            result = { success: true };
+            break;
+          }
+          case 'reorderModules': {
+            if (!onReorderModules) {
+              result = { error: 'Module reordering is not enabled in this app instance.' };
+              break;
+            }
+            onReorderModules(args.projectId, Number(args.startIndex), Number(args.endIndex));
+            result = { success: true };
+            break;
+          }
+          case 'reorderTasks': {
+            if (!onReorderTasks) {
+              result = { error: 'Task reordering is not enabled in this app instance.' };
+              break;
+            }
+            onReorderTasks(args.projectId, args.moduleId, Number(args.startIndex), Number(args.endIndex));
+            result = { success: true };
+            break;
+          }
+          case 'moveTask': {
+            if (!onMoveTask) {
+              result = { error: 'Task move is not enabled in this app instance.' };
+              break;
+            }
+            onMoveTask(args.projectId, args.sourceModuleId, args.targetModuleId, Number(args.sourceIndex), Number(args.targetIndex));
+            result = { success: true };
+            break;
+          }
+          case 'updateModuleType': {
+            if (!onUpdateModuleType) {
+              result = { error: 'Module type update is not enabled in this app instance.' };
+              break;
+            }
+            const moduleType = String(args.type) as ModuleType;
+            if (!Object.values(ModuleType).includes(moduleType)) {
+              result = { error: `Invalid module type. Use one of: ${Object.values(ModuleType).join(', ')}` };
+              break;
+            }
+            onUpdateModuleType(args.projectId, args.moduleId, moduleType);
+            result = { success: true, type: moduleType };
+            break;
+          }
+          case 'reorderAssignments': {
+            if (!onReorderAssignments) {
+              result = { error: 'Assignment reordering is not enabled in this app instance.' };
+              break;
+            }
+            onReorderAssignments(args.projectId, args.moduleId, args.taskId, Number(args.startIndex), Number(args.endIndex));
+            result = { success: true };
+            break;
+          }
+          case 'shiftTaskTimeline': {
+            if (!onShiftTask) {
+              result = { error: 'Task timeline shift is not enabled in this app instance.' };
+              break;
+            }
+            const dir = String(args.direction) as 'left' | 'right' | 'left-working' | 'right-working';
+            if (!['left', 'right', 'left-working', 'right-working'].includes(dir)) {
+              result = { error: 'Invalid direction. Use left, right, left-working, or right-working.' };
+              break;
+            }
+            onShiftTask(args.projectId, args.moduleId, args.taskId, dir);
+            result = { success: true, direction: dir };
+            break;
+          }
           case 'setDependency': {
             // Normalise parentAssignmentId: LLM sometimes sends the string "null" instead of JSON null
             const rawParent = args.parentAssignmentId;
@@ -565,7 +703,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
     }
 
     return results;
-  }, [onAddProject, onAddModule, onAddTask, onAddAssignment, onUpdateProjectName, onUpdateModuleName, onUpdateTaskName, onUpdateAssignmentResourceName, onUpdateAssignmentSchedule, onUpdateAssignmentProgress, onUpdateAssignmentDependency, onDeleteProject, onDeleteModule, onDeleteTask, onDeleteAssignment, onCollapseAllResourceRows]);
+  }, [onAddProject, onAddModule, onAddTask, onAddAssignment, onUpdateProjectName, onUpdateModuleName, onUpdateTaskName, onUpdateAssignmentResourceName, onUpdateAssignmentSchedule, onUpdateAssignmentProgress, onUpdateAssignmentActualDate, onUpdateAllocationByAssignment, onCopyAssignmentById, onReorderModules, onReorderTasks, onMoveTask, onUpdateModuleType, onReorderAssignments, onShiftTask, onUpdateAssignmentDependency, onDeleteProject, onDeleteModule, onDeleteTask, onDeleteAssignment, onCollapseAllResourceRows]);
 
   const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();

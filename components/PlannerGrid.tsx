@@ -592,6 +592,31 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
     actualDateOverrides.current = map;
   }
 
+  useEffect(() => {
+    const syncActualDatesFromStorage = () => {
+      const map = new Map<string, string>();
+      try {
+        const saved = localStorage.getItem('oms_assignment_actual_dates_v1');
+        if (saved) {
+          const parsed = JSON.parse(saved) as Record<string, string>;
+          Object.entries(parsed).forEach(([assignmentId, actualDate]) => {
+            if (typeof actualDate === 'string' && actualDate) {
+              map.set(assignmentId, actualDate);
+            }
+          });
+        }
+      } catch {
+        // Ignore malformed storage data.
+      }
+      actualDateOverrides.current = map;
+      setActualDateVersion((prev) => prev + 1);
+    };
+
+    if (typeof window === 'undefined') return;
+    window.addEventListener('oms-actual-date-updated', syncActualDatesFromStorage);
+    return () => window.removeEventListener('oms-actual-date-updated', syncActualDatesFromStorage);
+  }, []);
+
   const persistWaypointOverrides = useCallback(() => {
     try {
       const obj: Record<string, Record<string, {dx: number; dy: number}>> = {};

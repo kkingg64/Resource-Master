@@ -2429,6 +2429,277 @@ export const App: React.FC = () => {
                        setProjects(previousProjects);
                      }
                    }}
+                   onUpdateAssignmentActualDate={(aid, actualDate) => {
+                     const normalized = actualDate && /^\d{4}-\d{2}-\d{2}$/.test(actualDate) ? actualDate : null;
+                     try {
+                       const raw = localStorage.getItem('oms_assignment_actual_dates_v1');
+                       const parsed = raw ? JSON.parse(raw) as Record<string, string> : {};
+                       if (normalized) {
+                         parsed[aid] = normalized;
+                       } else {
+                         delete parsed[aid];
+                       }
+                       localStorage.setItem('oms_assignment_actual_dates_v1', JSON.stringify(parsed));
+                     } catch {
+                       // Ignore storage failures and still notify listeners.
+                     }
+
+                     if (typeof window !== 'undefined') {
+                       window.dispatchEvent(new CustomEvent('oms-actual-date-updated', {
+                         detail: { assignmentId: aid, actualDate: normalized }
+                       }));
+                     }
+                   }}
+                   onUpdateAllocationByAssignment={async (aid, wid, val, dayDate) => {
+                     const locate = () => {
+                       for (const p of projects) {
+                         for (const m of p.modules) {
+                           for (const t of m.tasks) {
+                             if (t.assignments.some(a => a.id === aid)) {
+                               return { pid: p.id, mid: m.id, tid: t.id };
+                             }
+                           }
+                         }
+                       }
+                       return null;
+                     };
+
+                     const loc = locate();
+                     if (!loc) return;
+
+                     const previousProjects = projects;
+                     setProjects(prev => prev.map(p => {
+                       if (p.id !== loc.pid) return p;
+                       return {
+                         ...p,
+                         modules: p.modules.map(m => {
+                           if (m.id !== loc.mid) return m;
+                           return {
+                             ...m,
+                             tasks: m.tasks.map(t => {
+                               if (t.id !== loc.tid) return t;
+                               return {
+                                 ...t,
+                                 assignments: t.assignments.map(a => {
+                                   if (a.id !== aid) return a;
+                                   const existingAlloc = a.allocations.find(al => al.weekId === wid);
+                                   let nextAlloc: any;
+                                   if (dayDate) {
+                                     const days = { ...(existingAlloc?.days || {}), [dayDate]: val };
+                                     const total = Object.values(days).reduce((sum, v) => sum + Number(v || 0), 0);
+                                     nextAlloc = { weekId: wid, count: total, days };
+                                   } else {
+                                     nextAlloc = { weekId: wid, count: val, days: existingAlloc?.days };
+                                   }
+                                   const nextAllocs = existingAlloc
+                                     ? a.allocations.map(al => al.weekId === wid ? nextAlloc : al)
+                                     : [...a.allocations, nextAlloc];
+                                   return { ...a, allocations: nextAllocs };
+                                 })
+                               };
+                             })
+                           };
+                         })
+                       };
+                     }));
+
+                     if (isOfflineMode) return;
+
+                     let payload: any = { count: val };
+                     if (dayDate) {
+                       const alloc = previousProjects
+                         .find(p => p.id === loc.pid)?.modules.find(m => m.id === loc.mid)?.tasks
+                         .find(t => t.id === loc.tid)?.assignments.find(a => a.id === aid)?.allocations
+                         .find(a => a.weekId === wid);
+                       const days = { ...(alloc?.days || {}), [dayDate]: val };
+                       payload = { count: Object.values(days).reduce((a: number, b: any) => a + Number(b || 0), 0), days };
+                     }
+
+                     const result = await runMutation(
+                       'Update Allocation (AI Panel)',
+                       { assignment_id: aid, week_id: wid, ...payload },
+                       supabase.from('resource_allocations').upsert({ assignment_id: aid, week_id: wid, user_id: session.user.id, ...payload }, { onConflict: 'assignment_id, week_id' })
+                     );
+                     if (result?.error) setProjects(previousProjects);
+                   }}
+                   onCopyAssignmentById={async (aid) => {
+                     const locate = () => {
+                       for (const p of projects) {
+                         for (const m of p.modules) {
+                           for (const t of m.tasks) {
+                             if (t.assignments.some(a => a.id === aid)) {
+                               return { pid: p.id, mid: m.id, tid: t.id };
+                             }
+                           }
+                         }
+                       }
+                       return null;
+                     };
+                     const loc = locate();
+                     if (!loc) return;
+
+                     if (isOfflineMode) {
+                       setProjects(prev => prev.map(p => p.id !== loc.pid ? p : {
+                         ...p,
+                         modules: p.modules.map(m => m.id !== loc.mid ? m : {
+                           ...m,
+                           tasks: m.tasks.map(t => t.id !== loc.tid ? t : {
+                             ...t,
+                             assignments: (() => {
+                               const orig = t.assignments.find(a => a.id === aid);
+                               if (!orig) return t.assignments;
+                               return [...t.assignments, { ...orig, id: createSafeId(), allocations: orig.allocations.map(al => ({ ...al })) }];
+                             })()
+                           })
+                         })
+                       }));
+                       return;
+                     }
+
+                     const { data: org } = await supabase.from('task_assignments').select('*').eq('id', aid).single();
+                     if (!org) return;
+
+                     const { data: newA } = await runMutation(
+                       'Copy Assignment (AI Panel)',
+                       { source_assignment_id: aid, task_id: loc.tid },
+                       supabase.from('task_assignments').insert({ task_id: loc.tid, role: org.role, resource_name: org.resource_name, start_date: org.start_date, duration: org.duration, user_id: session.user.id }).select().single()
+                     );
+                     const { data: allocs } = await supabase.from('resource_allocations').select('*').eq('assignment_id', aid);
+                     if (allocs && newA) {
+                       await runMutation(
+                         'Copy Assignment Allocations (AI Panel)',
+                         { source_assignment_id: aid, target_assignment_id: newA.id },
+                         supabase.from('resource_allocations').insert(allocs.map(a => ({ assignment_id: newA.id, week_id: a.week_id, count: a.count, days: a.days || {}, user_id: session.user.id })))
+                       );
+                     }
+                     await fetchData(true);
+                   }}
+                   onReorderModules={async (pid, sIdx, tIdx) => {
+                     if (sIdx === tIdx) return;
+                     const previousProjects = projects;
+                     const project = projects.find(x => x.id === pid);
+                     if (!project) return;
+                     const reorderedModules = reorderList(project.modules, sIdx, tIdx).map((module, index) => ({ ...module, sort_order: index }));
+                     setProjects(prev => prev.map(p => p.id !== pid ? p : { ...p, modules: reorderedModules }));
+                     if (!isOfflineMode && reorderedModules.length > 0) {
+                       const updates = reorderedModules.map((module, index) => supabase.from('modules').update({ sort_order: index }).eq('id', module.id));
+                       const result = await runMutation('Reorder Modules (AI Panel)', { project_id: pid }, Promise.all(updates).then(() => ({ data: 'ok', error: null })));
+                       if (result?.error) setProjects(previousProjects);
+                     }
+                   }}
+                   onReorderTasks={async (pid, mid, sIdx, tIdx) => {
+                     if (sIdx === tIdx) return;
+                     const previousProjects = projects;
+                     const project = projects.find(x => x.id === pid);
+                     const module = project?.modules.find(x => x.id === mid);
+                     if (!module) return;
+                     const reorderedTasks = reorderList(module.tasks, sIdx, tIdx).map((task, index) => ({ ...task, sort_order: index }));
+                     setProjects(prev => prev.map(p => p.id !== pid ? p : { ...p, modules: p.modules.map(m => m.id !== mid ? m : { ...m, tasks: reorderedTasks }) }));
+                     if (!isOfflineMode && reorderedTasks.length > 0) {
+                       const updates = reorderedTasks.map((task, index) => supabase.from('tasks').update({ sort_order: index }).eq('id', task.id));
+                       const result = await runMutation('Reorder Tasks (AI Panel)', { module_id: mid }, Promise.all(updates).then(() => ({ data: 'ok', error: null })));
+                       if (result?.error) setProjects(previousProjects);
+                     }
+                   }}
+                   onMoveTask={async (pid, sMid, tMid, sIdx, tIdx) => {
+                     const previousProjects = projects;
+                     const project = projects.find(x => x.id === pid);
+                     const sourceModule = project?.modules.find(x => x.id === sMid);
+                     if (!project || !sourceModule) return;
+                     const taskToMove = sourceModule.tasks[sIdx];
+                     if (!taskToMove) return;
+
+                     setProjects(prev => prev.map(p => {
+                       if (p.id !== pid) return p;
+                       return {
+                         ...p,
+                         modules: p.modules.map(m => {
+                           if (m.id === sMid) return { ...m, tasks: m.tasks.filter((_, index) => index !== sIdx) };
+                           if (m.id === tMid) {
+                             const newTasks = [...m.tasks];
+                             newTasks.splice(tIdx, 0, taskToMove);
+                             return { ...m, tasks: newTasks };
+                           }
+                           return m;
+                         })
+                       };
+                     }));
+
+                     if (!isOfflineMode) {
+                       const result = await runMutation('Move Task (AI Panel)', { task_id: taskToMove.id, target_module_id: tMid }, supabase.from('tasks').update({ module_id: tMid }).eq('id', taskToMove.id));
+                       if (result?.error) {
+                         setProjects(previousProjects);
+                         return;
+                       }
+                       await fetchData(true);
+                     }
+                   }}
+                   onUpdateModuleType={async (_pid, mid, type) => {
+                     await genericUpdate('modules', mid, { type });
+                   }}
+                   onReorderAssignments={async (pid, mid, tid, sIdx, tIdx) => {
+                     if (sIdx === tIdx) return;
+                     const previousProjects = projects;
+                     const project = projects.find(p => p.id === pid);
+                     const module = project?.modules.find(m => m.id === mid);
+                     const task = module?.tasks.find(t => t.id === tid);
+                     if (!task) return;
+                     const reorderedAssignments = reorderList(task.assignments, sIdx, tIdx).map((assignment, index) => ({ ...assignment, sort_order: index }));
+                     setProjects(prev => prev.map(p => p.id !== pid ? p : { ...p, modules: p.modules.map(m => m.id !== mid ? m : { ...m, tasks: m.tasks.map(t => t.id !== tid ? t : { ...t, assignments: reorderedAssignments }) }) }));
+                     if (!isOfflineMode && reorderedAssignments.length > 0) {
+                       const updates = reorderedAssignments.map((assignment, index) => supabase.from('task_assignments').update({ sort_order: index }).eq('id', assignment.id));
+                       const result = await runMutation('Reorder Assignments (AI Panel)', { task_id: tid }, Promise.all(updates).then(() => ({ data: 'ok', error: null })));
+                       if (result?.error) setProjects(previousProjects);
+                     }
+                   }}
+                   onShiftTask={async (pid, mid, tid, dir) => {
+                     const previousProjects = projects;
+                     const project = projects.find(p => p.id === pid);
+                     const module = project?.modules.find(m => m.id === mid);
+                     const task = module?.tasks.find(t => t.id === tid);
+                     if (!task) return;
+
+                     const shiftByWorkingDays = (dateText: string, deltaWorkingDays: number, holidayMap: Map<string, number>) => {
+                       const pointer = new Date(dateText.replace(/-/g, '/'));
+                       let remaining = Math.abs(deltaWorkingDays);
+                       const step = deltaWorkingDays >= 0 ? 1 : -1;
+                       while (remaining > 0) {
+                         pointer.setDate(pointer.getDate() + step);
+                         const day = pointer.getDay();
+                         const dayKey = pointer.toISOString().split('T')[0];
+                         const holidayDuration = holidayMap.get(dayKey) || 0;
+                         const isWorkingDay = day !== 0 && day !== 6 && holidayDuration < 1;
+                         if (isWorkingDay) remaining -= 1;
+                       }
+                       return pointer.toISOString().split('T')[0];
+                     };
+
+                     const shiftedAssignments = task.assignments.map(assignment => (
+                       assignment.startDate
+                         ? {
+                             ...assignment,
+                             startDate: dir === 'left' || dir === 'right'
+                               ? shiftDateTextByDays(assignment.startDate, dir === 'left' ? -7 : 7)
+                               : shiftByWorkingDays(assignment.startDate, dir === 'left-working' ? -5 : 5, getAssignmentHolidayMap(assignment.resourceName))
+                           }
+                         : assignment
+                     ));
+
+                     setProjects(prev => prev.map(p => p.id !== pid ? p : {
+                       ...p,
+                       modules: p.modules.map(m => m.id !== mid ? m : { ...m, tasks: m.tasks.map(t => t.id !== tid ? t : { ...t, assignments: shiftedAssignments }) })
+                     }));
+
+                     if (isOfflineMode) return;
+                     const updates = shiftedAssignments
+                       .filter((assignment): assignment is typeof assignment & { startDate: string } => Boolean(assignment.startDate))
+                       .map(assignment => supabase.from('task_assignments').update({ start_date: assignment.startDate }).eq('id', assignment.id));
+
+                     if (updates.length > 0) {
+                       const result = await runMutation('Shift Task Timeline (AI Panel)', { task_id: tid, direction: dir }, Promise.all(updates).then(() => ({ data: 'ok', error: null })));
+                       if (result?.error) setProjects(previousProjects);
+                     }
+                   }}
                       onUpdateAssignmentDependency={async (aid, pid) => {
                             const previousProjects = projects;
                         if (pid === aid) {
