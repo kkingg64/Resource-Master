@@ -186,6 +186,7 @@ const TOOLS = [
   { type: 'function' as const, function: { name: 'updateProgress', description: 'Update progress (0-100) of an assignment.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, progress: { type: 'number' } }, required: ['assignmentId', 'progress'] } } },
   { type: 'function' as const, function: { name: 'updateActualDate', description: 'Set or clear actual completion date for an assignment. To clear it, omit actualDate or pass null.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' }, actualDate: { type: 'string', description: 'YYYY-MM-DD. Optional; null/omit to clear.' } }, required: ['assignmentId'] } } },
   { type: 'function' as const, function: { name: 'updateActualDateBulk', description: 'Set or clear actual completion date for multiple assignments in one call. Use this for "clear actual dates" / "apply to all" requests.', parameters: { type: 'object', properties: { assignmentIds: { type: 'array', items: { type: 'string' } }, actualDate: { type: 'string', description: 'YYYY-MM-DD. Omit/null to clear.' }, force: { type: 'boolean', description: 'Set true only after confirming the count for large updates.' } }, required: ['assignmentIds'] } } },
+  { type: 'function' as const, function: { name: 'syncTaskActualDatesToPlannedEnd', description: 'For one task, set each assignment actual completion date to planned end date based on startDate + duration (working days). Optional resourceNames filter.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, taskId: { type: 'string' }, resourceNames: { type: 'array', items: { type: 'string' }, description: 'Optional list of resource names to limit updates.' }, force: { type: 'boolean', description: 'Set true only after confirming the count for large updates.' } }, required: ['projectId', 'moduleId', 'taskId'] } } },
   { type: 'function' as const, function: { name: 'syncModuleActualDatesToPlannedEnd', description: 'For a module, set each assignment actual completion date to its planned end date based on startDate + duration (working days). Optional resourceNames filter.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, moduleId: { type: 'string' }, resourceNames: { type: 'array', items: { type: 'string' }, description: 'Optional list of resource names to limit updates.' }, force: { type: 'boolean', description: 'Set true only after confirming the count for large updates.' } }, required: ['projectId', 'moduleId'] } } },
   { type: 'function' as const, function: { name: 'copyAssignment', description: 'Duplicate an assignment (including allocations where available) by assignment ID.', parameters: { type: 'object', properties: { assignmentId: { type: 'string' } }, required: ['assignmentId'] } } },
   { type: 'function' as const, function: { name: 'reorderModules', description: 'Reorder modules within a project.', parameters: { type: 'object', properties: { projectId: { type: 'string' }, startIndex: { type: 'number' }, endIndex: { type: 'number' } }, required: ['projectId', 'startIndex', 'endIndex'] } } },
@@ -220,6 +221,7 @@ Guidelines:
 - For requests that say "all", "every", or "apply to all", do not stop after one record. Use assignResourceBulk (or multiple assignResource calls) until all matched assignments are updated.
 - For bulk updates, always report requested count, updated count, and skipped count.
 - For "set actual end date to planned end date" requests on a whole module (or all resources in a module), prefer syncModuleActualDatesToPlannedEnd.
+- For task-level "set actual end date to planned end date" requests, prefer syncTaskActualDatesToPlannedEnd.
 - For "clear actual date" requests, use updateActualDateBulk when multiple assignments are involved and return requested/updated/skipped counts.
 - Bulk safety rule: if matched records are large (>20), do NOT execute immediately unless the user explicitly confirms the count, or use force=true after confirmation.
 - If scope is ambiguous (for example, "user module" could match multiple modules), first call getProjectDetails and resolve exact project/module IDs before making updates.
@@ -233,7 +235,7 @@ Guidelines:
 - createPhasedProjectTimeline is an atomic tool: after calling it successfully, do NOT call addProject, addModule, addTask, addAssignment, or updateSchedule for that same request unless the user explicitly asks for a separate follow-up change.
 - To remove ALL dependencies in a module, use clearModuleDependencies (pass projectId + moduleId).
 - To remove a single dependency, use setDependency with only childAssignmentId (omit parentAssignmentId).
-- ALWAYS call getProjectDetails before setDependency, updateProgress, updateActualDate, updateActualDateBulk, syncModuleActualDatesToPlannedEnd, or clearModuleDependencies to obtain correct IDs.
+- ALWAYS call getProjectDetails before setDependency, updateProgress, updateActualDate, updateActualDateBulk, syncTaskActualDatesToPlannedEnd, syncModuleActualDatesToPlannedEnd, or clearModuleDependencies to obtain correct IDs.
 
 CRITICAL FOR TIMELINE CREATION:
 - When creating a project with phases/modules, you MUST also create tasks within those modules and assignments for those tasks with SCHEDULE information.
@@ -764,6 +766,78 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
               skipped: skippedIds.length,
               actualDate: actualDate || null,
               skippedIds,
+            };
+            break;
+          }
+          case 'syncTaskActualDatesToPlannedEnd': {
+            if (!onUpdateAssignmentActualDate) {
+              result = { error: 'Actual date update is not enabled in this app instance.' };
+              break;
+            }
+            const project = projectsRef.current.find((p) => p.id === args.projectId);
+            const module = project?.modules.find((m) => m.id === args.moduleId);
+            const task = module?.tasks.find((t) => t.id === args.taskId);
+            if (!task) {
+              result = { error: 'Task not found. Use getProjectDetails to obtain correct IDs.' };
+              break;
+            }
+
+            const resourceFilter = Array.isArray(args.resourceNames)
+              ? new Set(args.resourceNames.map((n: any) => String(n).trim().toLowerCase()).filter(Boolean))
+              : null;
+
+            let requested = 0;
+            let updated = 0;
+            const skipped: Array<{ assignmentId: string; reason: string }> = [];
+            const toUpdate: Array<{ assignmentId: string; plannedEndYmd: string }> = [];
+
+            for (const assignment of task.assignments) {
+              const resourceName = String(assignment.resourceName || 'Unassigned');
+              if (resourceFilter && !resourceFilter.has(resourceName.toLowerCase())) {
+                continue;
+              }
+              requested += 1;
+
+              if (!assignment.startDate || !Number.isFinite(Number(assignment.duration)) || Number(assignment.duration) <= 0) {
+                skipped.push({ assignmentId: assignment.id, reason: 'Missing or invalid startDate/duration' });
+                continue;
+              }
+
+              const plannedEnd = addWorkingDaysInclusive(parseYmd(assignment.startDate), Number(assignment.duration));
+              const plannedEndYmd = fmt(plannedEnd);
+              toUpdate.push({ assignmentId: assignment.id, plannedEndYmd });
+            }
+
+            if (toUpdate.length > 20 && args.force !== true) {
+              result = {
+                error: `Large bulk update blocked: ${toUpdate.length} records matched in task '${task.name}'. Confirm scope and retry with force=true if intended.`,
+                projectId: args.projectId,
+                moduleId: args.moduleId,
+                taskId: task.id,
+                taskName: task.name,
+                requested,
+                matched: toUpdate.length,
+                skipped: skipped.length,
+                skippedAssignments: skipped,
+              };
+              break;
+            }
+
+            for (const item of toUpdate) {
+              await Promise.resolve(onUpdateAssignmentActualDate(item.assignmentId, item.plannedEndYmd) as any);
+              updated += 1;
+            }
+
+            result = {
+              success: true,
+              projectId: args.projectId,
+              moduleId: args.moduleId,
+              taskId: task.id,
+              taskName: task.name,
+              requested,
+              updated,
+              skipped: skipped.length,
+              skippedAssignments: skipped,
             };
             break;
           }
