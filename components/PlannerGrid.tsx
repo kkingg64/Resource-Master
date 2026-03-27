@@ -543,6 +543,10 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
   const ganttSurfaceRef = useRef<HTMLDivElement>(null);
   const assignmentBarRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const moduleBarRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  // Invisible anchor divs positioned at the EFFECTIVE right edge (including actual delay extension).
+  // The dependency connector measure function reads these to get the correct startX.
+  const assignmentEndAnchorRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const moduleEndAnchorRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [dependencyConnectorPaths, setDependencyConnectorPaths] = useState<Array<{ id: string; d: string; kind: 'summary' | 'detailed'; waypoints: Array<{x: number; y: number}> }>>([]);
   // User-adjusted waypoint offsets keyed by connector id → waypoint index → {dx,dy}
   // Offsets are relative to auto-routed waypoints so layout shifts do not break orthogonality.
@@ -1146,6 +1150,16 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
       return;
     }
     moduleBarRefs.current.delete(moduleId);
+  }, []);
+
+  const setAssignmentEndAnchorRef = useCallback((assignmentId: string, node: HTMLDivElement | null) => {
+    if (node) assignmentEndAnchorRefs.current.set(assignmentId, node);
+    else assignmentEndAnchorRefs.current.delete(assignmentId);
+  }, []);
+
+  const setModuleEndAnchorRef = useCallback((moduleId: string, node: HTMLDivElement | null) => {
+    if (node) moduleEndAnchorRefs.current.set(moduleId, node);
+    else moduleEndAnchorRefs.current.delete(moduleId);
   }, []);
 
 
@@ -1786,7 +1800,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
         // Skip zero-size elements (not rendered)
         if (fromRect.width === 0 || toRect.width === 0) return [];
 
-        const startX = fromRect.right - surfaceRect.left;
+        // Use effective-end anchor (includes actual delay extension) if available, else fall back to bar rect.
+        const fromEndAnchor = connector.kind === 'summary'
+          ? moduleEndAnchorRefs.current.get(connector.fromId)
+          : assignmentEndAnchorRefs.current.get(connector.fromId);
+        const startX = fromEndAnchor
+          ? fromEndAnchor.getBoundingClientRect().left - surfaceRect.left
+          : fromRect.right - surfaceRect.left;
         const endX = toRect.left - surfaceRect.left;
         const endXRight = toRect.right - surfaceRect.left;
         const startY = fromRect.top - surfaceRect.top + (fromRect.height / 2);
@@ -2641,6 +2661,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                                         title={`Actual completion extended beyond module plan`}
                                     />
                                 )}
+                                {/* Effective-end anchor: invisible 0-width div at module's actual right edge */}
+                                <div
+                                  ref={(node) => setModuleEndAnchorRef(module.id, node)}
+                                  className="absolute top-1/2 -translate-y-1/2 h-4 pointer-events-none"
+                                  style={{ left: `${(moduleEndIndex + 1) * colWidth}px`, width: 0 }}
+                                />
                                 </>
                              )}
                             {leftSpacerW > 0 && <div className="flex-shrink-0" style={{width: leftSpacerW}} />}
@@ -2823,6 +2849,17 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                                                 title={`Actual completion extended beyond task plan`}
                                             />
                                         )}
+                                        {/* Effective-end anchor: invisible 0-width div at task's actual right edge */}
+                                        <div
+                                          ref={(node) => {
+                                            task.assignments.forEach(a => {
+                                              if (node) assignmentEndAnchorRefs.current.set(a.id, node);
+                                              else assignmentEndAnchorRefs.current.delete(a.id);
+                                            });
+                                          }}
+                                          className="absolute top-1/2 -translate-y-1/2 h-4 pointer-events-none"
+                                          style={{ left: `${(taskEndIndex + 1) * colWidth}px`, width: 0 }}
+                                        />
                                         </>
                                     )}
                                     {leftSpacerW > 0 && <div className="flex-shrink-0" style={{width: leftSpacerW}} />}
@@ -3154,6 +3191,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                                                 )}
                                             </div>
 
+                                            {/* Effective-end anchor: placed at actual right edge of bar including delay extension */}
+                                            <div
+                                              ref={(node) => setAssignmentEndAnchorRef(assignment.id, node)}
+                                              className="absolute top-1.5 h-4 pointer-events-none"
+                                              style={{ left: `${(actualTimelineEndIndex + 1) * colWidth}px`, width: 0 }}
+                                            />
                                             {actualCompletionDate && actualDelayColSpan > 0 && (
                                               <div
                                                 className="absolute top-1.5 h-4 z-[19] rounded-r pointer-events-none"
