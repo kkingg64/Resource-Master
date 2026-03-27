@@ -2668,11 +2668,42 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                               let earliestDateObj: Date | null = null;
                               task.assignments.forEach(assignment => {
                                   if (!assignment.startDate || !assignment.duration) return;
-                                  const startDate = new Date(assignment.startDate.replace(/-/g, '/'));
+
+                                  // Calculate effective start considering dependency delay (same as individual bar rendering)
+                                  let effectiveStartDate = assignment.startDate;
+                                  if (assignment.parentAssignmentId) {
+                                      const parentAssignment = allAssignmentsMap.get(assignment.parentAssignmentId);
+                                      if (parentAssignment) {
+                                          const parentEffectiveEnd = getEffectiveAssignmentEndDate(parentAssignment);
+                                          const parentPlannedEnd = getPlannedAssignmentEndDate(parentAssignment);
+                                          if (parentEffectiveEnd && parentPlannedEnd && parentEffectiveEnd > parentPlannedEnd) {
+                                              const resName = assignment.resourceName || 'Unassigned';
+                                              const aHolidayMap = (resourceHolidaysMap.get(resName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
+                                              const pushedStart = findNextWorkingDay(parentEffectiveEnd, aHolidayMap);
+                                              if (pushedStart > assignment.startDate) {
+                                                  effectiveStartDate = pushedStart;
+                                              }
+                                          }
+                                      }
+                                  }
+
+                                  const startDate = new Date(effectiveStartDate.replace(/-/g, '/'));
                                   if (!earliestDateObj || startDate < earliestDateObj) {
                                       earliestDateObj = startDate;
                                   }
-                                  const endDateStr = getEffectiveAssignmentEndDate(assignment);
+
+                                  // Effective end: recalculate from pushed start if applicable
+                                  let endDateStr: string | null;
+                                  if (effectiveStartDate !== assignment.startDate) {
+                                      const resName = assignment.resourceName || 'Unassigned';
+                                      const aHolidayMap = (resourceHolidaysMap.get(resName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
+                                      const pushedEnd = calculateEndDate(effectiveStartDate, assignment.duration, aHolidayMap);
+                                      const actualDate = getValidatedActualDate(assignment);
+                                      endDateStr = actualDate && actualDate > pushedEnd ? actualDate : pushedEnd;
+                                  } else {
+                                      endDateStr = getEffectiveAssignmentEndDate(assignment);
+                                  }
+
                                   if (!endDateStr) return;
                                   const endDate = new Date(endDateStr.replace(/-/g, '/'));
                                   if (!latestEndDate || endDate > latestEndDate) {
