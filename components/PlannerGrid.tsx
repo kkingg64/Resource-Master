@@ -490,7 +490,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
 
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [displayMode, setDisplayMode] = useState<'allocation' | 'gantt'>('gantt'); 
-  const [dependencyViewMode, setDependencyViewMode] = useState<'detailed' | 'summary'>('detailed');
+  const [dependencyViewMode, setDependencyViewMode] = useState<'detailed' | 'summary' | 'none'>('detailed');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   
@@ -1623,7 +1623,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
   }, [collapsedTasks, collapseAllByDefault]);
 
   const dependencyConnectorDefs = useMemo(() => {
-    if (displayMode !== 'gantt') return [] as Array<{ id: string; fromId: string; toId: string; kind: 'summary' | 'detailed' }>;
+    if (displayMode !== 'gantt' || dependencyViewMode === 'none') return [] as Array<{ id: string; fromId: string; toId: string; kind: 'summary' | 'detailed' }>;
 
     const moduleOfAssignment = new Map<string, string>();
     const visibleDetailedAssignments = new Set<string>();
@@ -2086,16 +2086,16 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                 <div className="h-4 w-px bg-slate-200"></div>
                 <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-md p-1">
                   <button
-                    onClick={() => setDependencyViewMode('detailed')}
+                    onClick={() => setDependencyViewMode(dependencyViewMode === 'detailed' ? 'none' : 'detailed')}
                     className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${dependencyViewMode === 'detailed' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
-                    title="Show assignment-level dependency lines for expanded modules and summary lines for collapsed modules"
+                    title="Show assignment-level dependency lines (click again to hide)"
                   >
                     Detailed
                   </button>
                   <button
-                    onClick={() => setDependencyViewMode('summary')}
+                    onClick={() => setDependencyViewMode(dependencyViewMode === 'summary' ? 'none' : 'summary')}
                     className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${dependencyViewMode === 'summary' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}
-                    title="Show module-level summary dependency lines only"
+                    title="Show module-level summary dependency lines only (click again to hide)"
                   >
                     Summary
                   </button>
@@ -2587,7 +2587,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                                 <>
                                 <div
                                 ref={(node) => setModuleBarRef(module.id, node)}
-                                    className={`absolute top-1/2 -translate-y-1/2 h-4 z-10 ${style.ganttBarColor} rounded-md flex items-center overflow-hidden group/modbar ${(isModuleCollapsed || dependencyViewMode === 'summary') ? '' : 'invisible'}`}
+                                    className={`absolute top-1/2 -translate-y-1/2 h-4 z-10 ${style.ganttBarColor} rounded-md flex items-center overflow-hidden group/modbar ${(isModuleCollapsed || dependencyViewMode === 'summary' || dependencyViewMode === 'none') ? '' : 'invisible'}`}
                                     style={{
                                         left: `${moduleStartIndex * colWidth + 2}px`,
                                         width: `${((moduleDelayColSpan > 0 ? modulePlannedEndIndex : moduleEndIndex) - moduleStartIndex + 1) * colWidth - 4}px`,
@@ -2602,7 +2602,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                                 </div>
                                 {moduleDelayColSpan > 0 && (
                                     <div
-                                        className={`absolute top-1/2 -translate-y-1/2 h-4 z-[9] rounded-r pointer-events-none ${(isModuleCollapsed || dependencyViewMode === 'summary') ? '' : 'invisible'}`}
+                                        className={`absolute top-1/2 -translate-y-1/2 h-4 z-[9] rounded-r pointer-events-none ${(isModuleCollapsed || dependencyViewMode === 'summary' || dependencyViewMode === 'none') ? '' : 'invisible'}`}
                                         style={{
                                             left: `${(modulePlannedEndIndex + 1) * colWidth}px`,
                                             width: `${moduleDelayColSpan * colWidth - 2}px`,
