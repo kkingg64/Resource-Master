@@ -449,9 +449,16 @@ const structureProjectsData = (
 
   return (projects || []).map(p => {
     let role: ProjectRole = 'viewer';
+    // Check by user_id first
     if (p.user_id === currentUserId) {
         role = 'owner';
-    } else {
+    } 
+    // Fallback: check by owner_email if user_id is null/missing
+    else if (p.owner_email && currentUserEmail && p.owner_email.toLowerCase() === currentUserEmail.toLowerCase()) {
+        role = 'owner';
+    } 
+    // Otherwise check memberships
+    else {
         const membership = members.find(m => m.project_id === p.id && m.user_email === currentUserEmail);
         if (membership) {
             role = membership.role;

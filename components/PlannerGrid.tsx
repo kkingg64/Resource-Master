@@ -2457,17 +2457,44 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                         
                         allAssignments.forEach(assignment => {
                             if (!assignment.startDate || !assignment.duration) return;
-                            const startDate = new Date(assignment.startDate.replace(/-/g, '/'));
+                            
+                            // Calculate effective start date considering dependency delay
+                            let effectiveStartDate = assignment.startDate;
+                            if (assignment.parentAssignmentId) {
+                                const parentAssignment = allAssignmentsMap.get(assignment.parentAssignmentId);
+                                if (parentAssignment) {
+                                    const parentEffectiveEnd = getEffectiveAssignmentEndDate(parentAssignment);
+                                    const parentPlannedEnd = getPlannedAssignmentEndDate(parentAssignment);
+                                    if (parentEffectiveEnd && parentPlannedEnd && parentEffectiveEnd > parentPlannedEnd) {
+                                        const resourceName = assignment.resourceName || 'Unassigned';
+                                        const assignmentHolidaysMap = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
+                                        const pushedStart = findNextWorkingDay(parentEffectiveEnd, assignmentHolidaysMap);
+                                        if (pushedStart > assignment.startDate) {
+                                            effectiveStartDate = pushedStart;
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            const startDate = new Date(effectiveStartDate.replace(/-/g, '/'));
                             if (!earliestDateObj || startDate < earliestDateObj) {
                                 earliestDateObj = startDate;
                             }
-                            const endDateStr = getEffectiveAssignmentEndDate(assignment);
+                            
+                            // Calculate effective end date with dependency-adjusted start
+                            const resourceName = assignment.resourceName || 'Unassigned';
+                            const assignmentHolidaysMap = (resourceHolidaysMap.get(resourceName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
+                            const endDateWithDependency = calculateEndDate(effectiveStartDate, assignment.duration, assignmentHolidaysMap);
+                            const plannedEndStr = getPlannedAssignmentEndDate(assignment);
+                            const actualCompletionDate = getValidatedActualDate(assignment);
+                            const endDateStr = actualCompletionDate && actualCompletionDate > endDateWithDependency ? actualCompletionDate : endDateWithDependency;
+                            
                             if (!endDateStr) return;
                             const endDate = new Date(endDateStr.replace(/-/g, '/'));
                             if (!moduleLatestEndDate || endDate > moduleLatestEndDate) {
                                 moduleLatestEndDate = endDate;
                             }
-                            const plannedEndStr = getPlannedAssignmentEndDate(assignment);
+                            
                             if (plannedEndStr) {
                                 const plannedEnd = new Date(plannedEndStr.replace(/-/g, '/'));
                                 if (!modulePlannedLatestEnd || plannedEnd > modulePlannedLatestEnd) {
