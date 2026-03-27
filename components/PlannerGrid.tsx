@@ -1945,6 +1945,39 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
     return actualCompletionDate && actualCompletionDate > plannedEndDate ? actualCompletionDate : plannedEndDate;
   }, [getPlannedAssignmentEndDate, getValidatedActualDate]);
 
+  // Chain-aware effective end: propagates dependency delays recursively through the whole chain.
+  // e.g., A delays → B pushed → C pushed (even if B has no actual date of its own).
+  // Uses iterative passes until stable (handles arbitrary chain depth, max 20 iterations).
+  const chainEffectiveEndMap = useMemo(() => {
+    const endMap = new Map<string, string>();
+    let changed = true;
+    let iterations = 0;
+    while (changed && iterations < 20) {
+      changed = false;
+      iterations++;
+      allAssignmentsMap.forEach((assignment, id) => {
+        if (!assignment.startDate || !assignment.duration) return;
+        const resName = assignment.resourceName || 'Unassigned';
+        const hMap = (resourceHolidaysMap.get(resName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
+        let effectiveStart = assignment.startDate;
+        if (assignment.parentAssignmentId) {
+          const parentChainEnd = endMap.get(assignment.parentAssignmentId);
+          const parentAssignment = allAssignmentsMap.get(assignment.parentAssignmentId);
+          const parentPlannedEnd = parentAssignment ? getPlannedAssignmentEndDate(parentAssignment) : null;
+          if (parentChainEnd && parentPlannedEnd && parentChainEnd > parentPlannedEnd) {
+            const pushedStart = findNextWorkingDay(parentChainEnd, hMap);
+            if (pushedStart > assignment.startDate) effectiveStart = pushedStart;
+          }
+        }
+        const endFromEffStart = calculateEndDate(effectiveStart, assignment.duration, hMap);
+        const actualDate = getValidatedActualDate(assignment);
+        const newEnd = actualDate && actualDate > endFromEffStart ? actualDate : endFromEffStart;
+        if (endMap.get(id) !== newEnd) { endMap.set(id, newEnd); changed = true; }
+      });
+    }
+    return endMap;
+  }, [allAssignmentsMap, getPlannedAssignmentEndDate, getValidatedActualDate, resourceHolidaysMap]);
+
   const getLateCompletionWorkingDays = useCallback((assignment: TaskAssignment, plannedEndDate: string, actualCompletionDate: string | null): number => {
     if (!actualCompletionDate || actualCompletionDate <= plannedEndDate) return 0;
     const resourceName = assignment.resourceName || 'Unassigned';
@@ -2524,12 +2557,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                         allAssignments.forEach(assignment => {
                             if (!assignment.startDate || !assignment.duration) return;
                             
-                            // Calculate effective start date considering dependency delay
+                            // Calculate effective start date considering dependency delay (full chain)
                             let effectiveStartDate = assignment.startDate;
                             if (assignment.parentAssignmentId) {
                                 const parentAssignment = allAssignmentsMap.get(assignment.parentAssignmentId);
                                 if (parentAssignment) {
-                                    const parentEffectiveEnd = getEffectiveAssignmentEndDate(parentAssignment);
+                                    const parentEffectiveEnd = chainEffectiveEndMap.get(parentAssignment.id) ?? getEffectiveAssignmentEndDate(parentAssignment);
                                     const parentPlannedEnd = getPlannedAssignmentEndDate(parentAssignment);
                                     if (parentEffectiveEnd && parentPlannedEnd && parentEffectiveEnd > parentPlannedEnd) {
                                         const resourceName = assignment.resourceName || 'Unassigned';
@@ -2695,12 +2728,12 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                               task.assignments.forEach(assignment => {
                                   if (!assignment.startDate || !assignment.duration) return;
 
-                                  // Calculate effective start considering dependency delay (same as individual bar rendering)
+                                  // Calculate effective start considering dependency delay (full chain)
                                   let effectiveStartDate = assignment.startDate;
                                   if (assignment.parentAssignmentId) {
                                       const parentAssignment = allAssignmentsMap.get(assignment.parentAssignmentId);
                                       if (parentAssignment) {
-                                          const parentEffectiveEnd = getEffectiveAssignmentEndDate(parentAssignment);
+                                          const parentEffectiveEnd = chainEffectiveEndMap.get(parentAssignment.id) ?? getEffectiveAssignmentEndDate(parentAssignment);
                                           const parentPlannedEnd = getPlannedAssignmentEndDate(parentAssignment);
                                           if (parentEffectiveEnd && parentPlannedEnd && parentEffectiveEnd > parentPlannedEnd) {
                                               const resName = assignment.resourceName || 'Unassigned';
@@ -2898,15 +2931,15 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                                     return { startIndex: startIdx, endIndex: endIdx };
                                 })();
 
-                                // Dependency delay visual shift:
-                                // If the parent assignment finished later than planned, push this bar to start after the parent's actual end.
+                                // Dependency delay visual shift (full chain-aware):
+                                // Uses chainEffectiveEndMap so grandparent delays propagate through the full chain.
                                 let displayStartIndex = startIndex;
                                 let displayEndIndex = endIndex;
                                 let dependencyPushedStart: string | null = null;
                                 if (hasSchedule && assignment.parentAssignmentId) {
                                     const parentAssignment = allAssignmentsMap.get(assignment.parentAssignmentId);
                                     if (parentAssignment) {
-                                        const parentEffectiveEnd = getEffectiveAssignmentEndDate(parentAssignment);
+                                        const parentEffectiveEnd = chainEffectiveEndMap.get(parentAssignment.id) ?? getEffectiveAssignmentEndDate(parentAssignment);
                                         const parentPlannedEnd = getPlannedAssignmentEndDate(parentAssignment);
                                         if (parentEffectiveEnd && parentPlannedEnd && parentEffectiveEnd > parentPlannedEnd) {
                                             const pushedStart = findNextWorkingDay(parentEffectiveEnd, assignmentHolidaysMap);
