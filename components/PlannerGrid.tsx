@@ -2732,13 +2732,31 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                           let latestEndDate: Date | null = null;
                           let taskPlannedLatestEnd: Date | null = null;
                           let totalDuration = 0;
+                          let displayEarliestStartDate: string | null = null;
+                          let resolvedDisplayLatestEndDate: Date | null = null;
 
                           if (task.assignments.length > 0) {
-                              let earliestDateObj: Date | null = null;
+                              let earliestDateObj: Date | null = null;         // ORIGINAL start → render condition guard
+                              let displayEarliestDateObj: Date | null = null;  // PUSHED start  → visual bar position
+                              let displayLatestEndDate: Date | null = null;    // PUSHED end    → visual bar width
+
                               task.assignments.forEach(assignment => {
                                   if (!assignment.startDate || !assignment.duration) return;
 
-                                  // Calculate effective start considering dependency delay (full chain)
+                                  // ── ORIGINAL (render guard) ──────────────────────────────
+                                  const originalStart = new Date(assignment.startDate.replace(/-/g, '/'));
+                                  if (!earliestDateObj || originalStart < earliestDateObj) {
+                                      earliestDateObj = originalStart;
+                                  }
+                                  const originalEndStr = getEffectiveAssignmentEndDate(assignment);
+                                  if (originalEndStr) {
+                                      const originalEnd = new Date(originalEndStr.replace(/-/g, '/'));
+                                      if (!latestEndDate || originalEnd > latestEndDate) {
+                                          latestEndDate = originalEnd;
+                                      }
+                                  }
+
+                                  // ── DISPLAY (dependency-pushed, full chain) ──────────────
                                   let effectiveStartDate = assignment.startDate;
                                   if (assignment.parentAssignmentId) {
                                       const parentAssignment = allAssignmentsMap.get(assignment.parentAssignmentId);
@@ -2756,28 +2774,29 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                                       }
                                   }
 
-                                  const startDate = new Date(effectiveStartDate.replace(/-/g, '/'));
-                                  if (!earliestDateObj || startDate < earliestDateObj) {
-                                      earliestDateObj = startDate;
+                                  const displayStart = new Date(effectiveStartDate.replace(/-/g, '/'));
+                                  if (!displayEarliestDateObj || displayStart < displayEarliestDateObj) {
+                                      displayEarliestDateObj = displayStart;
                                   }
 
-                                  // Effective end: recalculate from pushed start if applicable
-                                  let endDateStr: string | null;
+                                  let displayEndStr: string | null;
                                   if (effectiveStartDate !== assignment.startDate) {
                                       const resName = assignment.resourceName || 'Unassigned';
                                       const aHolidayMap = (resourceHolidaysMap.get(resName) || resourceHolidaysMap.get('Unassigned'))?.holidayMap || new Map<string, number>();
                                       const pushedEnd = calculateEndDate(effectiveStartDate, assignment.duration, aHolidayMap);
                                       const actualDate = getValidatedActualDate(assignment);
-                                      endDateStr = actualDate && actualDate > pushedEnd ? actualDate : pushedEnd;
+                                      displayEndStr = actualDate && actualDate > pushedEnd ? actualDate : pushedEnd;
                                   } else {
-                                      endDateStr = getEffectiveAssignmentEndDate(assignment);
+                                      displayEndStr = getEffectiveAssignmentEndDate(assignment);
+                                  }
+                                  if (displayEndStr) {
+                                      const displayEnd = new Date(displayEndStr.replace(/-/g, '/'));
+                                      if (!displayLatestEndDate || displayEnd > displayLatestEndDate) {
+                                          displayLatestEndDate = displayEnd;
+                                      }
                                   }
 
-                                  if (!endDateStr) return;
-                                  const endDate = new Date(endDateStr.replace(/-/g, '/'));
-                                  if (!latestEndDate || endDate > latestEndDate) {
-                                      latestEndDate = endDate;
-                                  }
+                                  // Planned end (for delay stripe comparison)
                                   const plannedEndStr = getPlannedAssignmentEndDate(assignment);
                                   if (plannedEndStr) {
                                       const plannedEnd = new Date(plannedEndStr.replace(/-/g, '/'));
@@ -2790,8 +2809,11 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                                   earliestStartDate = formatDateForInput(earliestDateObj);
                                   totalDuration = calculateWorkingDaysBetween(earliestStartDate, formatDateForInput(latestEndDate), projectHolidayMap);
                               }
-                          }
-                          
+                              // Resolve display start/end (fall back to original if display dates are null/outside timeline)
+                              displayEarliestStartDate = displayEarliestDateObj ? formatDateForInput(displayEarliestDateObj) : earliestStartDate;
+                              resolvedDisplayLatestEndDate = displayLatestEndDate ?? latestEndDate;
+                          } // end if assignments
+
                           const taskPlannedEndForProgress = taskPlannedLatestEnd || latestEndDate;
                           const taskProgress = (earliestStartDate && taskPlannedEndForProgress)
                             ? calculateTimeBasedProgress(earliestStartDate, formatDateForInput(taskPlannedEndForProgress))
@@ -2824,7 +2846,18 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                                 const plannedEndIdx = taskPlannedLatestEnd ? getColumnIndex(formatDateForInput(taskPlannedLatestEnd)) : endIdx;
                                 return { taskStartIndex: startIdx, taskEndIndex: endIdx, taskPlannedEndIndex: plannedEndIdx };
                           })();
-                          const taskDelayColSpan = taskEndIndex > taskPlannedEndIndex && taskPlannedEndIndex > -1 ? taskEndIndex - taskPlannedEndIndex : 0;
+                          // Display indices: use pushed effective dates for visual position; clamp to original if outside timeline
+                          const taskDisplayStartIndex = (() => {
+                            if (!displayEarliestStartDate) return taskStartIndex;
+                            const idx = getColumnIndex(displayEarliestStartDate);
+                            return idx !== -1 ? idx : taskStartIndex;
+                          })();
+                          const taskDisplayEndIndex = (() => {
+                            if (!resolvedDisplayLatestEndDate) return taskEndIndex;
+                            const idx = getColumnIndex(formatDateForInput(resolvedDisplayLatestEndDate));
+                            return idx !== -1 ? idx : taskEndIndex;
+                          })();
+                          const taskDelayColSpan = taskDisplayEndIndex > taskPlannedEndIndex && taskPlannedEndIndex > -1 ? taskDisplayEndIndex - taskPlannedEndIndex : 0;
 
                           return (
                             <React.Fragment key={task.id}>
@@ -2864,8 +2897,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                                             }}
                                             className={`absolute top-1/2 -translate-y-1/2 h-4 z-10 bg-slate-400 rounded-md flex items-center overflow-hidden group/taskbar ${taskStatusBorderClass}`}
                                             style={{
-                                                left: `${taskStartIndex * colWidth + 2}px`,
-                                                width: `${((taskDelayColSpan > 0 ? taskPlannedEndIndex : taskEndIndex) - taskStartIndex + 1) * colWidth - 4}px`,
+                                                left: `${taskDisplayStartIndex * colWidth + 2}px`,
+                                                width: `${((taskDelayColSpan > 0 ? taskPlannedEndIndex : taskDisplayEndIndex) - taskDisplayStartIndex + 1) * colWidth - 4}px`,
                                             }}
                                             title={`Duration: ${totalDuration} working days${taskScheduleStatus === 'overdue' ? ` | Overdue by ${taskDaysOverdue}d` : ''}`}
                                         >
@@ -2901,7 +2934,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                                             });
                                           }}
                                           className="absolute top-1/2 -translate-y-1/2 h-4 pointer-events-none"
-                                          style={{ left: `${(taskEndIndex + 1) * colWidth}px`, width: 0 }}
+                                          style={{ left: `${(taskDisplayEndIndex + 1) * colWidth}px`, width: 0 }}
                                         />
                                         </>
                                     )}
