@@ -591,7 +591,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
             break;
           }
           case 'assignResourceBulk': {
-            const assignmentIds = Array.isArray(args.assignmentIds)
+            const assignmentIds: string[] = Array.isArray(args.assignmentIds)
               ? Array.from(new Set(args.assignmentIds.map((id: any) => String(id).trim()).filter(Boolean)))
               : [];
             if (assignmentIds.length === 0) {
@@ -724,7 +724,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = (props) => {
               result = { error: 'Actual date update is not enabled in this app instance.' };
               break;
             }
-            const ids = Array.isArray(args.assignmentIds)
+            const ids: string[] = Array.isArray(args.assignmentIds)
               ? Array.from(new Set(args.assignmentIds.map((id: any) => String(id).trim()).filter(Boolean)))
               : [];
             if (ids.length === 0) {

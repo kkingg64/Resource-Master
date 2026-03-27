@@ -1641,9 +1641,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
           task.assignments.forEach((a) => moduleOfAssignment.set(a.id, module.id));
         });
 
-        if (modCollapsed || dependencyViewMode === 'summary') {
-          modulesWithVisibleBars.add(module.id);
-        }
+        // Always register every visible module for cross-module summary lines.
+        // visibility:hidden module bars still report correct getBoundingClientRect positions.
+        modulesWithVisibleBars.add(module.id);
 
         if (modCollapsed) return; // skip detail tracking for collapsed modules
 
@@ -1676,25 +1676,25 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
       const parentModuleId = moduleOfAssignment.get(assignment.parentAssignmentId);
       if (!childModuleId || !parentModuleId) return;
 
-      // Try detailed line (both bars individually visible)
-      const childBarVisible = visibleDetailedAssignments.has(assignmentId) || taskVisibleAssignments.has(assignmentId);
-      const parentBarVisible = visibleDetailedAssignments.has(assignment.parentAssignmentId) || taskVisibleAssignments.has(assignment.parentAssignmentId);
+      const isCrossModule = childModuleId !== parentModuleId;
 
-      if (dependencyViewMode === 'detailed' && childBarVisible && parentBarVisible) {
-        detailedDefs.push({
-          id: `${assignmentId}-${assignment.parentAssignmentId}`,
-          fromId: assignment.parentAssignmentId,
-          toId: assignmentId,
-          kind: 'detailed',
-        });
-        return;
+      if (!isCrossModule) {
+        // Intra-module: show individual assignment lines only in detailed mode when both bars are visible.
+        const childBarVisible = visibleDetailedAssignments.has(assignmentId) || taskVisibleAssignments.has(assignmentId);
+        const parentBarVisible = visibleDetailedAssignments.has(assignment.parentAssignmentId) || taskVisibleAssignments.has(assignment.parentAssignmentId);
+        if (dependencyViewMode === 'detailed' && childBarVisible && parentBarVisible) {
+          detailedDefs.push({
+            id: `${assignmentId}-${assignment.parentAssignmentId}`,
+            fromId: assignment.parentAssignmentId,
+            toId: assignmentId,
+            kind: 'detailed',
+          });
+        }
+        return; // Intra-module deps never get a module→module summary line
       }
 
-      // Fall back to module summary line
-      if (childModuleId === parentModuleId) return; // skip intra-module
-      // Both module bars must be visible (collapsed or in summary mode)
-      if (!modulesWithVisibleBars.has(childModuleId) || !modulesWithVisibleBars.has(parentModuleId)) return;
-
+      // Cross-module: always consolidate to ONE summary line per module pair (regardless of view mode).
+      // modulesWithVisibleBars always includes all visible modules, so this path is always active.
       summaryDefs.set(`${childModuleId}-${parentModuleId}`, {
         id: `${childModuleId}-${parentModuleId}`,
         fromId: parentModuleId,
@@ -1731,8 +1731,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
 
         if (!fromNode || !toNode) return [];
 
-        // Skip if either node is invisible (CSS visibility:hidden / invisible class)
-        if (fromNode.classList.contains('invisible') || toNode.classList.contains('invisible')) return [];
+        // For detailed connectors skip individually-invisible assignment bars.
+        // For summary connectors the module bar may have class 'invisible' (visibility:hidden) when the
+        // module is expanded, but visibility:hidden still reports correct getBoundingClientRect positions,
+        // so we can safely measure it to draw the consolidated cross-module line.
+        if (connector.kind === 'detailed') {
+          if (fromNode.classList.contains('invisible') || toNode.classList.contains('invisible')) return [];
+        }
 
         const fromRect = fromNode.getBoundingClientRect();
         const toRect = toNode.getBoundingClientRect();
@@ -1846,7 +1851,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [colWidth, collapsedModules, collapsedTasks, collapsedProjects, dependencyConnectorDefs, displayMode, filteredProjects, stickyLeftOffset, visibleColRange, remeasureCounter, persistWaypointOverrides]);
+  }, [allAssignmentsMap, colWidth, collapsedModules, collapsedTasks, collapsedProjects, dependencyConnectorDefs, displayMode, filteredProjects, stickyLeftOffset, visibleColRange, remeasureCounter, persistWaypointOverrides]);
 
   const getStoredActualDate = useCallback((assignmentId: string): string | null => {
     actualDateVersion;
