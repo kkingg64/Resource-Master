@@ -1626,20 +1626,24 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
     if (displayMode !== 'gantt' || dependencyViewMode === 'none') return [] as Array<{ id: string; fromId: string; toId: string; kind: 'summary' | 'detailed' }>;
 
     const moduleOfAssignment = new Map<string, string>();
-    const visibleDetailedAssignments = new Set<string>();
-    const taskVisibleAssignments = new Set<string>();
-    // Track which modules are fully expanded (not collapsed) under a non-collapsed project.
+    const taskOfAssignment = new Map<string, string>();
+    const visibleDetailedAssignments = new Set<string>(); // both task + module expanded
+    const taskVisibleAssignments = new Set<string>();     // task collapsed, module expanded
     const expandedModules = new Set<string>();
+    const expandedTasks = new Set<string>();
 
     filteredProjects.forEach((project) => {
       if (collapsedProjects[project.id]) return;
 
       project.modules.forEach((module) => {
         const modCollapsed = isModuleEffectivelyCollapsed(module.id);
-        
-        // Always map assignments → module
+
+        // Always map assignments → module and task
         module.tasks.forEach((task) => {
-          task.assignments.forEach((a) => moduleOfAssignment.set(a.id, module.id));
+          task.assignments.forEach((a) => {
+            moduleOfAssignment.set(a.id, module.id);
+            taskOfAssignment.set(a.id, task.id);
+          });
         });
 
         if (!modCollapsed) {
@@ -1658,6 +1662,7 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
             });
             return;
           }
+          expandedTasks.add(task.id);
           task.assignments.forEach((a) => {
             if (a.startDate && a.duration && a.duration > 0) {
               visibleDetailedAssignments.add(a.id);
@@ -1667,57 +1672,79 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
       });
     });
 
-    const detailedDefs: Array<{ id: string; fromId: string; toId: string; kind: 'detailed' }> = [];
-    const summaryDefs = new Map<string, { id: string; fromId: string; toId: string; kind: 'summary' }>();
+    // Dedup maps: keyed by "fromId-toId" at each granularity level
+    const summaryDefs  = new Map<string, { id: string; fromId: string; toId: string; kind: 'summary' }>();
+    const taskDefs     = new Map<string, { id: string; fromId: string; toId: string; kind: 'detailed' }>();
+    const assignDefs   = new Map<string, { id: string; fromId: string; toId: string; kind: 'detailed' }>();
 
     allAssignmentsMap.forEach((assignment, assignmentId) => {
       if (!assignment.parentAssignmentId) return;
 
-      const childModuleId = moduleOfAssignment.get(assignmentId);
+      const childModuleId  = moduleOfAssignment.get(assignmentId);
       const parentModuleId = moduleOfAssignment.get(assignment.parentAssignmentId);
       if (!childModuleId || !parentModuleId) return;
 
-      const childBarVisible = visibleDetailedAssignments.has(assignmentId) || taskVisibleAssignments.has(assignmentId);
-      const parentBarVisible = visibleDetailedAssignments.has(assignment.parentAssignmentId) || taskVisibleAssignments.has(assignment.parentAssignmentId);
+      const childTaskId  = taskOfAssignment.get(assignmentId);
+      const parentTaskId = taskOfAssignment.get(assignment.parentAssignmentId);
+
+      const childVisible  = visibleDetailedAssignments.has(assignmentId) || taskVisibleAssignments.has(assignmentId);
+      const parentVisible = visibleDetailedAssignments.has(assignment.parentAssignmentId) || taskVisibleAssignments.has(assignment.parentAssignmentId);
+      if (!childVisible || !parentVisible) return;
 
       const isCrossModule = childModuleId !== parentModuleId;
 
-      if (!isCrossModule) {
-        // Intra-module: show individual assignment lines in detailed mode when both bars are visible.
-        if (dependencyViewMode === 'detailed' && childBarVisible && parentBarVisible) {
-          detailedDefs.push({
-            id: `${assignmentId}-${assignment.parentAssignmentId}`,
-            fromId: assignment.parentAssignmentId,
-            toId: assignmentId,
-            kind: 'detailed',
-          });
-        }
-        return;
-      }
-
-      // Cross-module:
-      // • Both modules expanded + detailed mode → individual assignment-level lines (task/resource visible)
-      // • Either module collapsed OR summary mode → ONE consolidated summary line per module pair
-      const bothExpanded = expandedModules.has(childModuleId) && expandedModules.has(parentModuleId);
-      if (bothExpanded && dependencyViewMode === 'detailed' && childBarVisible && parentBarVisible) {
-        detailedDefs.push({
-          id: `${assignmentId}-${assignment.parentAssignmentId}`,
-          fromId: assignment.parentAssignmentId,
-          toId: assignmentId,
-          kind: 'detailed',
-        });
-      } else {
-        // Collapse to one summary line per module pair (deduped by Map key)
+      // ── Level 1: Module summary ──────────────────────────────────────────
+      // Either module is collapsed → one summary line per module pair.
+      if (isCrossModule && (!expandedModules.has(childModuleId) || !expandedModules.has(parentModuleId))) {
         summaryDefs.set(`${childModuleId}-${parentModuleId}`, {
           id: `${childModuleId}-${parentModuleId}`,
           fromId: parentModuleId,
           toId: childModuleId,
           kind: 'summary',
         });
+        return;
       }
+
+      // In summary view mode always collapse cross-module to one summary line.
+      if (isCrossModule && dependencyViewMode === 'summary') {
+        summaryDefs.set(`${childModuleId}-${parentModuleId}`, {
+          id: `${childModuleId}-${parentModuleId}`,
+          fromId: parentModuleId,
+          toId: childModuleId,
+          kind: 'summary',
+        });
+        return;
+      }
+
+      // ── Level 2: Task-level dedup ────────────────────────────────────────
+      // Either task is collapsed (assignments share one bar) → one line per task pair.
+      const bothTasksExpanded = !!childTaskId && !!parentTaskId
+        && expandedTasks.has(childTaskId) && expandedTasks.has(parentTaskId);
+
+      if (!bothTasksExpanded) {
+        // Use the current assignment IDs as fromId/toId — they're all registered
+        // to the same task bar when the task is collapsed, so dedup by task pair key.
+        const tKey = `${childTaskId ?? assignmentId}-${parentTaskId ?? assignment.parentAssignmentId}`;
+        taskDefs.set(tKey, {
+          id: tKey,
+          fromId: assignment.parentAssignmentId,
+          toId: assignmentId,
+          kind: 'detailed',
+        });
+        return;
+      }
+
+      // ── Level 3: Assignment-level ────────────────────────────────────────
+      // Both tasks are expanded: show individual resource-level lines.
+      assignDefs.set(`${assignmentId}-${assignment.parentAssignmentId}`, {
+        id: `${assignmentId}-${assignment.parentAssignmentId}`,
+        fromId: assignment.parentAssignmentId,
+        toId: assignmentId,
+        kind: 'detailed',
+      });
     });
 
-    return [...summaryDefs.values(), ...detailedDefs];
+    return [...summaryDefs.values(), ...taskDefs.values(), ...assignDefs.values()];
   }, [allAssignmentsMap, collapsedModules, collapsedProjects, collapsedTasks, collapseAllByDefault, dependencyViewMode, displayMode, filteredProjects, isModuleEffectivelyCollapsed, isTaskEffectivelyCollapsed]);
 
   useEffect(() => {
