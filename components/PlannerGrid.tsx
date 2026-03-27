@@ -2857,7 +2857,15 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                             const idx = getColumnIndex(formatDateForInput(resolvedDisplayLatestEndDate));
                             return idx !== -1 ? idx : taskEndIndex;
                           })();
-                          const taskDelayColSpan = taskDisplayEndIndex > taskPlannedEndIndex && taskPlannedEndIndex > -1 ? taskDisplayEndIndex - taskPlannedEndIndex : 0;
+                          // Delay stripe only when task has SELF-DELAY (original unpushed end > planned end).
+                          // Dependency-pushed tasks (no self-delay) just show a solid bar at the new position.
+                          // Also guard against pushed start being after planned end (would make solid bar width negative).
+                          const taskHasSelfDelay = taskEndIndex > taskPlannedEndIndex && taskPlannedEndIndex > -1;
+                          const taskDelayColSpan = (taskHasSelfDelay
+                            && taskDisplayStartIndex <= taskPlannedEndIndex
+                            && taskDisplayEndIndex > taskPlannedEndIndex)
+                            ? taskDisplayEndIndex - taskPlannedEndIndex
+                            : 0;
 
                           return (
                             <React.Fragment key={task.id}>
