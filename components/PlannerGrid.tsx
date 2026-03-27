@@ -1969,9 +1969,19 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
             if (pushedStart > assignment.startDate) effectiveStart = pushedStart;
           }
         }
-        const endFromEffStart = calculateEndDate(effectiveStart, assignment.duration, hMap);
         const actualDate = getValidatedActualDate(assignment);
-        const newEnd = actualDate && actualDate > endFromEffStart ? actualDate : endFromEffStart;
+        const plannedEnd = getPlannedAssignmentEndDate(assignment);
+        let newEnd: string;
+        if (actualDate) {
+          // Completed: actual date IS the chain effective end (same as getEffectiveAssignmentEndDate).
+          // Do NOT use the projected-from-pushed-start end — the assignment is already done.
+          newEnd = actualDate > (plannedEnd || '') ? actualDate : (plannedEnd || actualDate);
+        } else {
+          // Not yet completed: project end from effective start (accounts for upstream push).
+          // If no upstream push, effectiveStart === startDate, so this equals plannedEnd.
+          const projectedEnd = calculateEndDate(effectiveStart, assignment.duration, hMap);
+          newEnd = projectedEnd || plannedEnd || '';
+        }
         if (endMap.get(id) !== newEnd) { endMap.set(id, newEnd); changed = true; }
       });
     }
