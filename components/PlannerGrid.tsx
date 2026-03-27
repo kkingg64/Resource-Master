@@ -2929,7 +2929,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                                 const dependencyOptions = getAvailableDependencies(assignment.id);
                                 const currentDependencyLabel = getDependencyLabel(assignment.parentAssignmentId);
 
-                const plannedProgress = hasSchedule ? calculateTimeBasedProgress(assignment.startDate!, endDateStr) : 0;
+                const effectiveStartDateStr = dependencyPushedStart ?? assignment.startDate!;
+                const plannedProgress = hasSchedule ? calculateTimeBasedProgress(effectiveStartDateStr, displayEndDateStr) : 0;
                 const actualCompletionDate = getValidatedActualDate(assignment);
                 const actualTimelineEndDate = actualCompletionDate && actualCompletionDate > displayEndDateStr ? actualCompletionDate : displayEndDateStr;
                 const actualProgress = calculateActualProgressFromDate(assignment, actualCompletionDate);
@@ -2951,19 +2952,23 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
                                 let daysOverdue = 0;
                                 let daysRemaining = 0;
                                 if (hasSchedule && assignmentStartDate && assignmentEndDate) {
+                                    const effectiveStart = dependencyPushedStart
+                                        ? new Date(dependencyPushedStart.replace(/-/g, '/'))
+                                        : assignmentStartDate;
+                                    const effectiveEnd = new Date(displayEndDateStr.replace(/-/g, '/'));
                                     const now = new Date();
                                     now.setHours(0, 0, 0, 0);
-                                    if (now < assignmentStartDate) {
+                                    if (now < effectiveStart) {
                                         scheduleStatus = 'not-started';
-                                        daysRemaining = Math.ceil((assignmentStartDate.getTime() - now.getTime()) / 86400000);
+                                        daysRemaining = Math.ceil((effectiveStart.getTime() - now.getTime()) / 86400000);
                   } else if (actualCompletionDate) {
                     scheduleStatus = 'completed';
-                  } else if (now > assignmentEndDate) {
+                  } else if (now > effectiveEnd) {
                     scheduleStatus = 'overdue';
-                                        daysOverdue = Math.ceil((now.getTime() - assignmentEndDate.getTime()) / 86400000);
+                                        daysOverdue = Math.ceil((now.getTime() - effectiveEnd.getTime()) / 86400000);
                                     } else {
                                         scheduleStatus = 'in-progress';
-                                        daysRemaining = Math.ceil((assignmentEndDate.getTime() - now.getTime()) / 86400000);
+                                        daysRemaining = Math.ceil((effectiveEnd.getTime() - now.getTime()) / 86400000);
                                     }
                                 }
 
