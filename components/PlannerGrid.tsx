@@ -1628,7 +1628,8 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
     const moduleOfAssignment = new Map<string, string>();
     const visibleDetailedAssignments = new Set<string>();
     const taskVisibleAssignments = new Set<string>();
-    const modulesWithVisibleBars = new Set<string>();
+    // Track which modules are fully expanded (not collapsed) under a non-collapsed project.
+    const expandedModules = new Set<string>();
 
     filteredProjects.forEach((project) => {
       if (collapsedProjects[project.id]) return;
@@ -1641,9 +1642,9 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
           task.assignments.forEach((a) => moduleOfAssignment.set(a.id, module.id));
         });
 
-        // Always register every visible module for cross-module summary lines.
-        // visibility:hidden module bars still report correct getBoundingClientRect positions.
-        modulesWithVisibleBars.add(module.id);
+        if (!modCollapsed) {
+          expandedModules.add(module.id);
+        }
 
         if (modCollapsed) return; // skip detail tracking for collapsed modules
 
@@ -1676,12 +1677,13 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
       const parentModuleId = moduleOfAssignment.get(assignment.parentAssignmentId);
       if (!childModuleId || !parentModuleId) return;
 
+      const childBarVisible = visibleDetailedAssignments.has(assignmentId) || taskVisibleAssignments.has(assignmentId);
+      const parentBarVisible = visibleDetailedAssignments.has(assignment.parentAssignmentId) || taskVisibleAssignments.has(assignment.parentAssignmentId);
+
       const isCrossModule = childModuleId !== parentModuleId;
 
       if (!isCrossModule) {
-        // Intra-module: show individual assignment lines only in detailed mode when both bars are visible.
-        const childBarVisible = visibleDetailedAssignments.has(assignmentId) || taskVisibleAssignments.has(assignmentId);
-        const parentBarVisible = visibleDetailedAssignments.has(assignment.parentAssignmentId) || taskVisibleAssignments.has(assignment.parentAssignmentId);
+        // Intra-module: show individual assignment lines in detailed mode when both bars are visible.
         if (dependencyViewMode === 'detailed' && childBarVisible && parentBarVisible) {
           detailedDefs.push({
             id: `${assignmentId}-${assignment.parentAssignmentId}`,
@@ -1690,17 +1692,29 @@ export const PlannerGrid: React.FC<PlannerGridProps> = React.memo(({
             kind: 'detailed',
           });
         }
-        return; // Intra-module deps never get a module→module summary line
+        return;
       }
 
-      // Cross-module: always consolidate to ONE summary line per module pair (regardless of view mode).
-      // modulesWithVisibleBars always includes all visible modules, so this path is always active.
-      summaryDefs.set(`${childModuleId}-${parentModuleId}`, {
-        id: `${childModuleId}-${parentModuleId}`,
-        fromId: parentModuleId,
-        toId: childModuleId,
-        kind: 'summary',
-      });
+      // Cross-module:
+      // • Both modules expanded + detailed mode → individual assignment-level lines (task/resource visible)
+      // • Either module collapsed OR summary mode → ONE consolidated summary line per module pair
+      const bothExpanded = expandedModules.has(childModuleId) && expandedModules.has(parentModuleId);
+      if (bothExpanded && dependencyViewMode === 'detailed' && childBarVisible && parentBarVisible) {
+        detailedDefs.push({
+          id: `${assignmentId}-${assignment.parentAssignmentId}`,
+          fromId: assignment.parentAssignmentId,
+          toId: assignmentId,
+          kind: 'detailed',
+        });
+      } else {
+        // Collapse to one summary line per module pair (deduped by Map key)
+        summaryDefs.set(`${childModuleId}-${parentModuleId}`, {
+          id: `${childModuleId}-${parentModuleId}`,
+          fromId: parentModuleId,
+          toId: childModuleId,
+          kind: 'summary',
+        });
+      }
     });
 
     return [...summaryDefs.values(), ...detailedDefs];
