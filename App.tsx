@@ -1154,15 +1154,23 @@ export const App: React.FC = () => {
           hasSession: Boolean(session),
           userEmail: session?.user?.email || null,
         }, 'success');
-        setSession(session);
+        // Avoid unnecessary app-wide refreshes on focus-driven token events.
+        setSession((previousSession: any | null) => {
+          const previousUserId = previousSession?.user?.id || null;
+          const nextUserId = session?.user?.id || null;
+          if (previousUserId && nextUserId && previousUserId === nextUserId) {
+            return previousSession;
+          }
+          return session;
+        });
       });
       return () => { authListener?.subscription?.unsubscribe(); };
     }
   }, [appendDebugEntry]);
 
   useEffect(() => {
-    if (session) fetchData(false);
-  }, [session]);
+    if (session?.user?.id) fetchData(false);
+  }, [session?.user?.id]);
 
   // Auto-load real data in offline mode if localStorage is empty
   useEffect(() => {
