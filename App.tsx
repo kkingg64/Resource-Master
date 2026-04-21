@@ -1290,6 +1290,27 @@ export const App: React.FC = () => {
       return runMutation(`DELETE ${table}`, { [column]: value }, supabase.from(table).delete().eq(column, value), refresh);
   };
 
+    const updateModuleTypeOptimistic = async (projectId: string, moduleId: string, type: ModuleType) => {
+        const previousProjects = projects;
+        setProjects(prev => prev.map(project => {
+          if (project.id !== projectId) return project;
+          return {
+            ...project,
+            modules: project.modules.map(module => module.id === moduleId ? { ...module, type } : module),
+          };
+        }));
+
+        const result = await runMutation(
+          'Update Module Type',
+          { module_id: moduleId, type },
+          supabase.from('modules').update({ type }).eq('id', moduleId)
+        );
+
+        if (result?.error) {
+          setProjects(previousProjects);
+        }
+      };
+
       const findAssignmentInProjects = useCallback((assignmentId: string) => {
         for (const project of projects) {
           for (const module of project.modules) {
@@ -1994,7 +2015,7 @@ export const App: React.FC = () => {
                               fetchData(true);
                           }
                     }}
-                    onUpdateModuleType={(pid, mid, type) => genericUpdate('modules', mid, { type })}
+                    onUpdateModuleType={updateModuleTypeOptimistic}
                     onReorderAssignments={async (pid, mid, tid, sIdx, tIdx) => {
                         if (sIdx === tIdx) return;
                           const previousProjects = projects;
@@ -2689,9 +2710,7 @@ export const App: React.FC = () => {
                        await fetchData(true);
                      }
                    }}
-                   onUpdateModuleType={async (_pid, mid, type) => {
-                     await genericUpdate('modules', mid, { type });
-                   }}
+                   onUpdateModuleType={updateModuleTypeOptimistic}
                    onReorderAssignments={async (pid, mid, tid, sIdx, tIdx) => {
                      if (sIdx === tIdx) return;
                      const previousProjects = projects;
